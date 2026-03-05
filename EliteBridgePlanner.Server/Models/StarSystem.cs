@@ -28,12 +28,8 @@ public class StarSystem
     public int? PreviousSystemId { get; set; }
     public StarSystem? PreviousSystem { get; set; }
 
-    public int? NextSystemId { get; set; }
-    public StarSystem? NextSystem { get; set; }
-
     // Calculé dynamiquement — jamais stocké
-    public bool IsStart => PreviousSystemId is null;
-    public bool IsEnd => NextSystemId is null;
+    public bool IsStart => PreviousSystemId is null;    
 }
 
 public enum SystemType

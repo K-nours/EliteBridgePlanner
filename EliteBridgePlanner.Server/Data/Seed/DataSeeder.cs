@@ -53,20 +53,10 @@ public class DataSeeder
         await _db.SaveChangesAsync(); // Les IDs sont maintenant générés
 
         // Chaîner dans l'ordre : Sol → Alpha Centauri → Barnard's Star → Wolf 359 → Sirius → Colonia
-        sol.NextSystemId = alphaCentauri.Id;
-
         alphaCentauri.PreviousSystemId = sol.Id;
-        alphaCentauri.NextSystemId = barnardStar.Id;
-
         barnardStar.PreviousSystemId = alphaCentauri.Id;
-        barnardStar.NextSystemId = wolf359.Id;
-
         wolf359.PreviousSystemId = barnardStar.Id;
-        wolf359.NextSystemId = sirius.Id;
-
         sirius.PreviousSystemId = wolf359.Id;
-        sirius.NextSystemId = colonia.Id;
-
         colonia.PreviousSystemId = sirius.Id;
         // colonia.NextSystemId = null → fin de chaîne
 

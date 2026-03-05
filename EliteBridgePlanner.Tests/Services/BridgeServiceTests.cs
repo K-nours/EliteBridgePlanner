@@ -136,7 +136,8 @@ public class BridgeServiceTests
         // Arrange
         var db = DbContextFactory.CreateInMemory();
         var bridge = TestData.CreateBridge();
-        bridge.Systems.Add(TestData.CreateSystem(1, 1, 1));
+        bridge.Systems.Add(TestData.CreateSystem(1, 1, null));
+        bridge.Systems.Add(TestData.CreateSystem(2, 1, 1));
         db.Bridges.Add(bridge);
         await db.SaveChangesAsync();
         var svc = new BridgeService(db);
@@ -173,9 +174,9 @@ public class BridgeServiceTests
         // Arrange
         var db = DbContextFactory.CreateInMemory();
         var bridge = TestData.CreateBridge();
-        bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null, nextSystemId: 2));
-        bridge.Systems.Add(TestData.CreateSystem(2, 1, previousSystemId: 1,    nextSystemId: 3));
-        bridge.Systems.Add(TestData.CreateSystem(3, 1, previousSystemId: 2,    nextSystemId: null));
+        bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null));
+        bridge.Systems.Add(TestData.CreateSystem(2, 1, previousSystemId: 1));
+        bridge.Systems.Add(TestData.CreateSystem(3, 1, previousSystemId: 2));
         db.Bridges.Add(bridge);
         await db.SaveChangesAsync();
         var svc = new BridgeService(db);
@@ -186,7 +187,7 @@ public class BridgeServiceTests
         // Assert
         Assert.That(result!.Order, Is.EqualTo(3));
         Assert.That(db.StarSystems.First(s => s.Id == 2).PreviousSystemId, Is.Null);
-        Assert.That(db.StarSystems.First(s => s.Id == 3).NextSystemId, Is.EqualTo(1));
+        Assert.That(db.StarSystems.First(s => s.Id == 1).PreviousSystemId, Is.EqualTo(3));
     }
 
     // ── DeleteSystem ───────────────────────────────────────────────────────
@@ -197,9 +198,9 @@ public class BridgeServiceTests
         // Arrange
         var db = DbContextFactory.CreateInMemory();
         var bridge = TestData.CreateBridge();
-        bridge.Systems.Add(TestData.CreateSystem(1, 1, null, 2));
-        bridge.Systems.Add(TestData.CreateSystem(2, 1, 1, 3));
-        bridge.Systems.Add(TestData.CreateSystem(3, 1, 2, null));
+        bridge.Systems.Add(TestData.CreateSystem(1, 1, null));
+        bridge.Systems.Add(TestData.CreateSystem(2, 1, 1));
+        bridge.Systems.Add(TestData.CreateSystem(3, 1, 2));
         db.Bridges.Add(bridge);
         await db.SaveChangesAsync();
         var svc = new BridgeService(db);
@@ -210,8 +211,7 @@ public class BridgeServiceTests
         // Assert
         Assert.That(ok, Is.True);
         Assert.That(db.StarSystems.Count(), Is.EqualTo(2));
-        // Le système 3 doit être remonté à l'ordre 2
-        //Assert.That(db.StarSystems.First(s => s.Id == 3).Order, Is.EqualTo(2));
+        // Le système 3 doit être remonté à l'ordre 2        
     }
 
     [Test]
@@ -236,10 +236,10 @@ public class BridgeServiceTests
         // Arrange
         var db = DbContextFactory.CreateInMemory();
         var bridge = TestData.CreateBridge();
-        bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null, nextSystemId: 2, status: ColonizationStatus.FINI));
-        bridge.Systems.Add(TestData.CreateSystem(2, 1, previousSystemId: 1, nextSystemId: 3, status: ColonizationStatus.FINI));
-        bridge.Systems.Add(TestData.CreateSystem(3, 1, previousSystemId: 2, nextSystemId: 4, status: ColonizationStatus.PLANIFIE));
-        bridge.Systems.Add(TestData.CreateSystem(4, 1, previousSystemId: 3, nextSystemId: null, status: ColonizationStatus.PLANIFIE));
+        bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null, status: ColonizationStatus.FINI));
+        bridge.Systems.Add(TestData.CreateSystem(2, 1, previousSystemId: 1, status: ColonizationStatus.FINI));
+        bridge.Systems.Add(TestData.CreateSystem(3, 1, previousSystemId: 2, status: ColonizationStatus.PLANIFIE));
+        bridge.Systems.Add(TestData.CreateSystem(4, 1, previousSystemId: 3, status: ColonizationStatus.PLANIFIE));
         db.Bridges.Add(bridge);
         await db.SaveChangesAsync();
         var svc = new BridgeService(db);

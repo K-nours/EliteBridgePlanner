@@ -46,8 +46,8 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
             // Relation chaînée Previous
             e.HasOne(s => s.PreviousSystem)
-             .WithOne(s => s.NextSystem)
-             .HasForeignKey<StarSystem>(s => s.PreviousSystemId)
+             .WithMany()
+             .HasForeignKey(s => s.PreviousSystemId)
              .OnDelete(DeleteBehavior.NoAction)
              .IsRequired(false);
 

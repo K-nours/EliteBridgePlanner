@@ -18,7 +18,7 @@ public class SystemsControllerTests
     private SystemsController _controller = null!;
 
     private static StarSystemDto SampleDto(int id = 1) => new(
-        id, "Sol", "DEBUT", "PLANIFIE", 1,null,null, null, null, 1, DateTime.UtcNow);
+        id, "Sol", "DEBUT", "PLANIFIE", 1,null, null, null, 1, DateTime.UtcNow);
 
     [SetUp]
     public void SetUp()

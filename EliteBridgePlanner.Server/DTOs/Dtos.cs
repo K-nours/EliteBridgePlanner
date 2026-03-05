@@ -47,8 +47,7 @@ public record StarSystemDto(
     string Type,
     string Status,
     int Order, // Calculé à la volée par le service, non stocké
-    string? PreviousSystemId,
-    string? NextSystemId,
+    string? PreviousSystemId,    
     string? ArchitectId,
     string? ArchitectName,
     int BridgeId,

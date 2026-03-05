@@ -41,14 +41,13 @@ public static class TestData
         Systems = []
     };
 
-    public static StarSystem CreateSystem(int id, int bridgeId, int? previousSystemId = null, int? nextSystemId = null,
+    public static StarSystem CreateSystem(int id, int bridgeId, int? previousSystemId = null,
         SystemType type = SystemType.TABLIER,
         ColonizationStatus status = ColonizationStatus.PLANIFIE) => new()
         {
             Id = id,
             Name = $"Système {id}",
             PreviousSystemId = previousSystemId,
-            NextSystemId = nextSystemId,
             Type = type,
             Status = status,
             BridgeId = bridgeId
