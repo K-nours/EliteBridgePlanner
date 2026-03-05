@@ -1,4 +1,5 @@
 <Solution>
+  <Folder Name="/CI/" />
   <Folder Name="/Éléments de solution/">
     <File Path="docker-compose.yml" />
   </Folder>

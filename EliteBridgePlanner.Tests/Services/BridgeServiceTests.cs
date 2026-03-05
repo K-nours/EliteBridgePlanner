@@ -173,15 +173,15 @@ public class BridgeServiceTests
         // Arrange
         var db = DbContextFactory.CreateInMemory();
         var bridge = TestData.CreateBridge();
-        bridge.Systems.Add(TestData.CreateSystem(1, 1, null, 2));
-        bridge.Systems.Add(TestData.CreateSystem(2, 1, 1, 3));
-        bridge.Systems.Add(TestData.CreateSystem(3, 1, 2, null));
+        bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null, nextSystemId: 2));
+        bridge.Systems.Add(TestData.CreateSystem(2, 1, previousSystemId: 1,    nextSystemId: 3));
+        bridge.Systems.Add(TestData.CreateSystem(3, 1, previousSystemId: 2,    nextSystemId: null));
         db.Bridges.Add(bridge);
         await db.SaveChangesAsync();
         var svc = new BridgeService(db);
 
         // Act — déplacer le système 1 (ordre 1) à l'ordre 3
-        var result = await svc.MoveSystemAsync(1, insertAfterId: 3);
+        var result = await svc.MoveSystemAsync(1, insertAtIndex: 3);
 
         // Assert
         Assert.That(result!.Order, Is.EqualTo(3));
@@ -236,10 +236,10 @@ public class BridgeServiceTests
         // Arrange
         var db = DbContextFactory.CreateInMemory();
         var bridge = TestData.CreateBridge();
-        bridge.Systems.Add(TestData.CreateSystem(1, 1, 1, status: ColonizationStatus.FINI));
-        bridge.Systems.Add(TestData.CreateSystem(2, 1, 2, status: ColonizationStatus.FINI));
-        bridge.Systems.Add(TestData.CreateSystem(3, 1, 3, status: ColonizationStatus.PLANIFIE));
-        bridge.Systems.Add(TestData.CreateSystem(4, 1, 4, status: ColonizationStatus.PLANIFIE));
+        bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null, nextSystemId: 2, status: ColonizationStatus.FINI));
+        bridge.Systems.Add(TestData.CreateSystem(2, 1, previousSystemId: 1, nextSystemId: 3, status: ColonizationStatus.FINI));
+        bridge.Systems.Add(TestData.CreateSystem(3, 1, previousSystemId: 2, nextSystemId: 4, status: ColonizationStatus.PLANIFIE));
+        bridge.Systems.Add(TestData.CreateSystem(4, 1, previousSystemId: 3, nextSystemId: null, status: ColonizationStatus.PLANIFIE));
         db.Bridges.Add(bridge);
         await db.SaveChangesAsync();
         var svc = new BridgeService(db);

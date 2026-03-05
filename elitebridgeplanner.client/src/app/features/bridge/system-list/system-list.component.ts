@@ -17,30 +17,30 @@ export class SystemListComponent {
   readonly showAddForm = signal(false);
 
   readonly addForm = this.fb.group({
-    name:             ['', [Validators.required, Validators.maxLength(200)]],
-    type:             ['TABLIER' as SystemType, Validators.required],
-    status:           ['PLANIFIE' as ColonizationStatus, Validators.required],
-    insertAfterOrder: [0, [Validators.required, Validators.min(0)]],
-    architectId:      [null as string | null]
+    name: ['', [Validators.required, Validators.maxLength(200)]],
+    type: ['TABLIER' as SystemType, Validators.required],
+    status: ['PLANIFIE' as ColonizationStatus, Validators.required],
+    insertAtIndex: [this.store.orderedSystems().length + 1, [Validators.required, Validators.min(1)]],
+    architectId: [null as string | null]
   });
 
   readonly typeOptions: { value: SystemType; label: string }[] = [
-    { value: 'DEBUT',   label: 'Début' },
-    { value: 'PILE',    label: 'Pile' },
+    { value: 'DEBUT', label: 'Début' },
+    { value: 'PILE', label: 'Pile' },
     { value: 'TABLIER', label: 'Tablier' },
-    { value: 'FIN',     label: 'Fin' }
+    { value: 'FIN', label: 'Fin' }
   ];
 
   readonly statusOptions: { value: ColonizationStatus; label: string }[] = [
-    { value: 'PLANIFIE',     label: 'Planifié' },
+    { value: 'PLANIFIE', label: 'Planifié' },
     { value: 'CONSTRUCTION', label: 'En construction' },
-    { value: 'FINI',         label: 'Fini' }
+    { value: 'FINI', label: 'Fini' }
   ];
 
   toggleAddForm(): void {
     this.showAddForm.update(v => !v);
     if (this.showAddForm()) {
-      this.addForm.patchValue({ insertAfterOrder: this.store.orderedSystems().length });
+      this.addForm.patchValue({ insertAtIndex: this.store.orderedSystems().length });
     }
   }
 
@@ -48,14 +48,14 @@ export class SystemListComponent {
     if (this.addForm.invalid) return;
     const val = this.addForm.getRawValue();
     this.store.addSystem({
-      name:             val.name!,
-      type:             val.type!,
-      status:           val.status!,
-      insertAfterOrder: val.insertAfterOrder ?? 0,
-      architectId:      val.architectId ?? null,
-      bridgeId:         this.store.activeBridge()!.id
+      name: val.name!,
+      type: val.type!,
+      status: val.status!,
+      insertAtIndex: val.insertAtIndex!,
+      architectId: val.architectId ?? null,
+      bridgeId: this.store.activeBridge()!.id
     });
-    this.addForm.reset({ type: 'TABLIER', status: 'PLANIFIE', insertAfterOrder: 0 });
+    this.addForm.reset({ type: 'TABLIER', status: 'PLANIFIE', insertAtIndex: 0 });
     this.showAddForm.set(false);
   }
 

@@ -34,7 +34,7 @@ export interface CreateSystemRequest {
   name: string;
   type: SystemType;
   status: ColonizationStatus;
-  insertAfterOrder: number;
+  insertAtIndex: number;
   architectId: string | null;
   bridgeId: number;
 }

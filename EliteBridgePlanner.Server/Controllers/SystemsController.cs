@@ -45,7 +45,7 @@ public class SystemsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Move(int id, [FromBody] MoveSystemRequest request)
     {
-        var result = await _bridgeService.MoveSystemAsync(id, request.InsertAfterId);
+        var result = await _bridgeService.MoveSystemAsync(id, request.InsertAtIndex);
         return result is null ? NotFound() : Ok(result);
     }
 

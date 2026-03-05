@@ -57,9 +57,9 @@ public record StarSystemDto(
 
 public record CreateSystemRequest(
     [Required][MaxLength(200)] string Name,
-    [Required] string Type,       // "DEBUT" | "PILE" | "TABLIER" | "FIN"
-    [Required] string Status,     // "PLANIFIE" | "CONSTRUCTION" | "FINI"
-    int? InsertAfterId,     // ID du système après lequel insérer (null = début)
+    [Required] string Type,
+    [Required] string Status,
+    [Range(1, int.MaxValue)] int InsertAtIndex,  // 1 = en tête, 2 = après le 1er, etc.
     string? ArchitectId,
     int BridgeId
 );
@@ -71,10 +71,6 @@ public record UpdateSystemRequest(
     string? ArchitectId           // "" = remettre à Inconnu (null)
 );
 
-//public record ReorderSystemRequest(
-//    [Range(1, int.MaxValue)] int NewOrder
-//);
-
 public record MoveSystemRequest(
-    int? InsertAfterId      // null = déplacer en tête de liste
+    [Range(1, int.MaxValue)] int InsertAtIndex  // même logique que CreateSystemRequest
 );
