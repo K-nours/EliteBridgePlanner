@@ -1,0 +1,96 @@
+@use '../../../../styles/variables' as v;
+
+.viz-container {
+  padding: v.$spacing-md v.$spacing-lg;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  min-height: 120px;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.viz-title {
+  font-family: v.$font-title;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  margin-bottom: v.$spacing-sm;
+}
+
+.bridge-track {
+  display: flex;
+  align-items: center;
+  min-width: max-content;
+}
+
+.bridge-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+
+  &.selected .node-shape {
+    filter: brightness(1.8);
+    transform: scale(1.15);
+  }
+
+  &:hover .node-shape {
+    filter: brightness(1.5);
+    transform: scale(1.1);
+  }
+}
+
+.node-shape {
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: v.$font-mono;
+  font-size: 0.7rem;
+  transition: all v.$transition-fast;
+
+  &.type-DEBUT, &.type-FIN {
+    clip-path: polygon(20% 0%, 80% 0%, 100% 50%, 80% 100%, 20% 100%, 0% 50%);
+  }
+  &.type-PILE {
+    clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+    height: 46px;
+  }
+  &.type-TABLIER { border-radius: v.$border-radius; }
+
+  &.type-DEBUT   { background: rgba(0,255,136,.2);  border: 2px solid var(--color-debut);   color: var(--color-debut); }
+  &.type-FIN     { background: rgba(255,51,102,.2); border: 2px solid var(--color-fin);     color: var(--color-fin); }
+  &.type-PILE    { background: rgba(255,107,0,.2);  border: 2px solid var(--color-pile);    color: var(--color-pile); }
+  &.type-TABLIER { background: rgba(0,212,255,.1);  border: 1px solid var(--color-tablier); color: var(--color-tablier); }
+}
+
+.node-label {
+  font-size: 0.55rem;
+  margin-top: 4px;
+  color: var(--text-dim);
+  max-width: 65px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bridge-connector {
+  width: 28px;
+  height: 4px;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, var(--color-tablier), transparent 50%, var(--color-tablier));
+  opacity: 0.4;
+  align-self: center;
+  margin-bottom: 18px;
+  transition: opacity v.$transition-fast;
+
+  &.solid { opacity: 0.9; background: var(--color-tablier); }
+}
+
+.empty-viz {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  padding: v.$spacing-md;
+}

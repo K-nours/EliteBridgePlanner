@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/Éléments de solution/">
+    <File Path="docker-compose.yml" />
+  </Folder>
+  <Project Path="elitebridgeplanner.client/elitebridgeplanner.client.esproj">
+    <Build />
+    <Deploy />
+  </Project>
+  <Project Path="EliteBridgePlanner.Server/EliteBridgePlanner.Server.csproj" />
+  <Project Path="EliteBridgePlanner.Tests/EliteBridgePlanner.Tests.csproj" />
+</Solution>

@@ -1,0 +1,160 @@
+@use '../../../../styles/variables' as v;
+
+.detail-wrapper { height: 100%; }
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: v.$spacing-md;
+}
+
+.section-title {
+  font-family: v.$font-title;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+}
+
+.action-btns { display: flex; gap: v.$spacing-sm; }
+
+.detail-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: v.$spacing-lg;
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+}
+
+.detail-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: v.$spacing-lg;
+}
+
+.sys-name {
+  font-family: v.$font-title;
+  font-size: 1rem;
+  color: var(--accent);
+  margin-bottom: v.$spacing-xs;
+}
+
+.sys-badges { display: flex; gap: 6px; }
+
+.sys-order {
+  font-family: v.$font-mono;
+  font-size: 2.5rem;
+  color: var(--border);
+  line-height: 1;
+}
+
+.edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: v.$spacing-md;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: v.$spacing-xs;
+  &.full-width { grid-column: 1 / -1; }
+}
+
+.field-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.field-input, .field-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: v.$font-ui;
+  font-size: 0.9rem;
+  padding: 8px 10px;
+  outline: none;
+  width: 100%;
+  transition: border-color v.$transition-fast;
+
+  &:focus { border-color: var(--accent); }
+  option { background: var(--bg2); }
+}
+
+.status-row { display: flex; gap: v.$spacing-sm; flex-wrap: wrap; }
+
+.status-btn {
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: v.$font-ui;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: all v.$transition-fast;
+  @include v.badge-clip;
+
+  &:hover { border-color: var(--text); color: var(--text); }
+  &.active-PLANIFIE     { border-color: var(--status-plan);  color: var(--status-plan);  background: rgba(74,106,138,.15); }
+  &.active-CONSTRUCTION { border-color: var(--status-build); color: var(--status-build); background: rgba(255,140,0,.1); }
+  &.active-FINI         { border-color: var(--status-done);  color: var(--status-done);  background: rgba(0,204,102,.1); }
+}
+
+.btn {
+  font-family: v.$font-ui;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  padding: 8px 18px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  @include v.btn-clip;
+  transition: all v.$transition-fast;
+  text-transform: uppercase;
+
+  &:hover { background: var(--accent); color: var(--bg); box-shadow: var(--glow); }
+  &.btn-sm { padding: 5px 14px; font-size: 0.75rem; }
+  &.btn-danger {
+    border-color: var(--color-fin); color: var(--color-fin);
+    &:hover { background: var(--color-fin); color: white; }
+  }
+}
+
+.badge {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  @include v.badge-clip;
+
+  &.badge-type-DEBUT   { background: rgba(0,255,136,.12);  color: var(--color-debut);   border: 1px solid var(--color-debut); }
+  &.badge-type-FIN     { background: rgba(255,51,102,.12); color: var(--color-fin);     border: 1px solid var(--color-fin); }
+  &.badge-type-PILE    { background: rgba(255,107,0,.12);  color: var(--color-pile);    border: 1px solid var(--color-pile); }
+  &.badge-type-TABLIER { background: rgba(0,212,255,.1);   color: var(--color-tablier); border: 1px solid var(--color-tablier); }
+  &.badge-status-PLANIFIE     { background: rgba(74,106,138,.15); color: var(--status-plan);  border: 1px solid var(--status-plan); }
+  &.badge-status-CONSTRUCTION { background: rgba(255,140,0,.12);  color: var(--status-build); border: 1px solid var(--status-build); }
+  &.badge-status-FINI         { background: rgba(0,204,102,.12);  color: var(--status-done);  border: 1px solid var(--status-done); }
+}
+
+.empty-detail {
+  text-align: center;
+  padding: v.$spacing-xl * 2;
+  color: var(--text-dim);
+  .empty-icon { font-size: 2.5rem; opacity: 0.3; display: block; margin-bottom: v.$spacing-md; }
+  p { font-size: 0.9rem; line-height: 1.8; }
+}

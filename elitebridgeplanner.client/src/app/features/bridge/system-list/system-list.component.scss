@@ -1,0 +1,238 @@
+@use '../../../../styles/variables' as v;
+
+.sidebar-header {
+  padding: v.$spacing-md;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg3);
+  flex-shrink: 0;
+}
+
+.sidebar-title {
+  font-family: v.$font-title;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+  margin-bottom: v.$spacing-sm;
+}
+
+.bridge-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: v.$spacing-sm;
+}
+
+.meta-item {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 6px 8px;
+}
+
+.meta-label {
+  font-size: 0.58rem;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.meta-value {
+  font-family: v.$font-mono;
+  font-size: 0.8rem;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-add {
+  width: 100%;
+  font-family: v.$font-ui;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  padding: 7px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  @include v.btn-clip;
+  transition: all v.$transition-fast;
+  text-transform: uppercase;
+  margin-top: v.$spacing-xs;
+
+  &:hover { background: var(--accent); color: var(--bg); }
+}
+
+// ── Formulaire d'ajout ────────────────────────────────────────────────────
+.add-form {
+  padding: v.$spacing-sm v.$spacing-md;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--accent);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: v.$spacing-xs;
+  margin-bottom: v.$spacing-sm;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+
+  &.full-width { grid-column: 1 / -1; }
+}
+
+.field-label {
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.field-input, .field-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: v.$font-ui;
+  font-size: 0.85rem;
+  padding: 6px 8px;
+  outline: none;
+  width: 100%;
+
+  &:focus { border-color: var(--accent); }
+
+  option { background: var(--bg2); }
+}
+
+.btn-confirm {
+  width: 100%;
+  font-family: v.$font-ui;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  padding: 6px;
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  cursor: pointer;
+  @include v.btn-clip;
+  text-transform: uppercase;
+  transition: all v.$transition-fast;
+
+  &:hover:not(:disabled) { opacity: 0.85; }
+  &:disabled { opacity: 0.4; cursor: not-allowed; }
+}
+
+// ── Liste ─────────────────────────────────────────────────────────────────
+.systems-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: v.$spacing-xs;
+}
+
+.system-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  margin-bottom: 5px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: all v.$transition-fast;
+
+  &:hover { border-color: var(--accent); background: var(--bg3); }
+  &.selected { border-color: var(--accent); background: rgba(0,212,255,.04); }
+
+  &.type-DEBUT   { border-left-color: var(--color-debut); }
+  &.type-FIN     { border-left-color: var(--color-fin); }
+  &.type-PILE    { border-left-color: var(--color-pile); }
+  &.type-TABLIER { border-left-color: var(--color-tablier); }
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+
+.card-order {
+  font-family: v.$font-mono;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  background: var(--bg);
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.card-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-controls {
+  display: flex;
+  gap: 3px;
+}
+
+.order-btn {
+  width: 20px;
+  height: 20px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all v.$transition-fast;
+
+  &:hover { border-color: var(--accent); color: var(--accent); }
+}
+
+.card-bottom {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.badge {
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  @include v.badge-clip;
+
+  &.badge-type-DEBUT   { background: rgba(0,255,136,.12);  color: var(--color-debut);   border: 1px solid var(--color-debut); }
+  &.badge-type-FIN     { background: rgba(255,51,102,.12); color: var(--color-fin);     border: 1px solid var(--color-fin); }
+  &.badge-type-PILE    { background: rgba(255,107,0,.12);  color: var(--color-pile);    border: 1px solid var(--color-pile); }
+  &.badge-type-TABLIER { background: rgba(0,212,255,.1);   color: var(--color-tablier); border: 1px solid var(--color-tablier); }
+
+  &.badge-status-PLANIFIE     { background: rgba(74,106,138,.15); color: var(--status-plan);  border: 1px solid var(--status-plan); }
+  &.badge-status-CONSTRUCTION { background: rgba(255,140,0,.12);  color: var(--status-build); border: 1px solid var(--status-build); }
+  &.badge-status-FINI         { background: rgba(0,204,102,.12);  color: var(--status-done);  border: 1px solid var(--status-done); }
+}
+
+.card-architect {
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  margin-left: auto;
+}
+
+.empty-list {
+  text-align: center;
+  padding: v.$spacing-xl;
+  color: var(--text-dim);
+
+  .empty-icon { font-size: 2rem; opacity: 0.3; display: block; margin-bottom: v.$spacing-sm; }
+  p { font-size: 0.85rem; line-height: 1.6; }
+}

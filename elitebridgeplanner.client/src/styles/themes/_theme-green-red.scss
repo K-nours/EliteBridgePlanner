@@ -1,0 +1,45 @@
+// Thème Vert
+body.theme-green {
+  --bg          : #030d07;
+  --bg2         : #061309;
+  --bg3         : #091a0d;
+  --panel       : #071510;
+  --border      : #1a3a25;
+  --accent      : #00ff88;
+  --accent2     : #88ff00;
+  --accent3     : #00ffcc;
+  --color-pile    : #88ff00;
+  --color-tablier : #00ff88;
+  --color-debut   : #00ffcc;
+  --color-fin     : #ff3366;
+  --text        : #c8f0da;
+  --text-dim    : #5a9a7a;
+  --status-plan  : #2a6a4a;
+  --status-build : #aaff00;
+  --status-done  : #00ffaa;
+  --glow        : 0 0 20px rgba(0, 255, 136, 0.3);
+  --glow-strong : 0 0 40px rgba(0, 255, 136, 0.5);
+}
+
+// Thème Rouge
+body.theme-red {
+  --bg          : #0f0407;
+  --bg2         : #180608;
+  --bg3         : #20080c;
+  --panel       : #150508;
+  --border      : #3a1520;
+  --accent      : #ff3366;
+  --accent2     : #ff6600;
+  --accent3     : #ff9900;
+  --color-pile    : #ff6600;
+  --color-tablier : #ff3366;
+  --color-debut   : #ff9900;
+  --color-fin     : #cc0033;
+  --text        : #f0c8d0;
+  --text-dim    : #9a5a6a;
+  --status-plan  : #6a2a3a;
+  --status-build : #ff6600;
+  --status-done  : #cc3366;
+  --glow        : 0 0 20px rgba(255, 51, 102, 0.3);
+  --glow-strong : 0 0 40px rgba(255, 51, 102, 0.5);
+}

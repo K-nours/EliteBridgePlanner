@@ -1,0 +1,22 @@
+// Thème par défaut — Cyan / Elite Dangerous bleu
+body.theme-blue {
+  --bg          : #04080f;
+  --bg2         : #080e1a;
+  --bg3         : #0d1526;
+  --panel       : #0a1220;
+  --border      : #1a2d4a;
+  --accent      : #00d4ff;
+  --accent2     : #ff6b00;
+  --accent3     : #00ff88;
+  --color-pile    : #ff6b00;
+  --color-tablier : #00d4ff;
+  --color-debut   : #00ff88;
+  --color-fin     : #ff3366;
+  --text        : #c8daf0;
+  --text-dim    : #5a7a9a;
+  --status-plan  : #4a6a8a;
+  --status-build : #ff8c00;
+  --status-done  : #00cc66;
+  --glow        : 0 0 20px rgba(0, 212, 255, 0.3);
+  --glow-strong : 0 0 40px rgba(0, 212, 255, 0.5);
+}

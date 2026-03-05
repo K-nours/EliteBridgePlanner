@@ -1,0 +1,35 @@
+@use 'styles/variables' as v;
+
+.theme-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .label {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    margin-right: 2px;
+  }
+}
+
+.theme-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all v.$transition-fast;
+  padding: 0;
+
+  &:hover {
+    transform: scale(1.2);
+    border-color: rgba(255, 255, 255, 0.6);
+  }
+
+  &.active {
+    border-color: white;
+    transform: scale(1.15);
+    box-shadow: 0 0 6px currentColor;
+  }
+}

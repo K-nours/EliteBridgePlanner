@@ -1,0 +1,48 @@
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="logo-icon">⬡</div>
+      <h1 class="title">NOUVEAU CMDR</h1>
+      <p class="subtitle">ELITE DANGEROUS // COLONIZATION</p>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" class="login-form">
+      <div class="field-group">
+        <label class="field-label">EMAIL</label>
+        <input class="field-input" type="email" formControlName="email" placeholder="cmdr@example.com" />
+        @if (form.get('email')?.invalid && form.get('email')?.touched) {
+          <span class="field-error">Email invalide</span>
+        }
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">NOM DE COMMANDANT</label>
+        <input class="field-input" type="text" formControlName="commanderName" placeholder="CMDR_VOTRENOM" />
+        @if (form.get('commanderName')?.invalid && form.get('commanderName')?.touched) {
+          <span class="field-error">Minimum 3 caractères</span>
+        }
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">MOT DE PASSE</label>
+        <input class="field-input" type="password" formControlName="password" placeholder="Minimum 8 caractères" />
+        @if (form.get('password')?.invalid && form.get('password')?.touched) {
+          <span class="field-error">Minimum 8 caractères</span>
+        }
+      </div>
+
+      @if (error()) {
+        <div class="error-banner">⚠ {{ error() }}</div>
+      }
+
+      <button type="submit" class="btn btn-primary" [disabled]="form.invalid || isLoading()">
+        {{ isLoading() ? 'INSCRIPTION...' : "S'INSCRIRE" }}
+      </button>
+    </form>
+
+    <div class="login-footer">
+      <span class="text-dim">Déjà un compte ?</span>
+      <a routerLink="/login" class="link">Se connecter</a>
+    </div>
+  </div>
+</div>

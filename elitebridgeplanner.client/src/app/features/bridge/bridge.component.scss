@@ -1,0 +1,177 @@
+@use '../../../styles/variables' as v;
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+// ── Header ────────────────────────────────────────────────────────────────
+.app-header {
+  height: v.$header-height;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 v.$spacing-lg;
+  background: linear-gradient(180deg, rgba(4,8,15,.95) 0%, rgba(4,8,15,.7) 100%);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-sm;
+
+  .logo-icon {
+    font-size: 1.8rem;
+    color: var(--accent);
+    text-shadow: var(--glow);
+  }
+
+  .logo-text {
+    font-family: v.$font-title;
+    font-size: 0.9rem;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    text-shadow: var(--glow);
+  }
+
+  .logo-sub {
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+  }
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-md;
+}
+
+.divider {
+  width: 1px;
+  height: 28px;
+  background: var(--border);
+}
+
+.cmdr-name {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+
+  strong {
+    color: var(--accent);
+    font-weight: 600;
+  }
+}
+
+// ── Stats bar ─────────────────────────────────────────────────────────────
+.stats-bar {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-md;
+  padding: 0 v.$spacing-lg;
+  height: v.$statsbar-height;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+
+  &.done    { background: var(--status-done); }
+  &.build   { background: var(--status-build); }
+  &.plan    { background: var(--status-plan); }
+  &.pile    { background: var(--color-pile); }
+  &.tablier { background: var(--color-tablier); }
+}
+
+.stat-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.stat-val {
+  font-family: v.$font-mono;
+  font-size: 0.85rem;
+  color: var(--text);
+
+  &.accent { color: var(--accent); }
+}
+
+.stat-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+// ── Body layout ───────────────────────────────────────────────────────────
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: v.$sidebar-width;
+  flex-shrink: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.detail-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: v.$spacing-lg;
+}
+
+// ── Boutons globaux ────────────────────────────────────────────────────────
+.btn {
+  font-family: v.$font-ui;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  padding: 8px 18px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  @include v.btn-clip;
+  transition: all v.$transition-fast;
+  text-transform: uppercase;
+
+  &:hover { background: var(--accent); color: var(--bg); box-shadow: var(--glow); }
+  &.btn-sm { padding: 5px 14px; font-size: 0.75rem; }
+}

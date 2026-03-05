@@ -1,0 +1,68 @@
+<div class="detail-wrapper">
+  <div class="section-header">
+    <span class="section-title">▸ DÉTAIL DU SYSTÈME</span>
+    @if (store.selectedSystem()) {
+      <div class="action-btns">
+        <button class="btn btn-danger btn-sm" (click)="onDelete()">SUPPRIMER</button>
+        <button class="btn btn-sm" (click)="onSave()">SAUVEGARDER</button>
+      </div>
+    }
+  </div>
+
+  @if (store.selectedSystem(); as sys) {
+    <div class="detail-panel animate-fadeIn">
+      <!-- En-tête du système sélectionné -->
+      <div class="detail-heading">
+        <div>
+          <div class="sys-name">{{ sys.name }}</div>
+          <div class="sys-badges">
+            <span class="badge" [class]="'badge-type-' + sys.type">{{ typeLabel(sys.type) }}</span>
+            <span class="badge" [class]="'badge-status-' + sys.status">{{ statusLabel(sys.status) }}</span>
+          </div>
+        </div>
+        <div class="sys-order">#{{ sys.order }}</div>
+      </div>
+
+      <!-- Formulaire d'édition -->
+      <div class="edit-grid">
+        <div class="field-group full-width">
+          <label class="field-label">Nom du Système</label>
+          <input class="field-input" [formControl]="form.controls.name" />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Type</label>
+          <select class="field-select" [formControl]="form.controls.type">
+            @for (opt of typeOptions; track opt.value) {
+              <option [value]="opt.value">{{ opt.label }}</option>
+            }
+          </select>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Architecte (ID utilisateur)</label>
+          <input class="field-input" [formControl]="form.controls.architectId" placeholder="ID ou vide = Inconnu" />
+        </div>
+
+        <div class="field-group full-width">
+          <label class="field-label">Statut de Construction</label>
+          <div class="status-row">
+            @for (opt of statusOptions; track opt.value) {
+              <button
+                class="status-btn"
+                [class]="form.controls.status.value === opt.value ? 'active-' + opt.value : ''"
+                type="button"
+                (click)="form.controls.status.setValue(opt.value)"
+              >{{ opt.label }}</button>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  } @else {
+    <div class="empty-detail">
+      <span class="empty-icon">◈</span>
+      <p>Sélectionnez un système dans la liste<br>ou ajoutez-en un nouveau</p>
+    </div>
+  }
+</div>

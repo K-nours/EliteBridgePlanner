@@ -1,0 +1,53 @@
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="logo-icon">⬡</div>
+      <h1 class="title">BRIDGE PLANNER</h1>
+      <p class="subtitle">ELITE DANGEROUS // COLONIZATION</p>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="onSubmit()" class="login-form">
+      <div class="field-group">
+        <label class="field-label">EMAIL</label>
+        <input
+          class="field-input"
+          type="email"
+          formControlName="email"
+          placeholder="cmdr@example.com"
+          autocomplete="email"
+        />
+        @if (form.get('email')?.invalid && form.get('email')?.touched) {
+          <span class="field-error">Email invalide</span>
+        }
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">MOT DE PASSE</label>
+        <input
+          class="field-input"
+          type="password"
+          formControlName="password"
+          placeholder="••••••••"
+          autocomplete="current-password"
+        />
+      </div>
+
+      @if (error()) {
+        <div class="error-banner">⚠ {{ error() }}</div>
+      }
+
+      <button
+        type="submit"
+        class="btn btn-primary"
+        [disabled]="form.invalid || isLoading()"
+      >
+        {{ isLoading() ? 'CONNEXION...' : 'SE CONNECTER' }}
+      </button>
+    </form>
+
+    <div class="login-footer">
+      <span class="text-dim">Pas encore de compte ?</span>
+      <a routerLink="/register" class="link">S'inscrire</a>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,94 @@
+<div class="sidebar-header">
+  <h2 class="sidebar-title">▸ PONT ACTIF</h2>
+  @if (store.activeBridge()) {
+    <div class="bridge-meta">
+      <div class="meta-item">
+        <div class="meta-label">Départ</div>
+        <div class="meta-value">{{ store.orderedSystems()[0]?.name ?? '—' }}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Arrivée</div>
+        <div class="meta-value">{{ store.orderedSystems().at(-1)?.name ?? '—' }}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Systèmes</div>
+        <div class="meta-value">{{ store.stats().total }}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Progression</div>
+        <div class="meta-value">{{ store.stats().completion }}%</div>
+      </div>
+    </div>
+  }
+  <button class="btn-add" (click)="toggleAddForm()">
+    {{ showAddForm() ? '✕ ANNULER' : '+ SYSTÈME' }}
+  </button>
+</div>
+
+<!-- Formulaire d'ajout -->
+@if (showAddForm()) {
+  <div class="add-form animate-fadeIn">
+    <div class="form-grid">
+      <div class="field-group full-width">
+        <label class="field-label">Nom du Système</label>
+        <input class="field-input" [formControl]="addForm.controls.name" placeholder="Ex: Colonia Gateway" />
+      </div>
+      <div class="field-group">
+        <label class="field-label">Type</label>
+        <select class="field-select" [formControl]="addForm.controls.type">
+          @for (opt of typeOptions; track opt.value) {
+            <option [value]="opt.value">{{ opt.label }}</option>
+          }
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Statut</label>
+        <select class="field-select" [formControl]="addForm.controls.status">
+          @for (opt of statusOptions; track opt.value) {
+            <option [value]="opt.value">{{ opt.label }}</option>
+          }
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Insérer après</label>
+        <input class="field-input" type="number" [formControl]="addForm.controls.insertAfterOrder" min="0" />
+      </div>
+    </div>
+    <button class="btn-confirm" (click)="onAdd()" [disabled]="addForm.invalid">AJOUTER</button>
+  </div>
+}
+
+<!-- Liste des systèmes -->
+<div class="systems-list">
+  @for (system of store.orderedSystems(); track system.id) {
+    <div
+      class="system-card"
+      [class]="'type-' + system.type"
+      [class.selected]="store.selectedSystem()?.id === system.id"
+      (click)="store.selectSystem(system)"
+    >
+      <div class="card-top">
+        <span class="card-order">#{{ system.order }}</span>
+        <span class="card-name">{{ system.name }}</span>
+        <div class="order-controls" (click)="$event.stopPropagation()">
+          <button class="order-btn" (click)="moveUp(system.id, system.order)" title="Monter">▲</button>
+          <button class="order-btn" (click)="moveDown(system.id, system.order)" title="Descendre">▼</button>
+        </div>
+      </div>
+      <div class="card-bottom">
+        <span class="badge" [class]="'badge-type-' + system.type">{{ typeLabel(system.type) }}</span>
+        <span class="badge" [class]="'badge-status-' + system.status">{{ statusLabel(system.status) }}</span>
+        @if (system.architectName) {
+          <span class="card-architect">◈ {{ system.architectName }}</span>
+        }
+      </div>
+    </div>
+  }
+
+  @if (store.orderedSystems().length === 0 && !store.isLoading()) {
+    <div class="empty-list">
+      <span class="empty-icon">◈</span>
+      <p>Aucun système<br>Ajoutez-en un pour commencer</p>
+    </div>
+  }
+</div>
