@@ -61,13 +61,13 @@ export class SystemListComponent {
 
   moveUp(id: number, currentOrder: number): void {
     if (currentOrder <= 1) return;
-    this.store.reorderSystem({ id, previousSystemId: currentOrder - 1 });
+    this.store.reorderSystem({ id, insertAtIndex: currentOrder - 1 });
   }
 
   moveDown(id: number, currentOrder: number): void {
     const max = this.store.orderedSystems().length;
     if (currentOrder >= max) return;
-    this.store.reorderSystem({ id, previousSystemId: currentOrder + 1 });
+    this.store.reorderSystem({ id, insertAtIndex: currentOrder + 1 });
   }
 
   typeLabel(type: string): string {

@@ -123,9 +123,9 @@ export const BridgeStore = signalStore(
     ),
 
     // ── Réordonner un système ──────────────────────────────────────────────
-    reorderSystem: rxMethod<{ id: number; previousSystemId: number }>(
+    reorderSystem: rxMethod<{ id: number;   insertAtIndex: number }>(
       pipe(
-        switchMap(({ id, previousSystemId }) => api.moveSystem(id,  previousSystemId ).pipe(
+        switchMap(({ id, insertAtIndex }) => api.reorderSystem(id,  { insertAtIndex } ).pipe(
           tap(() => {
             const bridgeId = store.activeBridge()?.id;
             if (bridgeId) {

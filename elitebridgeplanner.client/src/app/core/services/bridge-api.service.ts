@@ -4,7 +4,7 @@ import { Observable } from 'rxjs';
 import {
   BridgeDto, CreateBridgeRequest,
   StarSystemDto, CreateSystemRequest,
-  UpdateSystemRequest, ReorderSystemRequest
+  UpdateSystemRequest, MoveSystemRequest
 } from '../models/models';
 
 /**
@@ -41,16 +41,16 @@ export class BridgeApiService {
     return this.http.patch<StarSystemDto>(`${this.baseUrl}/systems/${id}`, request);
   }
 
-  // reorderSystem(id: number, request: ReorderSystemRequest): Observable<StarSystemDto> {
-  //   return this.http.patch<StarSystemDto>(`${this.baseUrl}/systems/${id}/reorder`, request);
-  // }
-
-  moveSystem(id: number, insertAfterId: number | null): Observable<StarSystemDto> {
-    return this.http.patch<StarSystemDto>(
-      `${this.baseUrl}/systems/${id}/move`,
-      { insertAfterId }
-    );
+  reorderSystem(id: number, request: MoveSystemRequest): Observable<StarSystemDto> {
+    return this.http.patch<StarSystemDto>(`${this.baseUrl}/systems/${id}/reorder`, request);
   }
+
+  // moveSystem(id: number, insertAfterId: number | null): Observable<StarSystemDto> {
+  //   return this.http.patch<StarSystemDto>(
+  //     `${this.baseUrl}/systems/${id}/move`,
+  //     { insertAfterId }
+  //   );
+  // }
 
   deleteSystem(id: number): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/systems/${id}`);

@@ -46,8 +46,8 @@ export interface UpdateSystemRequest {
   architectId?: string;
 }
 
-export interface ReorderSystemRequest {
-  newOrder: number;
+export interface MoveSystemRequest {
+  insertAtIndex: number;
 }
 
 // Auth
