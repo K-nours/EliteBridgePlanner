@@ -183,19 +183,6 @@ public class BridgeService : IBridgeService
         return MapSystemToDto(system, insertAtIndex);
     }
 
-    private async Task DetachFromChain(StarSystem system)
-    {
-        // Trouver le successeur = celui qui pointe vers system
-        var successor = await GetNextAsync(system.Id, system.BridgeId);
-
-        // Le successeur saute par-dessus system et pointe vers le prédécesseur de system
-        if (successor is not null)
-            successor.PreviousSystemId = system.PreviousSystemId;
-
-        system.PreviousSystemId = null;
-        await _db.SaveChangesAsync();
-    }
-
     private async Task<List<StarSystemDto>> GetOrderedSystemsAsync(int bridgeId)
     {
         var all = await _db.StarSystems
