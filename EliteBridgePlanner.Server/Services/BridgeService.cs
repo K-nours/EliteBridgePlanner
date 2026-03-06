@@ -229,13 +229,7 @@ public class BridgeService : IBridgeService
 
     private static BridgeDto MapToDto(Bridge b)
     {
-        var systems = b.Systems
-            .Select(MapSystemToDto)
-            .OrderBy(s => s.Order)
-            .ToList();
-
-        //var systems= GetOrderedSystems(b);
-
+        var systems= GetOrderedSystems(b);
         var total = systems.Count;
         var done = systems.Count(s => s.Status == nameof(ColonizationStatus.FINI));
 
@@ -249,27 +243,21 @@ public class BridgeService : IBridgeService
             b.CreatedAt
         );
     }
-    //private static List<StarSystemDto> GetOrderedSystems(Bridge bridge)
-    //{
-    //    //var all = await _db.StarSystems
-    //    //    .Include(s => s.Architect)
-    //    //    .Where(s => s.BridgeId == bridgeId)
-    //    //    .ToListAsync();
+    private static List<StarSystemDto> GetOrderedSystems(Bridge bridge)
+    {
 
-    //    var result = new List<StarSystemDto>();
-    //    var current = bridge.Systems.FirstOrDefault(s => s.PreviousSystemId == null);
-    //    int order = 1;
+        var result = new List<StarSystemDto>();
+        var current = bridge.Systems.FirstOrDefault(s => s.PreviousSystemId == null);
+        int order = 1;
 
-    //    while (current is not null)
-    //    {
-    //        result.Add(MapSystemToDto(current, order++));
-    //        current = current.NextSystemId.HasValue
-    //            ? bridge.Systems.FirstOrDefault(s => s.Id == current.NextSystemId.Value)
-    //            : null;
-    //    }
+        while (current is not null)
+        {
+            result.Add(MapSystemToDto(current, order++));
+            current = bridge.Systems.FirstOrDefault(s => s.PreviousSystemId == current.Id);                
+        }
 
-    //    return result;
-    //}
+        return result;
+    }
 
     private static StarSystemDto MapSystemToDto(StarSystem s, int order) => new(
         s.Id,
