@@ -21,7 +21,7 @@ body.theme-green {
   --glow-strong : 0 0 40px rgba(0, 255, 136, 0.5);
 }
 
-// Thème Rouge
+// Thème Rouge — contrastes accessibilité améliorés
 body.theme-red {
   --bg          : #0f0407;
   --bg2         : #180608;
@@ -34,12 +34,12 @@ body.theme-red {
   --color-pile    : #ff6600;
   --color-tablier : #ff3366;
   --color-debut   : #ff9900;
-  --color-fin     : #cc0033;
+  --color-fin     : #ff4466;
   --text        : #f0c8d0;
-  --text-dim    : #9a5a6a;
-  --status-plan  : #6a2a3a;
+  --text-dim    : #b87a8a;
+  --status-plan  : #8a4a5a;
   --status-build : #ff6600;
-  --status-done  : #cc3366;
+  --status-done  : #e64d7a;
   --glow        : 0 0 20px rgba(255, 51, 102, 0.3);
   --glow-strong : 0 0 40px rgba(255, 51, 102, 0.5);
 }

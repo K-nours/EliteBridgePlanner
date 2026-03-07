@@ -13,7 +13,7 @@
   font-family: v.$font-title;
   font-size: 0.65rem;
   letter-spacing: 0.2em;
-  color: var(--text-dim);
+  color: var(--text);
   margin-bottom: v.$spacing-sm;
 }
 
@@ -48,6 +48,7 @@
   justify-content: center;
   font-family: v.$font-mono;
   font-size: 0.7rem;
+  font-weight: 600;
   transition: all v.$transition-fast;
 
   &.type-DEBUT, &.type-FIN {
@@ -62,13 +63,13 @@
   &.type-DEBUT   { background: rgba(0,255,136,.2);  border: 2px solid var(--color-debut);   color: var(--color-debut); }
   &.type-FIN     { background: rgba(255,51,102,.2); border: 2px solid var(--color-fin);     color: var(--color-fin); }
   &.type-PILE    { background: rgba(255,107,0,.2);  border: 2px solid var(--color-pile);    color: var(--color-pile); }
-  &.type-TABLIER { background: rgba(0,212,255,.1);  border: 1px solid var(--color-tablier); color: var(--color-tablier); }
+  &.type-TABLIER { background: rgba(0,212,255,.18); border: 1px solid var(--color-tablier); color: var(--color-tablier); }
 }
 
 .node-label {
   font-size: 0.55rem;
   margin-top: 4px;
-  color: var(--text-dim);
+  color: var(--text);
   max-width: 65px;
   text-align: center;
   overflow: hidden;
@@ -90,7 +91,7 @@
 }
 
 .empty-viz {
-  color: var(--text-dim);
+  color: var(--text);
   font-size: 0.85rem;
   padding: v.$spacing-md;
 }

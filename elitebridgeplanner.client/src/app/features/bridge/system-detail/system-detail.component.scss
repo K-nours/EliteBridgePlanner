@@ -72,7 +72,7 @@
 .field-label {
   font-size: 0.62rem;
   letter-spacing: 0.12em;
-  color: var(--text-dim);
+  color: var(--text);
   text-transform: uppercase;
 }
 
@@ -137,18 +137,19 @@
 
 .badge {
   font-size: 0.6rem;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 2px 8px;
   @include v.badge-clip;
 
-  &.badge-type-DEBUT   { background: rgba(0,255,136,.12);  color: var(--color-debut);   border: 1px solid var(--color-debut); }
-  &.badge-type-FIN     { background: rgba(255,51,102,.12); color: var(--color-fin);     border: 1px solid var(--color-fin); }
-  &.badge-type-PILE    { background: rgba(255,107,0,.12);  color: var(--color-pile);    border: 1px solid var(--color-pile); }
-  &.badge-type-TABLIER { background: rgba(0,212,255,.1);   color: var(--color-tablier); border: 1px solid var(--color-tablier); }
-  &.badge-status-PLANIFIE     { background: rgba(74,106,138,.15); color: var(--status-plan);  border: 1px solid var(--status-plan); }
-  &.badge-status-CONSTRUCTION { background: rgba(255,140,0,.12);  color: var(--status-build); border: 1px solid var(--status-build); }
-  &.badge-status-FINI         { background: rgba(0,204,102,.12);  color: var(--status-done);  border: 1px solid var(--status-done); }
+  &.badge-type-DEBUT   { background: rgba(0,255,136,.18);  color: var(--color-debut);   border: 1px solid var(--color-debut); }
+  &.badge-type-FIN     { background: rgba(255,51,102,.18); color: var(--color-fin);     border: 1px solid var(--color-fin); }
+  &.badge-type-PILE    { background: rgba(255,107,0,.18);  color: var(--color-pile);    border: 1px solid var(--color-pile); }
+  &.badge-type-TABLIER { background: rgba(0,212,255,.18);  color: var(--color-tablier); border: 1px solid var(--color-tablier); }
+  &.badge-status-PLANIFIE     { background: rgba(74,106,138,.2);  color: var(--status-plan);  border: 1px solid var(--status-plan); }
+  &.badge-status-CONSTRUCTION { background: rgba(255,140,0,.18);  color: var(--status-build); border: 1px solid var(--status-build); }
+  &.badge-status-FINI         { background: rgba(0,204,102,.18);  color: var(--status-done);  border: 1px solid var(--status-done); }
 }
 
 .empty-detail {
