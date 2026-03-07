@@ -4,6 +4,7 @@
 
 .viz-container {
   padding: v.$spacing-md v.$spacing-lg;
+  padding-bottom: 32px; /* 16px base + 16px ajouté en dessous */
   border-bottom: 1px solid var(--border);
   background: var(--bg2);
   min-height: 100px;
@@ -18,7 +19,7 @@
   letter-spacing: 0.2em;
   color: var(--accent);
   opacity: 1;
-  margin-bottom: v.$spacing-sm;
+  margin-bottom: 0;
 }
 
 .bridge-track {
@@ -129,8 +130,8 @@
   top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 0.55rem;
-  color: var(--text-dim);
+  font-size: 0.7rem;
+  color: var(--text);
   max-width: 70px;
   text-align: center;
   overflow: hidden;

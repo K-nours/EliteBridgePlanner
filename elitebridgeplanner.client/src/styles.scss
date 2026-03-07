@@ -40,11 +40,7 @@ body {
 }
 
 // ── Utilitaires globaux ───────────────────────────────────────────────────
-.font-title { font-family: v.$font-title; }
-.font-mono  { font-family: v.$font-mono; }
-
-.text-accent  { color: var(--accent); }
-.text-dim     { color: var(--text-dim); }
+.text-dim { color: var(--text-dim); }
 
 // ── Focus clavier (accessibilité WCAG) ────────────────────────────────────
 input:focus-visible,
@@ -62,16 +58,6 @@ select:focus-visible {
 }
 
 // ── Animations globales ───────────────────────────────────────────────────
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.5; }
-}
-
-@keyframes scanline {
-  0%   { transform: translateY(-100%); }
-  100% { transform: translateY(100vh); }
-}
-
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
