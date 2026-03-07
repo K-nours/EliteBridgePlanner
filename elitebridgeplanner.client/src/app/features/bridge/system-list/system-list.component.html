@@ -2,13 +2,21 @@
   <h2 class="sidebar-title">▸ PONT ACTIF</h2>
   @if (store.activeBridge()) {
   <div class="bridge-meta">
-    <div class="meta-item">
+    <div class="meta-item meta-depart" tabindex="0">
       <div class="meta-label">Départ</div>
-      <div class="meta-value">{{ store.orderedSystems()[0]?.name ?? '—' }}</div>
+      <div
+        class="meta-value meta-value-truncate"
+        [truncateTooltip]="store.orderedSystems()[0]?.name ?? ''"
+        [truncateTooltipForce]="!!store.orderedSystems()[0]?.name"
+      >{{ (store.orderedSystems()[0]?.name ?? '—') | truncateMiddle:16 }}</div>
     </div>
-    <div class="meta-item">
+    <div class="meta-item meta-arrivee" tabindex="0">
       <div class="meta-label">Arrivée</div>
-      <div class="meta-value">{{ store.orderedSystems().at(-1)?.name ?? '—' }}</div>
+      <div
+        class="meta-value meta-value-truncate"
+        [truncateTooltip]="store.orderedSystems().at(-1)?.name ?? ''"
+        [truncateTooltipForce]="!!store.orderedSystems().at(-1)?.name"
+      >{{ (store.orderedSystems().at(-1)?.name ?? '—') | truncateMiddle:16 }}</div>
     </div>
     <div class="meta-item">
       <div class="meta-label">Systèmes</div>
@@ -86,14 +94,21 @@
     <div class="card-row card-row-1">
       <span class="badge" [class]="'badge-type-' + system.type">{{ typeLabel(system.type) }}</span>
       <div class="order-controls" (click)="$event.stopPropagation()">
-        <button class="order-btn" (click)="moveUp(system.id, system.order)" title="Monter">▲</button>
-        <button class="order-btn" (click)="moveDown(system.id, system.order)" title="Descendre">▼</button>
+        <button class="order-btn" [truncateTooltip]="'Monter'" [truncateTooltipForce]="true" (click)="moveUp(system.id, system.order)">▲</button>
+        <button class="order-btn" [truncateTooltip]="'Descendre'" [truncateTooltipForce]="true" (click)="moveDown(system.id, system.order)">▼</button>
       </div>
     </div>
     <div class="card-row card-row-2">
-      <span class="card-order-name">#{{ system.order }} {{ system.name }}</span>
+      <span
+        class="card-order-name"
+        [truncateTooltip]="'#' + system.order + ' ' + system.name"
+        [truncateTooltipForce]="system.name.length > 18"
+      >#{{ system.order }} {{ system.name | truncateMiddle:18 }}</span>
       @if (system.architectName) {
-      <span class="card-architect">◈ {{ system.architectName }}</span>
+      <span
+        class="card-architect"
+        [truncateTooltip]="'◈ ' + system.architectName"
+      >◈ {{ system.architectName }}</span>
       }
     </div>
     <div class="card-row card-row-3" [class.status-PLANIFIE]="system.status === 'PLANIFIE'" [class.status-CONSTRUCTION]="system.status === 'CONSTRUCTION'" [class.status-FINI]="system.status === 'FINI'">

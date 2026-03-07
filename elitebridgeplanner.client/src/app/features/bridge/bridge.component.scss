@@ -4,7 +4,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  overflow: hidden;
+  overflow: visible; /* permet au tooltip Départ/Arrivée de s'afficher */
   background: var(--bg);
 }
 
@@ -52,6 +52,11 @@
   display: flex;
   align-items: center;
   gap: v.$spacing-md;
+
+  .theme-selector,
+  .cmdr-name {
+    line-height: 28px;
+  }
 }
 
 .divider {
@@ -131,7 +136,8 @@
 .app-body {
   display: flex;
   flex: 1;
-  overflow: hidden;
+  overflow: visible; /* permet au tooltip Départ/Arrivée de s'afficher */
+  min-height: 0;
 }
 
 .sidebar {
@@ -140,7 +146,7 @@
   min-height: 0;
   background: var(--panel);
   border-right: 1px solid var(--border);
-  overflow: hidden;
+  overflow: visible; /* permet au tooltip Départ/Arrivée de s'afficher au-dessus du panneau adjacent */
   display: flex;
   flex-direction: column;
 }

@@ -1,30 +1,41 @@
 // bridge-visualizer.component.ts
-import { Component, inject } from '@angular/core';
+import { Component, inject, computed } from '@angular/core';
 import { BridgeStore } from '../../../core/services/bridge.store';
-import { StarSystemDto } from '../../../core/models/models';
+import { TruncateMiddlePipe } from '../../../shared/pipes/truncate-middle.pipe';
+import { TruncateTooltipDirective } from '../../../shared/directives/truncate-tooltip.directive';
 
 @Component({
   selector: 'app-bridge-visualizer',
   standalone: true,
+  imports: [TruncateMiddlePipe, TruncateTooltipDirective],
   template: `
     <div class="viz-container">
       <div class="viz-title">▸ VISUALISATION DU PONT STELLAIRE</div>
       <div class="bridge-track">
-        @for (system of store.orderedSystems(); track system.id) {
+        @for (system of store.orderedSystems(); track system.id; let i = $index) {
+          @if (i > 0) {
+            <div
+              class="line-segment"
+              [class.segment-green]="system.order <= lastOperationalOrder()"
+              [class.segment-normal]="system.order > lastOperationalOrder()"
+            ></div>
+          }
           <div
-            class="bridge-node"
+            [class]="'bridge-node type-' + system.type"
             [class.selected]="store.selectedSystem()?.id === system.id"
             (click)="store.selectSystem(system)"
-            [title]="system.name"
           >
             <div
-              class="node-shape"
-              [class]="'type-' + system.type"
-              [style.opacity]="system.status === 'FINI' ? 1 : 0.5"
+              [class]="'node-shape type-' + system.type"
             >
               {{ system.order }}
             </div>
-            <div class="node-label">{{ system.name }}</div>
+            <div
+              class="node-label"
+              [truncateTooltip]="system.name"
+              [truncateTooltipForce]="system.name.length > 14"
+              [truncateTooltipAbove]="true"
+            >{{ system.name | truncateMiddle:14 }}</div>
           </div>
         }
         @if (store.orderedSystems().length === 0) {
@@ -37,4 +48,12 @@ import { StarSystemDto } from '../../../core/models/models';
 })
 export class BridgeVisualizerComponent {
   readonly store = inject(BridgeStore);
+
+  /** Ordre du dernier système opérationnel (FINI) — la ligne verte s'arrête là */
+  readonly lastOperationalOrder = computed(() => {
+    const systems = this.store.orderedSystems();
+    const operational = systems.filter(s => s.status === 'FINI');
+    if (operational.length === 0) return 0;
+    return Math.max(...operational.map(s => s.order));
+  });
 }

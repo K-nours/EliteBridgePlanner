@@ -78,3 +78,22 @@ select:focus-visible {
 }
 
 .animate-fadeIn { animation: fadeIn 0.2s ease forwards; }
+
+/* Tooltip flottant (position: fixed) — au-dessus de tout le contenu */
+.eb-tooltip-floating {
+  position: fixed;
+  z-index: 99999;
+  padding: 3px 6px;
+  font-family: v.$font-mono;
+  font-size: 0.75rem;
+  color: var(--accent);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  white-space: nowrap;
+  max-width: min(400px, calc(100vw - 48px));
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  &.visible { opacity: 1; }
+}

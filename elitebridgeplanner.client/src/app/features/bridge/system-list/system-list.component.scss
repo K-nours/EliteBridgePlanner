@@ -5,7 +5,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .sidebar-header {
@@ -17,23 +17,27 @@
 
 .sidebar-title {
   font-family: v.$font-title;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 400;
   letter-spacing: 0.2em;
   color: var(--accent);
+  opacity: 1;
   margin-bottom: v.$spacing-sm;
 }
 
 .bridge-meta {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr; /* 50/50 strict */
   gap: 6px;
   margin-bottom: v.$spacing-sm;
+  width: 100%;
 }
 
 .meta-item {
   background: var(--bg);
   border: 1px solid var(--border);
   padding: 6px 8px;
+  min-width: 0; /* permet au grid de partager l'espace 50/50 */
 }
 
 .meta-label {
@@ -50,6 +54,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+
+  /* Départ/Arrivée : pipe truncateMiddle = début…fin — pas d'ellipsis CSS qui couperait la fin */
+  &.meta-value-truncate {
+    text-overflow: clip !important; /* évite la double troncature (pipe + CSS) */
+    min-width: 0;
+    max-width: 18ch; /* le texte tronqué (16 car) tient sans coupure */
+  }
 }
 
 .btn-add {
@@ -165,7 +176,8 @@
   cursor: pointer;
   transition: all v.$transition-fast;
 
-  &:first-child { border-right-width: 0; }
+  &:first-child:not(.active) { border-right-width: 0; }
+  &:first-child.active { border-right: 1px solid var(--accent); }
   &:hover { color: var(--text); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
   &.active {
     color: var(--accent);
@@ -248,8 +260,13 @@
   padding: 8px 10px;
   cursor: pointer;
   transition: all v.$transition-fast;
+  position: relative;
 
-  &:hover { border-color: var(--accent); background: var(--bg3); }
+  &:hover {
+    border-color: var(--accent);
+    background: var(--bg3);
+    z-index: 1000; /* tooltip au-dessus des cartes en dessous */
+  }
   &.selected { border-color: var(--accent); background: rgba(0,212,255,.04); }
 
   &.type-DEBUT   { border-left-color: var(--color-debut); }
@@ -271,7 +288,7 @@
 
 .card-row-2 {
   justify-content: space-between;
-  gap: 4px;
+  gap: 16px;
   margin-bottom: 8px;
 }
 
@@ -363,7 +380,7 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip; /* truncateMiddle pipe = début…fin, pas d'ellipsis CSS */
   white-space: nowrap;
 }
 
@@ -389,6 +406,9 @@
   &:hover { border-color: var(--accent); color: var(--accent); }
 }
 
+/* Tooltip flottant via TruncateTooltipDirective (.eb-tooltip-floating dans styles.scss) */
+.card-has-tooltip { cursor: help; }
+
 .card-architect {
   font-size: 0.62rem;
   color: var(--text-dim);
@@ -411,7 +431,7 @@
   padding: 2px 8px 0;
   @include v.badge-clip;
 
-  &.badge-type-DEBUT   { background: rgba(0,255,136,.12);  color: var(--color-debut);   border: 1px solid color-mix(in srgb, var(--color-debut) 25%, transparent); }
+  &.badge-type-DEBUT   { background: rgba(0,255,136,.12);  color: var(--accent);   border: 1px solid color-mix(in srgb, var(--color-debut) 25%, transparent); }
   &.badge-type-FIN     { background: rgba(255,51,102,.12); color: var(--color-fin);     border: 1px solid color-mix(in srgb, var(--color-fin) 25%, transparent); }
   &.badge-type-PILE    { background: rgba(255,107,0,.12);  color: var(--color-pile);    border: 1px solid color-mix(in srgb, var(--color-pile) 25%, transparent); }
   &.badge-type-TABLIER { background: rgba(0,212,255,.1);   color: var(--color-tablier); border: 1px solid color-mix(in srgb, var(--color-tablier) 25%, transparent); }

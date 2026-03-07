@@ -1,42 +1,52 @@
 @use '../../../../styles/variables' as v;
 
+/* ── Plan de métro / RER — style Elite Dangerous ───────────────────────────── */
+
 .viz-container {
   padding: v.$spacing-md v.$spacing-lg;
   border-bottom: 1px solid var(--border);
   background: var(--bg2);
-  min-height: 120px;
+  min-height: 100px;
   overflow-x: auto;
   flex-shrink: 0;
 }
 
 .viz-title {
   font-family: v.$font-title;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 400;
   letter-spacing: 0.2em;
-  color: var(--text-dim);
+  color: var(--accent);
+  opacity: 1;
   margin-bottom: v.$spacing-sm;
 }
 
 .bridge-track {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   min-width: max-content;
   gap: 0;
   position: relative;
-  padding: v.$spacing-sm 0;
+  padding: v.$spacing-md 40px;
+}
 
-  &::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 38%;
-    transform: translateY(-50%);
-    height: 1px;
-    background: var(--border);
-    opacity: 0.5;
-    z-index: 0;
-    pointer-events: none;
+/* Segments de ligne : vert jusqu'au nœud 5, puis accent — min 24px entre libellés (70px/2 + 24 + 70px/2 = 94px entre centres) */
+.line-segment {
+  flex: 1;
+  min-width: 66px;
+  height: 2px;
+  align-self: center;
+  z-index: 0;
+
+  &.segment-green {
+    background: var(--color-debut);
+    opacity: 0.8;
+  }
+
+  &.segment-normal {
+    background: var(--accent);
+    opacity: 0.6;
   }
 }
 
@@ -47,85 +57,94 @@
   cursor: pointer;
   position: relative;
   z-index: 1;
+  flex-shrink: 0;
 
   &.selected .node-shape {
-    filter: brightness(1.8);
-    transform: scale(1.15);
+    filter: brightness(1.4);
+    transform: scale(1.1);
   }
 
   &:hover .node-shape {
-    filter: brightness(1.5);
-    transform: scale(1.1);
+    filter: brightness(1.2);
+    transform: scale(1.05);
   }
 }
 
 .node-shape {
-  width: 52px;
-  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: v.$font-mono;
-  font-size: 0.7rem;
-  padding: 0;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text);
   box-sizing: border-box;
   transition: all v.$transition-fast;
   position: relative;
-  overflow: hidden;
+  border-radius: 50%;
+  background: var(--bg2);
 
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--bg2);
-    z-index: -1;
+  /* DEBUT — terminus de départ : double cercle, très identifiable */
+  &.type-DEBUT {
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--color-debut);
+    background: color-mix(in srgb, var(--color-debut) 20%, var(--bg2));
+    color: var(--color-debut);
+    box-shadow: 0 0 0 2px var(--bg2);
   }
 
-  &.type-DEBUT, &.type-FIN {
-    clip-path: polygon(20% 0%, 80% 0%, 100% 50%, 80% 100%, 20% 100%, 0% 50%);
+  /* FIN — terminus d'arrivée : double cercle, très identifiable */
+  &.type-FIN {
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--color-fin);
+    background: color-mix(in srgb, var(--color-fin) 20%, var(--bg2));
+    color: var(--color-fin);
+    box-shadow: 0 0 0 2px var(--bg2);
   }
+
+  /* TABLIER — station normale : cercle discret */
+  &.type-TABLIER {
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--color-tablier);
+    background: color-mix(in srgb, var(--color-tablier) 30%, var(--bg2));
+    font-size: 0;
+  }
+
+  /* PILE — hub / correspondance : anneau + cercle central, plus important */
   &.type-PILE {
-    clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
-    width: 52px;
-    height: 38px;
-    margin-top: 2px;
-    background: var(--panel);
-    border: 2px solid var(--border);
-    color: var(--text);
-
-    &::before {
-      background: var(--panel);
-    }
-
-    &::after {
-      content: '';
-      position: absolute;
-      left: 50%;
-      top: 55%;
-      transform: translate(-50%, -50%);
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--color-pile);
-      z-index: 0;
-    }
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--color-pile);
+    background: color-mix(in srgb, var(--color-pile) 25%, var(--bg2));
+    color: var(--color-pile);
+    font-size: 0.6rem;
   }
-  &.type-TABLIER { border-radius: v.$border-radius; }
-
-  &.type-DEBUT   { background: rgba(0,255,136,.2);  border: 2px solid var(--color-debut);   color: var(--color-debut); }
-  &.type-FIN     { background: rgba(255,51,102,.2); border: 2px solid var(--color-fin);     color: var(--color-fin); }
-  &.type-TABLIER { background: rgba(0,212,255,.1);  border: 1px solid var(--color-tablier); color: var(--color-tablier); }
 }
 
 .node-label {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 0.55rem;
-  margin-top: 4px;
   color: var(--text-dim);
-  max-width: 65px;
+  max-width: 70px;
   text-align: center;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip; /* truncateMiddle pipe = début…fin, pas d'ellipsis CSS */
   white-space: nowrap;
+  pointer-events: none;
+
+  /* Aligné sur DEBUT/FIN (28px) : 8px sous le rond = référence */
+  .bridge-node.type-DEBUT &,
+  .bridge-node.type-FIN & { margin-top: 8px; }
+  /* TABLIER (14px) : compenser pour même ligne que DEBUT/FIN */
+  .bridge-node.type-TABLIER & { margin-top: 15px; }
+  /* PILE (22px) : compenser pour même ligne que DEBUT/FIN */
+  .bridge-node.type-PILE & { margin-top: 11px; }
 }
 
 .empty-viz {

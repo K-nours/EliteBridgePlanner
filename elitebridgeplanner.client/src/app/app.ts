@@ -1,6 +1,7 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { ThemeService } from './shared/themes/theme.service';
+import { LanguageService } from './core/i18n/language.service';
 
 @Component({
   selector: 'app-root',
@@ -11,9 +12,9 @@ import { ThemeService } from './shared/themes/theme.service';
 })
 export class App implements OnInit {
   private readonly themeService = inject(ThemeService);
+  private readonly languageService = inject(LanguageService);
 
   ngOnInit(): void {
-    // Le ThemeService applique le thème sauvegardé via son effect() au démarrage
-    // Rien à faire ici — le signal s'en charge
+    // ThemeService et LanguageService appliquent thème/lang via leurs effects au démarrage
   }
 }

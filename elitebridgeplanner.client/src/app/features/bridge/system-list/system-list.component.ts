@@ -2,11 +2,13 @@ import { Component, inject, signal, computed } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { BridgeStore } from '../../../core/services/bridge.store';
 import { SystemType, ColonizationStatus } from '../../../core/models/models';
+import { TruncateMiddlePipe } from '../../../shared/pipes/truncate-middle.pipe';
+import { TruncateTooltipDirective } from '../../../shared/directives/truncate-tooltip.directive';
 
 @Component({
   selector: 'app-system-list',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, TruncateMiddlePipe, TruncateTooltipDirective],
   templateUrl: './system-list.component.html',
   styleUrl: './system-list.component.scss'
 })
