@@ -36,10 +36,10 @@ export class SystemListComponent {
   });
 
   readonly typeOptions: { value: SystemType; label: string }[] = [
-    { value: 'DEBUT', label: 'Début' },
+    { value: 'DEBUT', label: 'Départ' },
     { value: 'PILE', label: 'Pile' },
     { value: 'TABLIER', label: 'Tablier' },
-    { value: 'FIN', label: 'Fin' }
+    { value: 'FIN', label: 'Arrivée' }
   ];
 
   readonly statusOptions: { value: ColonizationStatus; label: string }[] = [

@@ -85,33 +85,36 @@
   border-radius: 50%;
   background: var(--bg2);
 
-  /* DEBUT — terminus de départ : double cercle, très identifiable */
+  /* DEBUT — terminus de départ : rond plein, fond 0,75, bordure pleine */
   &.type-DEBUT {
     width: 28px;
     height: 28px;
-    border: 3px solid var(--color-debut);
-    background: color-mix(in srgb, var(--color-debut) 20%, var(--bg2));
-    color: var(--color-debut);
-    box-shadow: 0 0 0 2px var(--bg2);
+    border: 2px solid var(--color-debut);
+    background: color-mix(in srgb, var(--color-debut) 75%, transparent);
+    font-size: 0;
   }
 
-  /* FIN — terminus d'arrivée : double cercle, très identifiable */
+  /* FIN — terminus d'arrivée : rond plein, fond 0,25, bordure pleine */
   &.type-FIN {
     width: 28px;
     height: 28px;
-    border: 3px solid var(--color-fin);
-    background: color-mix(in srgb, var(--color-fin) 20%, var(--bg2));
-    color: var(--color-fin);
-    box-shadow: 0 0 0 2px var(--bg2);
+    border: 2px solid var(--color-fin);
+    background: color-mix(in srgb, var(--color-fin) 25%, transparent);
+    font-size: 0;
   }
 
-  /* TABLIER — station normale : cercle discret */
+  /* TABLIER — station normale : rond plein */
   &.type-TABLIER {
     width: 14px;
     height: 14px;
-    border: 1px solid var(--color-tablier);
-    background: color-mix(in srgb, var(--color-tablier) 30%, var(--bg2));
+    border: none;
+    background: var(--color-tablier);
     font-size: 0;
+
+    /* Opérationnel : pastille verte pleine */
+    &.status-FINI {
+      background: var(--status-done);
+    }
   }
 
   /* PILE — hub / correspondance : anneau + cercle central, plus important */
@@ -122,6 +125,12 @@
     background: color-mix(in srgb, var(--color-pile) 25%, var(--bg2));
     color: var(--color-pile);
     font-size: 0.6rem;
+
+    /* Opérationnel : vert, bordure pleine + fond semi-transparent */
+    &.status-FINI {
+      border-color: var(--status-done);
+      background: color-mix(in srgb, var(--status-done) 75%, transparent);
+    }
   }
 }
 
@@ -130,13 +139,12 @@
   top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 0.7rem;
-  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
   max-width: 70px;
   text-align: center;
-  overflow: hidden;
-  text-overflow: clip; /* truncateMiddle pipe = début…fin, pas d'ellipsis CSS */
-  white-space: nowrap;
   pointer-events: none;
 
   /* Aligné sur DEBUT/FIN (28px) : 8px sous le rond = référence */
@@ -146,6 +154,20 @@
   .bridge-node.type-TABLIER & { margin-top: 15px; }
   /* PILE (22px) : compenser pour même ligne que DEBUT/FIN */
   .bridge-node.type-PILE & { margin-top: 11px; }
+}
+
+.node-label-name {
+  font-size: 0.7rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.node-label-order {
+  font-family: v.$font-mono;
+  font-size: 0.6rem;
+  color: var(--text-dim);
 }
 
 .empty-viz {

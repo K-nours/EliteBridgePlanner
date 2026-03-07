@@ -57,7 +57,7 @@
   transition: all v.$transition-fast;
   text-align: left;
 
-  &:hover {
+  &:not(.btn-critical):hover {
     background: var(--bg3);
     color: var(--accent);
   }
@@ -113,20 +113,14 @@
   border-top: 1px solid var(--border);
 }
 
-.logout-btn {
+.btn-critical {
   height: 28px;
   padding: 0 10px;
-  border: 1px solid var(--color-fin);
   background: transparent;
   font-weight: 600;
   letter-spacing: 0.1em;
-  color: var(--color-fin);
   justify-content: center;
   text-align: center;
   transition: all v.$transition-fast;
-
-  &:hover {
-    background: var(--color-fin);
-    color: var(--bg);
-  }
+  @include v.btn-critical;
 }

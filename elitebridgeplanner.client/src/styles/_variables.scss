@@ -33,3 +33,14 @@ $transition-normal : 0.25s ease;
 @mixin btn-clip {
   @include rect-chip;
 }
+
+/// Style du bouton critical (déconnexion, supprimer, etc.)
+@mixin btn-critical {
+  border-color: var(--color-fin);
+  color: var(--color-fin);
+  &:hover {
+    background: var(--color-fin);
+    color: white;
+    box-shadow: var(--glow);
+  }
+}

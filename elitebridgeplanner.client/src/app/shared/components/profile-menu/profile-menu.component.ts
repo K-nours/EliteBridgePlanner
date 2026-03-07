@@ -22,7 +22,7 @@ import { LanguageService } from '../../../core/i18n/language.service';
           </div>
         </div>
         <div class="logout-separator"></div>
-        <button type="button" class="dropdown-item logout-btn" (click)="logout()">
+        <button type="button" class="dropdown-item btn-critical" (click)="logout()">
           DÉCONNEXION
         </button>
       </div>

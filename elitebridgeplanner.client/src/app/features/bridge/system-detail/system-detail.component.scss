@@ -173,9 +173,8 @@
 
   &:hover { background: var(--accent); color: var(--bg); box-shadow: var(--glow); }
   &.btn-sm { padding: 5px 14px; font-size: 0.75rem; }
-  &.btn-danger {
-    border-color: var(--color-fin); color: var(--color-fin);
-    &:hover { background: var(--color-fin); color: white; }
+  &.btn-critical {
+    @include v.btn-critical;
   }
 }
 
@@ -193,7 +192,7 @@
 
   &.badge-type-DEBUT   { background: rgba(0,255,136,.12);  color: var(--color-debut);   border: 1px solid color-mix(in srgb, var(--color-debut) 25%, transparent); }
   &.badge-type-FIN     { background: rgba(255,51,102,.12); color: var(--color-fin);     border: 1px solid color-mix(in srgb, var(--color-fin) 25%, transparent); }
-  &.badge-type-PILE    { background: rgba(255,107,0,.12);  color: var(--color-pile);    border: 1px solid color-mix(in srgb, var(--color-pile) 25%, transparent); }
+  &.badge-type-PILE    { background: color-mix(in srgb, var(--color-pile) 12%, transparent);  color: var(--color-pile);    border: 1px solid color-mix(in srgb, var(--color-pile) 25%, transparent); }
   &.badge-type-TABLIER { background: rgba(0,212,255,.1);   color: var(--color-tablier); border: 1px solid color-mix(in srgb, var(--color-tablier) 25%, transparent); }
   /* Planifié / En construction / Opérationnel : bordure retirée uniquement sur les côtés obliques */
   &.badge-status-PLANIFIE     { background: rgba(74,106,138,.15); color: var(--status-plan);  border: 1px solid color-mix(in srgb, var(--status-plan) 25%, transparent); border-right: none; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); padding: 2px 16px 0 10px; }

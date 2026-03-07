@@ -21,21 +21,22 @@ import { TruncateTooltipDirective } from '../../../shared/directives/truncate-to
             ></div>
           }
           <div
-            [class]="'bridge-node type-' + system.type"
+            [class]="'bridge-node type-' + system.type + (system.status === 'FINI' ? ' status-FINI' : '')"
             [class.selected]="store.selectedSystem()?.id === system.id"
             (click)="store.selectSystem(system)"
           >
             <div
-              [class]="'node-shape type-' + system.type"
-            >
-              {{ system.order }}
-            </div>
+              [class]="'node-shape type-' + system.type + (system.status === 'FINI' ? ' status-FINI' : '')"
+            ></div>
             <div
               class="node-label"
               [truncateTooltip]="system.name"
               [truncateTooltipForce]="system.name.length > 14"
               [truncateTooltipAbove]="true"
-            >{{ system.name | truncateMiddle:14 }}</div>
+            >
+              <span class="node-label-name">{{ system.name | truncateMiddle:14 }}</span>
+              <span class="node-label-order">#{{ system.order }}</span>
+            </div>
           </div>
         }
         @if (store.orderedSystems().length === 0) {
