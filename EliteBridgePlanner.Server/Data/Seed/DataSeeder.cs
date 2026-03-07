@@ -47,7 +47,7 @@ public class DataSeeder
         var barnardStar = new StarSystem { Name = "Barnard's Star", Type = SystemType.PILE, Status = ColonizationStatus.CONSTRUCTION, BridgeId = bridge.Id };
         var wolf359 = new StarSystem { Name = "Wolf 359", Type = SystemType.TABLIER, Status = ColonizationStatus.PLANIFIE, BridgeId = bridge.Id };
         var sirius = new StarSystem { Name = "Sirius", Type = SystemType.PILE, Status = ColonizationStatus.PLANIFIE, BridgeId = bridge.Id };
-        var colonia = new StarSystem { Name = "Colonia", Type = SystemType.FIN, Status = ColonizationStatus.PLANIFIE, BridgeId = bridge.Id };
+        var colonia = new StarSystem { Name = "Colonia Gateway", Type = SystemType.FIN, Status = ColonizationStatus.PLANIFIE, BridgeId = bridge.Id };
 
         _db.StarSystems.AddRange(sol, alphaCentauri, barnardStar, wolf359, sirius, colonia);
         await _db.SaveChangesAsync(); // Les IDs sont maintenant générés
