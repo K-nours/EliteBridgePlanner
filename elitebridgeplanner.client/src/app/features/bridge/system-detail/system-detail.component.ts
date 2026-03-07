@@ -31,7 +31,7 @@ export class SystemDetailComponent {
   readonly statusOptions: { value: ColonizationStatus; label: string }[] = [
     { value: 'PLANIFIE',     label: 'Planifié' },
     { value: 'CONSTRUCTION', label: 'En construction' },
-    { value: 'FINI',         label: 'Fini' }
+    { value: 'FINI',         label: 'Opérationnel' }
   ];
 
   constructor() {

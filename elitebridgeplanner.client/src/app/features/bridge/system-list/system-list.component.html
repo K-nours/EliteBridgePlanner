@@ -62,33 +62,60 @@
 </div>
 }
 
+<!-- Toggle masquer opérationnels — style cockpit, deux options claires -->
+@if (store.activeBridge()) {
+<div class="list-toolbar">
+  <div class="cockpit-toggle">
+    <button type="button" class="cockpit-toggle-btn" [class.active]="!hideOperational()"
+      (click)="hideOperational.set(false)">
+      Tous
+    </button>
+    <button type="button" class="cockpit-toggle-btn" [class.active]="hideOperational()"
+      (click)="hideOperational.set(true)">
+      En cours
+    </button>
+  </div>
+</div>
+}
+
 <!-- Liste des systèmes -->
 <div class="systems-list">
-  @for (system of store.orderedSystems(); track system.id) {
+  @for (system of displaySystems(); track system.id) {
   <div class="system-card" [class]="'type-' + system.type" [class.selected]="store.selectedSystem()?.id === system.id"
     (click)="store.selectSystem(system)">
-    <div class="card-top">
-      <span class="card-order">#{{ system.order }}</span>
-      <span class="card-name">{{ system.name }}</span>
+    <div class="card-row card-row-1">
+      <span class="badge" [class]="'badge-type-' + system.type">{{ typeLabel(system.type) }}</span>
       <div class="order-controls" (click)="$event.stopPropagation()">
         <button class="order-btn" (click)="moveUp(system.id, system.order)" title="Monter">▲</button>
         <button class="order-btn" (click)="moveDown(system.id, system.order)" title="Descendre">▼</button>
       </div>
     </div>
-    <div class="card-bottom">
-      <span class="badge" [class]="'badge-type-' + system.type">{{ typeLabel(system.type) }}</span>
-      <span class="badge" [class]="'badge-status-' + system.status">{{ statusLabel(system.status) }}</span>
+    <div class="card-row card-row-2">
+      <span class="card-order-name">#{{ system.order }} {{ system.name }}</span>
       @if (system.architectName) {
       <span class="card-architect">◈ {{ system.architectName }}</span>
+      }
+    </div>
+    <div class="card-row card-row-3" [class.status-PLANIFIE]="system.status === 'PLANIFIE'" [class.status-CONSTRUCTION]="system.status === 'CONSTRUCTION'" [class.status-FINI]="system.status === 'FINI'">
+      @if (system.status === 'CONSTRUCTION' || system.status === 'FINI') {
+        <span class="status-fictive status-fictive-left" [class]="'fictive-' + (system.status === 'FINI' ? 'CONSTRUCTION' : 'PLANIFIE')"></span>
+      }
+      <span class="badge" [class]="'badge-status-' + system.status">{{ statusLabel(system.status) }}</span>
+      @if (system.status === 'PLANIFIE' || system.status === 'CONSTRUCTION') {
+        <span class="status-fictive status-fictive-right" [class]="'fictive-' + (system.status === 'PLANIFIE' ? 'CONSTRUCTION' : 'FINI')"></span>
       }
     </div>
   </div>
   }
 
-  @if (store.orderedSystems().length === 0 && !store.isLoading()) {
+  @if (displaySystems().length === 0 && !store.isLoading()) {
   <div class="empty-list">
     <span class="empty-icon">◈</span>
+    @if (hideOperational() && store.orderedSystems().length > 0) {
+    <p>Tous les systèmes sont opérationnels<br>(masqués par le filtre)</p>
+    } @else {
     <p>Aucun système<br>Ajoutez-en un pour commencer</p>
+    }
   </div>
   }
 </div>

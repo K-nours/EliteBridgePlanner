@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, computed } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { BridgeStore } from '../../../core/services/bridge.store';
 import { SystemType, ColonizationStatus } from '../../../core/models/models';
@@ -15,6 +15,15 @@ export class SystemListComponent {
   private readonly fb = inject(FormBuilder);
 
   readonly showAddForm = signal(false);
+  readonly hideOperational = signal(false);
+
+  readonly displaySystems = computed(() => {
+    const systems = this.store.orderedSystems();
+    if (this.hideOperational()) {
+      return systems.filter(s => s.status === 'CONSTRUCTION');
+    }
+    return systems;
+  });
 
   readonly addForm = this.fb.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
@@ -34,7 +43,7 @@ export class SystemListComponent {
   readonly statusOptions: { value: ColonizationStatus; label: string }[] = [
     { value: 'PLANIFIE', label: 'Planifié' },
     { value: 'CONSTRUCTION', label: 'En construction' },
-    { value: 'FINI', label: 'Fini' }
+    { value: 'FINI', label: 'Opérationnel' }
   ];
 
   toggleAddForm(): void {

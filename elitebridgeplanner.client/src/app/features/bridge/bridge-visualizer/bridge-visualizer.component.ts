@@ -10,7 +10,7 @@ import { StarSystemDto } from '../../../core/models/models';
     <div class="viz-container">
       <div class="viz-title">▸ VISUALISATION DU PONT STELLAIRE</div>
       <div class="bridge-track">
-        @for (system of store.orderedSystems(); track system.id; let last = $last) {
+        @for (system of store.orderedSystems(); track system.id) {
           <div
             class="bridge-node"
             [class.selected]="store.selectedSystem()?.id === system.id"
@@ -26,11 +26,6 @@ import { StarSystemDto } from '../../../core/models/models';
             </div>
             <div class="node-label">{{ system.name }}</div>
           </div>
-          @if (!last) {
-            <div class="bridge-connector"
-              [class.solid]="system.status === 'FINI'">
-            </div>
-          }
         }
         @if (store.orderedSystems().length === 0) {
           <span class="empty-viz">Aucun système — ajoutez-en un pour commencer</span>

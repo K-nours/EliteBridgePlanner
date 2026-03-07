@@ -1,5 +1,13 @@
 @use '../../../../styles/variables' as v;
 
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .sidebar-header {
   padding: v.$spacing-md;
   border-bottom: 1px solid var(--border);
@@ -65,6 +73,7 @@
 
 // ── Formulaire d'ajout ────────────────────────────────────────────────────
 .add-form {
+  flex-shrink: 0;
   padding: v.$spacing-sm v.$spacing-md;
   background: var(--bg2);
   border-bottom: 1px solid var(--accent);
@@ -126,9 +135,107 @@
   &:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 
+// ── Toggle masquer opérationnels — style cockpit vaisseau ────────────────────
+.list-toolbar {
+  flex-shrink: 0;
+  padding: v.$spacing-sm v.$spacing-md;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+}
+
+.cockpit-toggle {
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  width: 100%;
+  user-select: none;
+}
+
+.cockpit-toggle-btn {
+  flex: 1;
+  height: 28px;
+  padding: 0 10px;
+  font-family: v.$font-mono;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: linear-gradient(180deg, rgba(0,0,0,.3) 0%, var(--bg) 100%);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all v.$transition-fast;
+
+  &:first-child { border-right-width: 0; }
+  &:hover { color: var(--text); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+  &.active {
+    color: var(--accent);
+    background: rgba(0,212,255,.08);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(0,212,255,.2);
+  }
+}
+
+.cockpit-toggle-track {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 28px;
+  padding: 0 6px;
+  background: linear-gradient(180deg, rgba(0,0,0,.4) 0%, var(--bg) 50%, rgba(0,0,0,.3) 100%);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.5);
+  position: relative;
+}
+
+.cockpit-toggle-lever {
+  position: absolute;
+  left: 6px;
+  top: 4px;
+  width: calc(50% - 10px);
+  height: calc(100% - 8px);
+  background: linear-gradient(180deg, var(--bg3) 0%, var(--bg2) 100%);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  box-shadow: 0 0 8px rgba(0,212,255,.15);
+  transition: left v.$transition-normal, box-shadow v.$transition-fast;
+}
+
+.cockpit-toggle.active .cockpit-toggle-lever {
+  left: calc(50% + 4px);
+  border-color: var(--accent);
+  box-shadow: 0 0 12px rgba(0,212,255,.4);
+}
+
+.cockpit-toggle-label {
+  font-family: v.$font-mono;
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+  z-index: 1;
+  transition: color v.$transition-fast;
+}
+
+.cockpit-toggle.active .cockpit-toggle-label:last-child {
+  color: var(--accent);
+  text-shadow: 0 0 6px rgba(0,212,255,.5);
+}
+
+.cockpit-toggle:not(.active) .cockpit-toggle-label:first-child {
+  color: var(--accent);
+  text-shadow: 0 0 6px rgba(0,212,255,.5);
+}
+
+.cockpit-toggle-hint {
+  font-size: 0.52rem;
+  letter-spacing: 0.2em;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
 // ── Liste ─────────────────────────────────────────────────────────────────
 .systems-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: v.$spacing-xs;
 }
@@ -151,27 +258,110 @@
   &.type-TABLIER { border-left-color: var(--color-tablier); }
 }
 
-.card-top {
+.card-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 5px;
+  gap: 3px;
 }
 
-.card-order {
-  font-family: v.$font-mono;
-  font-size: 0.6rem;
-  color: var(--text-dim);
-  background: var(--bg);
-  padding: 1px 5px;
-  border: 1px solid var(--border);
+.card-row-1 {
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.card-row-2 {
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.card-row-3 {
+  display: flex;
+  width: 100%;
+  margin-bottom: 0;
+  gap: 0;
+
+  /* Chevauchement pour resserrer l'espace entre les flèches */
+  > * + * {
+    margin-left: -6px;
+  }
+
+  > .badge {
+    display: inline-flex;
+    box-sizing: border-box;
+    flex: 1;
+    min-width: 0;
+    justify-content: center;
+    filter: none; /* évite le chevauchement avec les segments fictifs */
+  }
+
+  &.status-PLANIFIE {
+    justify-content: flex-start;
+  }
+
+  &.status-FINI {
+    justify-content: flex-end;
+  }
+
+  &.status-CONSTRUCTION {
+    justify-content: center;
+  }
+}
+
+// Segments fictifs pour continuité des flèches de statut (16px) — bordures uniquement sur les côtés droits (pas obliques)
+.status-fictive {
   flex-shrink: 0;
+  width: 16px;
+  height: 20px;
+  display: inline-block;
+  border: none;
+  opacity: 0.5;
+
+  $plan-border: 1px solid color-mix(in srgb, var(--status-plan) 10%, transparent);
+  $build-border: 1px solid color-mix(in srgb, var(--status-build) 10%, transparent);
+  $done-border: 1px solid color-mix(in srgb, var(--status-done) 10%, transparent);
+
+  // Planifié : bord gauche plat (droit), encoche droite (oblique) — bordure sur gauche, haut, bas
+  &.fictive-PLANIFIE {
+    background: color-mix(in srgb, var(--status-plan) 10%, transparent);
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+    border-top: $plan-border;
+    border-bottom: $plan-border;
+    border-left: $plan-border;
+  }
+  // En construction gauche : bord gauche plat, encoche droite oblique
+  &.fictive-CONSTRUCTION.status-fictive-left {
+    background: color-mix(in srgb, var(--status-build) 10%, transparent);
+    clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+    border-top: $build-border;
+    border-bottom: $build-border;
+    border-left: $build-border;
+  }
+  // En construction droite : encoche gauche oblique, bord droit plat
+  &.fictive-CONSTRUCTION.status-fictive-right {
+    background: color-mix(in srgb, var(--status-build) 10%, transparent);
+    clip-path: polygon(10px 50%, 0 0, 100% 0, 100% 100%, 0 100%);
+    border-top: $build-border;
+    border-bottom: $build-border;
+    border-right: $build-border;
+  }
+  // Opérationnel : encoche gauche oblique, bord droit plat
+  &.fictive-FINI {
+    background: color-mix(in srgb, var(--status-done) 10%, transparent);
+    clip-path: polygon(10px 50%, 0 0, 100% 0, 100% 100%, 0 100%);
+    border-top: $done-border;
+    border-bottom: $done-border;
+    border-right: $done-border;
+  }
 }
 
-.card-name {
-  font-size: 0.88rem;
+.card-order-name {
+  font-family: v.$font-mono;
+  font-size: 0.85rem;
   font-weight: 600;
+  color: var(--text);
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -180,6 +370,7 @@
 .order-controls {
   display: flex;
   gap: 3px;
+  flex-shrink: 0;
 }
 
 .order-btn {
@@ -198,34 +389,39 @@
   &:hover { border-color: var(--accent); color: var(--accent); }
 }
 
-.card-bottom {
-  display: flex;
-  gap: 5px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.badge {
-  font-size: 0.58rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 2px 6px;
-  @include v.badge-clip;
-
-  &.badge-type-DEBUT   { background: rgba(0,255,136,.12);  color: var(--color-debut);   border: 1px solid var(--color-debut); }
-  &.badge-type-FIN     { background: rgba(255,51,102,.12); color: var(--color-fin);     border: 1px solid var(--color-fin); }
-  &.badge-type-PILE    { background: rgba(255,107,0,.12);  color: var(--color-pile);    border: 1px solid var(--color-pile); }
-  &.badge-type-TABLIER { background: rgba(0,212,255,.1);   color: var(--color-tablier); border: 1px solid var(--color-tablier); }
-
-  &.badge-status-PLANIFIE     { background: rgba(74,106,138,.15); color: var(--status-plan);  border: 1px solid var(--status-plan); }
-  &.badge-status-CONSTRUCTION { background: rgba(255,140,0,.12);  color: var(--status-build); border: 1px solid var(--status-build); }
-  &.badge-status-FINI         { background: rgba(0,204,102,.12);  color: var(--status-done);  border: 1px solid var(--status-done); }
-}
-
 .card-architect {
   font-size: 0.62rem;
   color: var(--text-dim);
+  flex-shrink: 0;
   margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  font-size: 0.58rem;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 8px 0;
+  @include v.badge-clip;
+
+  &.badge-type-DEBUT   { background: rgba(0,255,136,.12);  color: var(--color-debut);   border: 1px solid color-mix(in srgb, var(--color-debut) 25%, transparent); }
+  &.badge-type-FIN     { background: rgba(255,51,102,.12); color: var(--color-fin);     border: 1px solid color-mix(in srgb, var(--color-fin) 25%, transparent); }
+  &.badge-type-PILE    { background: rgba(255,107,0,.12);  color: var(--color-pile);    border: 1px solid color-mix(in srgb, var(--color-pile) 25%, transparent); }
+  &.badge-type-TABLIER { background: rgba(0,212,255,.1);   color: var(--color-tablier); border: 1px solid color-mix(in srgb, var(--color-tablier) 25%, transparent); }
+
+  /* Planifié: carré gauche, flèche droite (→) — bordure droite oblique retirée */
+  &.badge-status-PLANIFIE     { background: rgba(74,106,138,.15); color: var(--status-plan);  border: 1px solid color-mix(in srgb, var(--status-plan) 15%, transparent); border-right: none; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); padding: 2px 16px 0 8px; }
+  /* En construction: flèche gauche (→) et flèche droite (→) — bordures gauche/droite obliques retirées */
+  &.badge-status-CONSTRUCTION { background: rgba(255,140,0,.12);  color: var(--status-build); border: 1px solid color-mix(in srgb, var(--status-build) 15%, transparent); border-left: none; border-right: none; clip-path: polygon(0 0, 10px 50%, 0 100%, calc(100% - 10px) 100%, 100% 50%, calc(100% - 10px) 0, 10px 0); padding: 2px 16px 0 16px; }
+  /* Opérationnel: flèche gauche (→), carré droite — bordure gauche oblique retirée */
+  &.badge-status-FINI         { background: rgba(0,204,102,.12);  color: var(--status-done);  border: 1px solid color-mix(in srgb, var(--status-done) 15%, transparent); border-left: none; clip-path: polygon(0 0, 10px 50%, 0 100%, 10px 100%, 100% 100%, 100% 0, 10px 0); padding: 2px 8px 0 16px; }
 }
 
 .empty-list {

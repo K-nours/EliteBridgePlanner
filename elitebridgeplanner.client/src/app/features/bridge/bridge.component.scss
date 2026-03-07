@@ -92,7 +92,7 @@
 .stat-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 0;
 
   &.done    { background: var(--status-done); }
   &.build   { background: var(--status-build); }
@@ -137,6 +137,7 @@
 .sidebar {
   width: v.$sidebar-width;
   flex-shrink: 0;
+  min-height: 0;
   background: var(--panel);
   border-right: 1px solid var(--border);
   overflow: hidden;
