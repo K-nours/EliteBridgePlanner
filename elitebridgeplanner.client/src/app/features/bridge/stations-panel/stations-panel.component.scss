@@ -1,0 +1,68 @@
+@use '../../../../styles/variables' as v;
+
+.stations-wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-top: v.$spacing-lg; // Même espace au-dessus que detail-area
+}
+
+.section-header {
+  flex-shrink: 0;
+  padding: 0 v.$spacing-lg v.$spacing-md; // Espace sous le titre avant la bordure
+  margin-bottom: v.$spacing-lg; // Espace sous la bordure avant le contenu
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-title {
+  font-family: v.$font-title;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+}
+
+.stations-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: v.$spacing-lg;
+}
+
+.stations-hint {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-bottom: v.$spacing-md;
+
+  strong {
+    color: var(--accent);
+    font-weight: 600;
+  }
+}
+
+.empty-stations,
+.empty-state {
+  text-align: center;
+  padding: v.$spacing-lg;
+  color: var(--text-dim);
+
+  .empty-icon {
+    font-size: 2rem;
+    opacity: 0.3;
+    display: block;
+    margin-bottom: v.$spacing-md;
+  }
+
+  p {
+    font-size: 0.85rem;
+    line-height: 1.6;
+
+    &.sub {
+      margin-top: v.$spacing-sm;
+      font-size: 0.75rem;
+      opacity: 0.8;
+    }
+  }
+}
