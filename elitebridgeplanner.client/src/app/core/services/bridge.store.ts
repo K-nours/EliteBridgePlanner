@@ -2,8 +2,14 @@ import { signalStore, withState, withMethods, withComputed, patchState } from '@
 import { inject, computed } from '@angular/core';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
 import { pipe, switchMap, tap, catchError, EMPTY } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
 import { BridgeDto, StarSystemDto, CreateSystemRequest, UpdateSystemRequest } from '../models/models';
 import { BridgeApiService } from '../services/bridge-api.service';
+
+const getErrorMessage = (err: unknown): string =>
+  err instanceof HttpErrorResponse && typeof err.error?.message === 'string'
+    ? err.error.message
+    : err instanceof Error ? err.message : 'Erreur inconnue';
 
 interface BridgeState {
   bridges: BridgeDto[];
@@ -54,8 +60,8 @@ export const BridgeStore = signalStore(
         tap(() => patchState(store, { isLoading: true, error: null })),
         switchMap(() => api.getBridges().pipe(
           tap((bridges: BridgeDto[]) => patchState(store, { bridges, isLoading: false })),
-          catchError((err: Error) => {
-            patchState(store, { error: err.message, isLoading: false });
+          catchError((err: unknown) => {
+            patchState(store, { error: getErrorMessage(err), isLoading: false });
             return EMPTY;
           })
         ))
@@ -68,38 +74,66 @@ export const BridgeStore = signalStore(
         tap(() => patchState(store, { isLoading: true, error: null })),
         switchMap((id: number) => api.getBridgeById(id).pipe(
           tap((activeBridge: BridgeDto) => patchState(store, { activeBridge, isLoading: false })),
-          catchError((err: Error) => {
-            patchState(store, { error: err.message, isLoading: false });
+          catchError((err: unknown) => {
+            patchState(store, { error: getErrorMessage(err), isLoading: false });
             return EMPTY;
           })
         ))
       )
     ),
+
+    /** Charge le premier pont disponible (évite l'id codé en dur) */
+    loadFirstBridge(): void {
+      patchState(store, { isLoading: true, error: null });
+      api.getBridges().pipe(
+        tap((bridges: BridgeDto[]) => patchState(store, { bridges })),
+        switchMap((bridges: BridgeDto[]) => {
+          const first = bridges[0];
+          if (!first) {
+            patchState(store, { isLoading: false, error: 'Aucun pont trouvé' });
+            return EMPTY;
+          }
+          return api.getBridgeById(first.id).pipe(
+            tap((activeBridge: BridgeDto) => patchState(store, { activeBridge, isLoading: false })),
+            catchError((err: unknown) => {
+              patchState(store, { error: getErrorMessage(err), isLoading: false });
+              return EMPTY;
+            })
+          );
+        }),
+        catchError((err: unknown) => {
+          patchState(store, { error: getErrorMessage(err), isLoading: false });
+          return EMPTY;
+        })
+      ).subscribe();
+    },
 
     // ── Sélectionner un système ────────────────────────────────────────────
     selectSystem(system: StarSystemDto | null): void {
       patchState(store, { selectedSystem: system });
     },
 
+    clearError(): void {
+      patchState(store, { error: null });
+    },
+
     // ── Ajouter un système ─────────────────────────────────────────────────
-    addSystem: rxMethod<CreateSystemRequest>(
-      pipe(
-        switchMap((request: CreateSystemRequest) => api.addSystem(request).pipe(
-          tap(() => {
-            const bridgeId = store.activeBridge()?.id;
-            if (bridgeId) {
-              api.getBridgeById(bridgeId).subscribe(
-                (activeBridge: BridgeDto) => patchState(store, { activeBridge })
-              );
-            }
-          }),
-          catchError((err: Error) => {
-            patchState(store, { error: err.message });
-            return EMPTY;
-          })
-        ))
-      )
-    ),
+    addSystem(request: CreateSystemRequest): void {
+      api.addSystem(request).pipe(
+        tap(() => {
+          const bridgeId = store.activeBridge()?.id;
+          if (bridgeId) {
+            api.getBridgeById(bridgeId).subscribe(
+              (activeBridge: BridgeDto) => patchState(store, { activeBridge })
+            );
+          }
+        }),
+        catchError((err: unknown) => {
+          patchState(store, { error: getErrorMessage(err) });
+          return EMPTY;
+        })
+      ).subscribe();
+    },
 
     // ── Mettre à jour un système ───────────────────────────────────────────
     updateSystem: rxMethod<{ id: number; request: UpdateSystemRequest }>(
@@ -114,8 +148,8 @@ export const BridgeStore = signalStore(
               selectedSystem: updated
             });
           }),
-          catchError((err: Error) => {
-            patchState(store, { error: err.message });
+          catchError((err: unknown) => {
+            patchState(store, { error: getErrorMessage(err) });
             return EMPTY;
           })
         ))
@@ -134,8 +168,8 @@ export const BridgeStore = signalStore(
               );
             }
           }),
-          catchError((err: Error) => {
-            patchState(store, { error: err.message });
+          catchError((err: unknown) => {
+            patchState(store, { error: getErrorMessage(err) });
             return EMPTY;
           })
         ))
@@ -155,8 +189,8 @@ export const BridgeStore = signalStore(
               selectedSystem: null
             });
           }),
-          catchError((err: Error) => {
-            patchState(store, { error: err.message });
+          catchError((err: unknown) => {
+            patchState(store, { error: getErrorMessage(err) });
             return EMPTY;
           })
         ))

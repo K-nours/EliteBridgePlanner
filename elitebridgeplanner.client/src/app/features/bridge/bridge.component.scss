@@ -182,3 +182,27 @@
   &:hover { background: var(--accent); color: var(--bg); box-shadow: var(--glow); }
   &.btn-sm { padding: 5px 14px; font-size: 0.75rem; }
 }
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+  background: rgba(255, 51, 102, 0.1);
+  border: 1px solid var(--color-fin);
+  color: var(--color-fin);
+  padding: v.$spacing-sm v.$spacing-lg;
+  font-size: 0.85rem;
+
+  .error-dismiss {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+
+    &:hover { opacity: 0.8; }
+  }
+}

@@ -33,6 +33,12 @@
     height: 2px;
     background: linear-gradient(90deg, var(--accent), transparent);
   }
+
+  /* Couleur du dégradé = bordure gauche de la card sélectionnée */
+  &.type-DEBUT::before   { background: linear-gradient(90deg, var(--color-debut), transparent); }
+  &.type-FIN::before     { background: linear-gradient(90deg, var(--color-fin), transparent); }
+  &.type-PILE::before    { background: linear-gradient(90deg, var(--color-pile), transparent); }
+  &.type-TABLIER::before { background: linear-gradient(90deg, var(--color-tablier), transparent); }
 }
 
 .detail-heading {

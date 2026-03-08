@@ -30,6 +30,8 @@
   gap: 0;
   position: relative;
   padding: v.$spacing-md 40px;
+  margin-top: 8px;
+  margin-bottom: 16px;
 }
 
 /* Segments de ligne : vert jusqu'au nœud 5, puis accent — min 24px entre libellés (70px/2 + 24 + 70px/2 = 94px entre centres) */

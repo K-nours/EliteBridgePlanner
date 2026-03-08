@@ -24,10 +24,9 @@ export class BridgeComponent implements OnInit {
   readonly store = inject(BridgeStore);
   readonly authService = inject(AuthService);
 
-  ngOnInit(): void {       
-    // TODO : ajouter la sélection de pont quand plusieurs ponts seront supportés
-    // Pour l'instant on charge directement le pont 1 après le chargement de la liste
-    this.store.loadBridge(1);
+  ngOnInit(): void {
+    // Charge le premier pont disponible (évite l'erreur FK si l'id 1 n'existe pas)
+    this.store.loadFirstBridge();
   }
 
   logout(): void {

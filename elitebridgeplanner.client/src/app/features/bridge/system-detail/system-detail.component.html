@@ -10,7 +10,13 @@
   </div>
 
   @if (store.selectedSystem(); as sys) {
-    <div class="detail-panel animate-fadeIn">
+    <div
+        class="detail-panel animate-fadeIn"
+        [class.type-DEBUT]="sys.type === 'DEBUT'"
+        [class.type-FIN]="sys.type === 'FIN'"
+        [class.type-PILE]="sys.type === 'PILE'"
+        [class.type-TABLIER]="sys.type === 'TABLIER'"
+      >
       <!-- En-tête du système sélectionné : badge type + nom sur la même ligne -->
       <div class="detail-heading">
         <div class="detail-heading-row">

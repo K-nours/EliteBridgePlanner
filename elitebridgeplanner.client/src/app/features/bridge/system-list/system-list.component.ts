@@ -51,7 +51,7 @@ export class SystemListComponent {
   toggleAddForm(): void {
     this.showAddForm.update(v => !v);
     if (this.showAddForm()) {
-      this.addForm.patchValue({ insertAtIndex: this.store.orderedSystems().length });
+      this.addForm.patchValue({ insertAtIndex: this.store.orderedSystems().length + 1 });
     }
   }
 
@@ -66,7 +66,7 @@ export class SystemListComponent {
       architectId: val.architectId ?? null,
       bridgeId: this.store.activeBridge()!.id
     });
-    this.addForm.reset({ type: 'TABLIER', status: 'PLANIFIE', insertAtIndex: 0 });
+    this.addForm.reset({ type: 'TABLIER', status: 'PLANIFIE', insertAtIndex: 1 });
     this.showAddForm.set(false);
   }
 
