@@ -91,6 +91,7 @@
 // ── Formulaire d'ajout ────────────────────────────────────────────────────
 .add-form {
   flex-shrink: 0;
+  margin-top: v.$spacing-sm;
   padding: v.$spacing-sm v.$spacing-md;
   background: var(--bg2);
   border-bottom: 1px solid var(--accent);
@@ -99,7 +100,7 @@
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: v.$spacing-xs;
+  gap: v.$spacing-md;
   margin-bottom: v.$spacing-sm;
 }
 
@@ -135,6 +136,7 @@
 
 .btn-confirm {
   width: 100%;
+  margin-bottom: v.$spacing-sm;
   font-family: v.$font-ui;
   font-size: 0.8rem;
   font-weight: 600;

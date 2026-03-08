@@ -2,11 +2,12 @@ import { Component, inject, effect, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { BridgeStore } from '../../../core/services/bridge.store';
 import { SystemType, ColonizationStatus } from '../../../core/models/models';
+import { CustomSelectComponent } from '../../../shared/components/custom-select/custom-select.component';
 
 @Component({
   selector: 'app-system-detail',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, CustomSelectComponent],
   templateUrl: './system-detail.component.html',
   styleUrl: './system-detail.component.scss'
 })

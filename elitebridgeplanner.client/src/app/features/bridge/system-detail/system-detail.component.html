@@ -34,12 +34,12 @@
         </div>
 
         <div class="field-group">
-          <label class="field-label">Type</label>
-          <select class="field-select" [formControl]="form.controls.type">
-            @for (opt of typeOptions; track opt.value) {
-              <option [value]="opt.value">{{ opt.label }}</option>
-            }
-          </select>
+          <label class="field-label" [id]="'edit-type-label'">Type</label>
+          <app-custom-select
+            [options]="typeOptions"
+            [labelId]="'edit-type-label'"
+            [formControl]="form.controls.type"
+          />
         </div>
 
         <div class="field-group">

@@ -4,11 +4,12 @@ import { BridgeStore } from '../../../core/services/bridge.store';
 import { SystemType, ColonizationStatus } from '../../../core/models/models';
 import { TruncateMiddlePipe } from '../../../shared/pipes/truncate-middle.pipe';
 import { TruncateTooltipDirective } from '../../../shared/directives/truncate-tooltip.directive';
+import { CustomSelectComponent } from '../../../shared/components/custom-select/custom-select.component';
 
 @Component({
   selector: 'app-system-list',
   standalone: true,
-  imports: [ReactiveFormsModule, TruncateMiddlePipe, TruncateTooltipDirective],
+  imports: [ReactiveFormsModule, TruncateMiddlePipe, TruncateTooltipDirective, CustomSelectComponent],
   templateUrl: './system-list.component.html',
   styleUrl: './system-list.component.scss'
 })

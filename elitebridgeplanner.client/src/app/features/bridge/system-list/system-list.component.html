@@ -42,20 +42,20 @@
       <input class="field-input" [formControl]="addForm.controls.name" placeholder="Ex: Colonia Gateway" />
     </div>
     <div class="field-group">
-      <label class="field-label">Type</label>
-      <select class="field-select" [formControl]="addForm.controls.type">
-        @for (opt of typeOptions; track opt.value) {
-        <option [value]="opt.value">{{ opt.label }}</option>
-        }
-      </select>
+      <label class="field-label" [id]="'add-type-label'">Type</label>
+      <app-custom-select
+        [options]="typeOptions"
+        [labelId]="'add-type-label'"
+        [formControl]="addForm.controls.type"
+      />
     </div>
     <div class="field-group">
-      <label class="field-label">Statut</label>
-      <select class="field-select" [formControl]="addForm.controls.status">
-        @for (opt of statusOptions; track opt.value) {
-        <option [value]="opt.value">{{ opt.label }}</option>
-        }
-      </select>
+      <label class="field-label" [id]="'add-status-label'">Statut</label>
+      <app-custom-select
+        [options]="statusOptions"
+        [labelId]="'add-status-label'"
+        [formControl]="addForm.controls.status"
+      />
     </div>
     <div class="field-group">
       <label class="field-label">Insérer à l'index</label>
