@@ -1,132 +1,414 @@
 <div class="api-explorer-demo">
-  <h1>API Explorer (Devtools)</h1>
-  <p class="hint">Test rapide EDSM / Spansh — vérifier CORS et données.</p>
+  <h1>Route Colonisation Spansh</h1>
+  <p class="hint">Planifier une route et analyser les systèmes potentiels pour vous ravitailler sur votre pont.</p>
 
-  <div class="system-input-row">
-    <label for="system-name">Système source</label>
-    <input id="system-name" type="text" [value]="systemName" (input)="systemName = $any($event.target).value" placeholder="Mayang" />
-  </div>
-  <div class="system-input-row">
-    <label for="destination-name">Système destination</label>
-    <input id="destination-name" type="text" [value]="destinationSystem" (input)="destinationSystem = $any($event.target).value" placeholder="Colonia" />
-  </div>
-
-  <section class="edsm-section">
-    <h2>EDSM</h2>
-    <div class="edsm-buttons">
-      <button (click)="testEdsn()" [disabled]="loadingEdsn" [class.loading]="loadingEdsn">
-        @if (loadingEdsn) { <span class="spinner"></span> }
-        {{ loadingEdsn ? 'Chargement…' : 'Tester EDSM System' }}
-      </button>
-      <button (click)="testEdsnBodies()" [disabled]="loadingEdsnBodies" [class.loading]="loadingEdsnBodies">
-        @if (loadingEdsnBodies) { <span class="spinner"></span> }
-        {{ loadingEdsnBodies ? 'Chargement…' : 'Tester EDSM Bodies' }}
-      </button>
+  <!-- 1. Zone de saisie -->
+  <section class="input-zone">
+    <h2>Calcul de route</h2>
+    <div class="source-analysis-row">
+      <span class="source-label">Source d'analyse :</span>
+      <label class="source-option">
+        <input type="radio" name="enrichmentMode" [value]="'edsm'" [(ngModel)]="enrichmentMode" />
+        EDSM
+      </label>
+      <label class="source-option">
+        <input type="radio" name="enrichmentMode" [value]="'spansh-lite'" [(ngModel)]="enrichmentMode" />
+        Spansh Lite
+      </label>
+      <label class="source-option">
+        <input type="radio" name="enrichmentMode" [value]="'hybrid'" [(ngModel)]="enrichmentMode" />
+        Hybrid
+      </label>
+      @if (enrichmentMode === 'hybrid') {
+        <label class="hybrid-top-n">
+          Top
+          <input type="number" [(ngModel)]="hybridTopN" min="1" max="20" style="width: 40px;" />
+          candidats par dépôt
+        </label>
+      }
     </div>
-    @if (edsnError) {
-      <div class="error">{{ edsnError }}</div>
-    }
-    @if (edsnResponse !== null) {
-      <div class="json-block" [class.collapsed]="!expandedEdsn">
-        <button type="button" class="collapse-trigger" (click)="toggleExpanded('edsn')" [attr.aria-expanded]="expandedEdsn">
-          <span class="chevron">{{ expandedEdsn ? '▼' : '▶' }}</span> JSON brut
-        </button>
-        @if (expandedEdsn) {
-          <pre>{{ edsnResponse | json }}</pre>
-        }
+    <div class="input-row">
+      <label for="depart">Départ</label>
+      <input id="depart" type="text" [(ngModel)]="systemName" placeholder="Prieluia BP-R d4-105" />
+    </div>
+    <div class="input-row">
+      <label for="arrivee">Arrivée</label>
+      <input id="arrivee" type="text" [(ngModel)]="destinationSystem" placeholder="Blae Hypue NH-V e2-2" />
+    </div>
+    <button
+      class="btn btn-primary"
+      (click)="testSpanshColonisationRoute()"
+      [disabled]="loadingSpanshColonisation || loadingSpanshColonisationResult"
+      [class.loading]="loadingSpanshColonisation || loadingSpanshColonisationResult"
+    >
+      @if (loadingSpanshColonisation || loadingSpanshColonisationResult) {
+        <span class="spinner"></span> Calcul en cours…
+      } @else {
+        Calculer la route
+      }
+    </button>
+    <div class="cache-controls">
+      <span
+        class="cache-indicator-icon"
+        [title]="edsmCacheTooltip"
+        aria-label="État du cache EDSM"
+      >ⓘ</span>
+      <span class="cache-stats-inline">Cache EDSM : {{ edsmCacheStats.hits }} hit(s), {{ edsmCacheStats.misses }} miss(es)</span>
+      <button type="button" class="btn-sm cache-clear-btn" (click)="clearEdsmCache()">Vider le cache</button>
+      @if (cacheClearedFeedback) {
+        <span class="cache-feedback">{{ cacheClearedFeedback }}</span>
+      }
+      <label class="cache-bypass">
+        <input type="checkbox" [(ngModel)]="useEdsmCache" />
+        Utiliser le cache
+      </label>
+      <label class="cache-delay">
+        Délai EDSM (ms) :
+        <input type="number" [(ngModel)]="edsmCallDelayMs" min="100" max="500" step="50" style="width: 60px;" />
+      </label>
+    </div>
+  </section>
+
+  <!-- Outils API (sous la zone de calcul, avant les résultats) -->
+  <section class="devtools-section">
+    <button
+      type="button"
+      class="collapse-trigger devtools-trigger"
+      (click)="toggleExpanded('devtoolsApi')"
+      [attr.aria-expanded]="expandedDevtoolsApi"
+    >
+      <span class="chevron">{{ expandedDevtoolsApi ? '▼' : '▶' }}</span> Outils API (EDSM, Spansh, Job ID)
+    </button>
+    @if (expandedDevtoolsApi) {
+      <div class="devtools-content">
+        <div class="input-row devtools-job-row">
+          <label for="spansh-job-id">Job ID</label>
+          <input id="spansh-job-id" type="text" [value]="spanshJobId" (input)="spanshJobId = $any($event.target).value" placeholder="Job ID" />
+          <div class="devtools-buttons">
+            <button (click)="fetchSpanshColonisationResult()" [disabled]="loadingSpanshColonisationResult">Récupérer résultat</button>
+            <button (click)="testEdsn()" [disabled]="loadingEdsn" [class.loading]="loadingEdsn">
+              @if (loadingEdsn) { <span class="spinner"></span> } Tester EDSM System
+            </button>
+            <button (click)="testEdsnBodies()" [disabled]="loadingEdsnBodies" [class.loading]="loadingEdsnBodies">
+              @if (loadingEdsnBodies) { <span class="spinner"></span> } Tester EDSM Bodies
+            </button>
+            <button (click)="testSpansh()" [disabled]="loadingSpansh" [class.loading]="loadingSpansh">
+              @if (loadingSpansh) { <span class="spinner"></span> } Tester Spansh (legacy)
+            </button>
+          </div>
+        </div>
+        @if (edsnError) { <div class="error">{{ edsnError }}</div> }
+        @if (edsnBodiesError) { <div class="error">{{ edsnBodiesError }}</div> }
+        @if (spanshError) { <div class="error">{{ spanshError }}</div> }
       </div>
     }
-    @if (edsnBodiesError) {
-      <div class="error">{{ edsnBodiesError }}</div>
-    }
-    @if (edsnBodiesResponse !== null && edsnBodiesEmpty) {
-      <div class="empty-warning">EDSM ne possède pas encore les données de ce système.</div>
-    }
-    @if (edsnBodiesSummary) {
-      <div class="summary">
-        <dl>
-          <dt>bodyCount</dt><dd>{{ edsnBodiesSummary.bodyCount }}</dd>
-          <dt>Landables</dt><dd>{{ edsnBodiesSummary.landable }}</dd>
-          <dt>Metal-rich</dt><dd>{{ edsnBodiesSummary.metalRich }}</dd>
-          <dt>High metal content</dt><dd>{{ edsnBodiesSummary.highMetalContent }}</dd>
-          <dt>Water world</dt><dd>{{ edsnBodiesSummary.waterWorld }}</dd>
-          <dt>Earth-like world</dt><dd>{{ edsnBodiesSummary.earthLike }}</dd>
+  </section>
+
+  <!-- 2. Page de résultat — deux colonnes -->
+  @if (spanshColonisationResult !== null && spanshRouteAnalysis) {
+    <div class="result-columns">
+      <!-- Colonne gauche : table complète des sauts (hauteur limitée à celle de la droite) -->
+      <aside class="result-left" #leftCol [style.max-height.px]="rightColHeight ?? undefined">
+        <div class="spansh-jumps-table">
+          <h2>Table des sauts</h2>
+          <div class="jumps-table-header">
+            <span>#</span>
+            <span>type</span>
+            <span>système</span>
+            <span>distance</span>
+            <span>cumul</span>
+            <span class="anchor-col">depuis ancrage</span>
+          </div>
+          <div class="jumps-table-body">
+            @for (j of spanshRouteAnalysis.jumps; track j.index) {
+              <div class="jump-row" [class.pile]="j.type === 'PILE'" [class.start]="j.type === 'START'" [class.end]="j.type === 'END'">
+                <span>{{ j.index }}</span>
+                <span>{{ getDisplayTypeWithIndex(j) }}</span>
+                <span>{{ j.name }}</span>
+                <span>{{ j.distance | number:'1.1-1' }} LY</span>
+                <span>{{ j.cumulativeDistance | number:'1.1-1' }} LY</span>
+                <span class="anchor-value" [class.pile-value]="j.type === 'PILE'">
+                  @if (j.type === 'PILE') {
+                    <strong>{{ j.distanceFromLastAnchor | number:'1.1-1' }} LY</strong>
+                  } @else {
+                    {{ j.distanceFromLastAnchor | number:'1.1-1' }} LY
+                  }
+                </span>
+              </div>
+            }
+          </div>
+        </div>
+      </aside>
+      <!-- Colonne droite : résumé, dépôts (définit la hauteur de référence) -->
+      <div class="result-right" #rightCol>
+        @if (spanshStatusText) {
+          <section class="summary-zone">
+      <h2>Résultat</h2>
+      <div class="summary-status" [class.error]="spanshColonisationError || spanshColonisationResultError">
+        @if (loadingSpanshColonisation || loadingSpanshColonisationResult) {
+          <span class="spinner"></span>
+        }
+        {{ spanshStatusText }}
+      </div>
+      @if (spanshColonisationError || spanshColonisationResultError) {
+        <div class="error">{{ spanshColonisationError || spanshColonisationResultError }}</div>
+      }
+      @if (spanshRouteAnalysis && spanshColonisationResult !== null) {
+        <dl class="summary-grid">
+          <dt>Sauts</dt>
+          <dd>{{ spanshRouteAnalysis.summary.totalJumps }}</dd>
+          <dt>Distance totale</dt>
+          <dd>{{ spanshRouteAnalysis.summary.totalDistance | number:'1.1-1' }} LY</dd>
+          <dt>Dépôts détectés</dt>
+          <dd>{{ spanshRouteAnalysis.summary.pileCandidates }}</dd>
         </dl>
-      </div>
-    }
-    @if (edsnBodiesResponse !== null) {
-      <div class="json-block" [class.collapsed]="!expandedEdsnBodies">
-        <button type="button" class="collapse-trigger" (click)="toggleExpanded('edsnBodies')" [attr.aria-expanded]="expandedEdsnBodies">
-          <span class="chevron">{{ expandedEdsnBodies ? '▼' : '▶' }}</span> JSON brut
-        </button>
-        @if (expandedEdsnBodies) {
-          <pre>{{ edsnBodiesResponse | json }}</pre>
+        @if (autoEnrichmentStatus) {
+          <div class="edsm-status">
+            @if (enrichingPileIndex !== null) {
+              <span class="spinner"></span>
+            }
+            {{ autoEnrichmentStatus }}
+          </div>
+        }
+        @if (enrichmentDebugStats) {
+          <dl class="enrichment-debug-stats">
+            <dt>Candidats totaux</dt>
+            <dd>{{ enrichmentDebugStats.totalCandidates }}</dd>
+            <dt>Uniques</dt>
+            <dd>{{ enrichmentDebugStats.uniqueCandidates }}</dd>
+            <dt>Déjà en cache</dt>
+            <dd>{{ enrichmentDebugStats.alreadyInCache }}</dd>
+            <dt>Appels EDSM</dt>
+            <dd>{{ enrichmentDebugStats.httpCalls }}</dd>
+            <dt>Cache hits</dt>
+            <dd>{{ enrichmentDebugStats.cacheHits }}</dd>
+            <dt>Cache misses</dt>
+            <dd>{{ enrichmentDebugStats.cacheMisses }}</dd>
+          </dl>
+        }
+      }
+    </section>
+        }
+        @if (spanshRouteAnalysis.localCandidatesByPile.length > 0) {
+    <section class="piles-section">
+      <h2>Dépôts candidats</h2>
+      <div class="piles-list">
+        @for (pile of spanshRouteAnalysis.localCandidatesByPile; track pile.pileIndex) {
+          <div class="pile-card">
+            <div class="pile-card-header">
+              <span class="pile-num">Dépôt #{{ pile.pileIndex }}</span>
+              <span class="pile-geo">{{ pile.pileName }}</span>
+              <span class="pile-cumul">cumul {{ pile.pileCumulativeDistance | number:'1.1-1' }} LY</span>
+            </div>
+            @let coverage = getDepositCoverage(pile);
+            @if (coverage.total < 5 && !coverage.fromSphere) {
+              <div class="coverage-warn">Peu de candidats</div>
+            }
+            <div class="coverage-debug">
+              @if (coverage.fromSphere) {
+                sphère 50 LY : {{ coverage.total }} systèmes · enrichis {{ coverage.enriched }} · EDSM inconnus {{ coverage.unknown }}
+              } @else {
+                candidats {{ coverage.total }} · enrichis {{ coverage.enriched }} · EDSM inconnus {{ coverage.unknown }} · fenêtre ±{{ pileWindowLy }} LY
+              }
+              @if (getDepositFallbackMessage(pile.pileIndex)) {
+                <span class="fallback-badge">{{ getDepositFallbackMessage(pile.pileIndex) }}</span>
+              }
+            </div>
+            @let best = getBestCandidateInPile(pile);
+            @if (best) {
+              <div class="pile-best">
+                <span class="best-label">Meilleur candidat</span>
+                <span class="best-name">{{ best.candidate.name }}</span>
+                <span class="best-score">{{ best.score | number:'1.1-1' }}</span>
+                <span class="best-metrics">
+                  {{ best.edsm.metalRichLandableCount }} riches en métaux,
+                  {{ best.edsm.rockyLandableCount }} rocheux,
+                  {{ best.edsm.highMetalContentLandableCount }} haute teneur en métal (atterrissables) · {{ best.edsm.bodyCount }} corps
+                </span>
+              </div>
+            } @else if (isDepositFullyEnriched(pile)) {
+              <div class="pile-no-score">
+                @let fallbackMsg = getDepositFallbackMessage(pile.pileIndex);
+                @if (fallbackMsg) {
+                  <span class="fallback-msg">{{ fallbackMsg }}</span>
+                } @else {
+                  Aucune donnée EDSM disponible pour ce dépôt.
+                }
+              </div>
+            } @else {
+              <div class="pile-no-score">
+                <button
+                  type="button"
+                  class="enrich-btn"
+                  (click)="enrichPileWithEdsm(pile.pileIndex)"
+                  [disabled]="enrichingPileIndex !== null"
+                  [class.loading]="enrichingPileIndex === pile.pileIndex"
+                >
+                  @if (enrichingPileIndex === pile.pileIndex) {
+                    <span class="spinner"></span> Enrichissement EDSM…
+                  } @else {
+                    Enrichir avec EDSM pour voir le meilleur candidat
+                  }
+                </button>
+              </div>
+            }
+          </div>
         }
       </div>
-    }
-  </section>
+    </section>
+        }
+      </div>
+    </div>
+    <!-- Debug en footer pleine largeur -->
+    <section class="debug-section result-footer">
+      <button
+        type="button"
+        class="collapse-trigger debug-trigger"
+        (click)="toggleExpanded('debug')"
+        [attr.aria-expanded]="expandedDebug"
+      >
+        <span class="chevron">{{ expandedDebug ? '▼' : '▶' }}</span> Debug (candidats détaillés, JSON)
+      </button>
+      @if (expandedDebug) {
+        <div class="debug-content">
+          <!-- Candidats locaux détaillés -->
+          <div class="debug-block">
+            <button
+              type="button"
+              class="collapse-trigger"
+              (click)="toggleExpanded('debugCandidates')"
+              [attr.aria-expanded]="expandedDebugCandidates"
+            >
+              <span class="chevron">{{ expandedDebugCandidates ? '▼' : '▶' }}</span> Candidats locaux détaillés par Dépôt
+            </button>
+            @if (expandedDebugCandidates && spanshRouteAnalysis) {
+              <div class="pile-local-candidates">
+                @for (pile of spanshRouteAnalysis.localCandidatesByPile; track pile.pileIndex) {
+                  <div class="pile-block">
+                    <div class="pile-header">
+                      <strong>Dépôt #{{ pile.pileIndex }}</strong>
+                      {{ pile.pileName }} — cumul {{ pile.pileCumulativeDistance | number:'1.1-1' }} LY
+                      @if (!isDepositFullyEnriched(pile)) {
+                        <button
+                          type="button"
+                          class="enrich-btn"
+                          (click)="enrichPileWithEdsm(pile.pileIndex)"
+                          [disabled]="enrichingPileIndex !== null"
+                          [class.loading]="enrichingPileIndex === pile.pileIndex"
+                        >
+                          @if (enrichingPileIndex === pile.pileIndex) {
+                            <span class="spinner"></span> Enrichissement…
+                          } @else {
+                            Enrichir avec EDSM
+                          }
+                        </button>
+                      }
+                    </div>
+                    <div class="pile-candidates-table-wrap">
+                      <table class="pile-candidates-table" [class.with-edsm]="pileEdsmEnrichment.has(pile.pileIndex)">
+                        <colgroup>
+                          <col class="col-name" />
+                          <col class="col-distance" />
+                          <col class="col-cumul" />
+                          <col class="col-body" />
+                          <col class="col-landmark" />
+                          @if (pileEdsmEnrichment.has(pile.pileIndex)) {
+                            <col class="col-num" /><col class="col-num" /><col class="col-num" /><col class="col-num" />
+                            <col class="col-num" /><col class="col-num" /><col class="col-num" /><col class="col-num" />
+                            <col class="col-num" /><col class="col-score" />
+                          }
+                        </colgroup>
+                        <thead>
+                          <tr>
+                            <th>name</th>
+                            <th class="num">distance</th>
+                            <th class="num">cumul</th>
+                            <th class="num">body_count</th>
+                            <th class="num">landmark_value</th>
+                            @if (pileEdsmEnrichment.has(pile.pileIndex)) {
+                              <th class="num" title="Corps rocheux">Rocheux</th>
+                              <th class="num" title="Corps rocheux atterrissables">Rocheux atter.</th>
+                              <th class="num" title="Corps riche en métaux">Métal-riche</th>
+                              <th class="num" title="Corps riche en métaux atterrissables">Métal-riche atter.</th>
+                              <th class="num" title="Haute teneur en métal">HTM</th>
+                              <th class="num" title="Haute teneur en métal atterrissables">HTM atter.</th>
+                              <th class="num">Corps</th>
+                              <th class="num" title="Mondes aquatiques">Aquatique</th>
+                              <th class="num" title="Mondes telluriques">Tellurique</th>
+                              <th class="num score-col">score</th>
+                            }
+                          </tr>
+                        </thead>
+                        <tbody>
+                          @for (c of getDisplayCandidates(pile); track c.name + (c.cumulativeDistance ?? c.distance)) {
+                            <tr [class.is-pile]="c.name === pile.pileName" [class.best-score]="pileEdsmEnrichment.has(pile.pileIndex) && getCandidateScore(pile.pileIndex, c) === getBestScoreInPile(pile) && getCandidateScore(pile.pileIndex, c) !== null">
+                              <td class="cand-name">
+                                {{ c.name }}
+                                @if (pileEdsmEnrichment.has(pile.pileIndex) && getCandidateScore(pile.pileIndex, c) === getBestScoreInPile(pile) && getCandidateScore(pile.pileIndex, c) !== null) {
+                                  <span class="best-badge">BEST</span>
+                                }
+                              </td>
+                              <td class="num">{{ c.distance | number:'1.1-1' }} LY</td>
+                              <td class="num">{{ c.cumulativeDistance != null ? (c.cumulativeDistance | number:'1.1-1') + ' LY' : '—' }}</td>
+                              <td class="num">{{ c.body_count ?? '—' }}</td>
+                              <td class="num">{{ c.landmark_value ?? '—' }}</td>
+                              @if (pileEdsmEnrichment.has(pile.pileIndex)) {
+                                @let edsm = getEdsmEnrichment(pile.pileIndex, c.name);
+                                @if (edsm !== undefined) {
+                                  @if ('unknown' in edsm) {
+                                    <td colspan="10" class="edsm-unknown">EDSM: inconnu</td>
+                                  } @else {
+                                    <td class="num">{{ edsm.rockyCount }}</td>
+                                    <td class="num">{{ edsm.rockyLandableCount }}</td>
+                                    <td class="num">{{ edsm.metalRichCount }}</td>
+                                    <td class="num">{{ edsm.metalRichLandableCount }}</td>
+                                    <td class="num">{{ edsm.highMetalContentCount }}</td>
+                                    <td class="num">{{ edsm.highMetalContentLandableCount }}</td>
+                                    <td class="num">{{ edsm.bodyCount }}</td>
+                                    <td class="num">{{ edsm.waterWorldCount }}</td>
+                                    <td class="num">{{ edsm.earthLikeWorldCount }}</td>
+                                    <td class="num score-cell">{{ getCandidateScore(pile.pileIndex, c) | number:'1.1-1' }}</td>
+                                  }
+                                } @else {
+                                  <td class="num">…</td>
+                                  <td class="num">…</td>
+                                  <td class="num">…</td>
+                                  <td class="num">…</td>
+                                  <td class="num">…</td>
+                                  <td class="num">…</td>
+                                  <td class="num">…</td>
+                                  <td class="num">…</td>
+                                  <td class="num">…</td>
+                                  <td class="num score-cell">…</td>
+                                }
+                              }
+                            </tr>
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
 
-  <section>
-    <h2>Spansh — Colonisation Plotter</h2>
-    <p class="hint-section">Route : <strong>{{ systemName || 'Système source' }}</strong> → <strong>{{ destinationSystem || 'Système destination' }}</strong></p>
-    <div class="system-input-row">
-      <label for="spansh-job-id">Job ID</label>
-      <input id="spansh-job-id" type="text" [value]="spanshJobId" (input)="spanshJobId = $any($event.target).value" placeholder="C1E5D9B2-1ACD-11F1-BFBB-B079545E58E4" />
-      <button (click)="fetchSpanshColonisationResult()" [disabled]="loadingSpanshColonisationResult">Récupérer résultat</button>
-    </div>
-    <div class="edsm-buttons">
-      <button (click)="testSpanshColonisationRoute()" [disabled]="loadingSpanshColonisation" [class.loading]="loadingSpanshColonisation">
-        @if (loadingSpanshColonisation) { <span class="spinner"></span> }
-        {{ loadingSpanshColonisation ? 'Chargement…' : 'Tester Spansh Colonisation Route' }}
-      </button>
-      <button (click)="testSpansh()" [disabled]="loadingSpansh" [class.loading]="loadingSpansh">
-        @if (loadingSpansh) { <span class="spinner"></span> }
-        {{ loadingSpansh ? 'Chargement…' : 'Tester Spansh (legacy)' }}
-      </button>
-    </div>
-    @if (spanshColonisationError) {
-      <div class="error">{{ spanshColonisationError }}</div>
-    }
-    @if (spanshColonisationResponse !== null) {
-      <div class="json-block" [class.collapsed]="!expandedSpanshColonisation">
-        <button type="button" class="collapse-trigger" (click)="toggleExpanded('spanshColonisation')" [attr.aria-expanded]="expandedSpanshColonisation">
-          <span class="chevron">{{ expandedSpanshColonisation ? '▼' : '▶' }}</span> JSON brut (Colonisation — job)
-        </button>
-        @if (expandedSpanshColonisation) {
-          <pre>{{ spanshColonisationResponse | json }}</pre>
-        }
-      </div>
-    }
-    @if (loadingSpanshColonisationResult) {
-      <div class="loading-result">
-        <span class="spinner"></span> Récupération du résultat (2 s)…
-      </div>
-    }
-    @if (spanshColonisationResultError) {
-      <div class="error">{{ spanshColonisationResultError }}</div>
-    }
-    @if (spanshColonisationResult !== null) {
-      <div class="json-block" [class.collapsed]="!expandedSpanshColonisationResult">
-        <button type="button" class="collapse-trigger" (click)="toggleExpanded('spanshColonisationResult')" [attr.aria-expanded]="expandedSpanshColonisationResult">
-          <span class="chevron">{{ expandedSpanshColonisationResult ? '▼' : '▶' }}</span> JSON brut (Résultat)
-        </button>
-        @if (expandedSpanshColonisationResult) {
-          <pre>{{ spanshColonisationResult | json }}</pre>
-        }
-      </div>
-    }
-    @if (spanshError) {
-      <div class="error">{{ spanshError }}</div>
-    }
-    @if (spanshResponse !== null) {
-      <div class="json-block" [class.collapsed]="!expandedSpansh">
-        <button type="button" class="collapse-trigger" (click)="toggleExpanded('spansh')" [attr.aria-expanded]="expandedSpansh">
-          <span class="chevron">{{ expandedSpansh ? '▼' : '▶' }}</span> JSON brut
-        </button>
-        @if (expandedSpansh) {
-          <pre>{{ spanshResponse | json }}</pre>
-        }
-      </div>
-    }
-  </section>
+          <!-- JSON brut -->
+          <div class="debug-block">
+            <button
+              type="button"
+              class="collapse-trigger"
+              (click)="toggleExpanded('debugJson')"
+              [attr.aria-expanded]="expandedDebugJson"
+            >
+              <span class="chevron">{{ expandedDebugJson ? '▼' : '▶' }}</span> JSON brut Spansh
+            </button>
+            @if (expandedDebugJson) {
+              <pre>{{ spanshColonisationResult | json }}</pre>
+            }
+          </div>
+        </div>
+      }
+    </section>
+  }
 </div>

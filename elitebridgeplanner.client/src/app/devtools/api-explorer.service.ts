@@ -1,6 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, tap } from 'rxjs';
+import { Observable, of } from 'rxjs';
+import { tap, catchError, retry } from 'rxjs/operators';
+
+import type { EnrichmentMode } from './enrichment-types';
 
 /**
  * Service de test pour explorer les APIs externes (EDSM, Spansh).
@@ -12,6 +15,32 @@ export class ApiExplorerService {
 
   private readonly EDSM_BASE = 'https://www.edsm.net/api-v1';
 
+  /** Mode d'enrichissement : edsm | spansh-lite | hybrid */
+  enrichmentMode: EnrichmentMode = 'edsm';
+
+  /** En mode hybrid : nombre de meilleurs candidats par dépôt à enrichir avec EDSM (défaut 3) */
+  hybridTopN = 3;
+
+  /** Cache en mémoire pour EDSM bodies (clé = systemName normalisé) */
+  private readonly edsmBodiesCache = new Map<string, unknown>();
+
+  /** Statistiques cache pour debug (hits, misses) */
+  readonly edsmCacheStats = { hits: 0, misses: 0 };
+
+  /**
+   * Bypass temporaire du cache pour debug.
+   * false = appel EDSM direct sans cache (pour comparer avec/sans cache).
+   */
+  useEdsmCache = true;
+
+  /** Réinitialise le cache (utile entre analyses) */
+  clearEdsmBodiesCache(): void {
+    this.edsmBodiesCache.clear();
+    this.edsmCacheStats.hits = 0;
+    this.edsmCacheStats.misses = 0;
+    console.log('[EDSM cache] cache vidé, stats réinitialisées');
+  }
+
   /**
    * URL Spansh pour le plotter galaxy.
    * ⚠️ À CONFIRMER : api.spansh.co.uk n'existe pas (ERR_NAME_NOT_RESOLVED).
@@ -21,7 +50,7 @@ export class ApiExplorerService {
    */
   private readonly SPANSH_PLOTTER_URL = 'https://spansh.co.uk/api/galaxy/plot';
 
-  /** API Spansh Colonisation — proxifié en dev pour contourner CORS */
+  /** API Spansh Colonisation — proxifié via spansh.co.uk pour contourner CORS */
   private readonly SPANSH_COLONISATION_URL = '/spansh-api/api/colonisation/route';
 
   /**
@@ -44,14 +73,69 @@ export class ApiExplorerService {
   }
 
   /**
-   * Teste l'API EDSM — récupère les corps célestes d'un système.
+   * Récupère les systèmes dans une sphère (50 LY) autour de coordonnées.
+   * GET https://www.edsm.net/api-v1/sphere-systems
+   */
+  getEdsmSphereSystemsByCoords(x: number, y: number, z: number, radius = 50): Observable<{ distance: number; name: string }[]> {
+    const url = `${this.EDSM_BASE}/sphere-systems`;
+    const params = { x: String(x), y: String(y), z: String(z), radius: String(radius) };
+    return this.http.get<{ distance: number; name: string }[]>(url, { params }).pipe(
+      tap((r) => console.log('[ApiExplorer] EDSM sphere-systems:', r?.length ?? 0, 'systèmes'))
+    );
+  }
+
+  /**
+   * Récupère les systèmes dans une sphère (50 LY) autour d'un système (par nom).
+   * GET https://www.edsm.net/api-v1/sphere-systems
+   */
+  getEdsmSphereSystemsByName(systemName: string, radius = 50): Observable<{ distance: number; name: string }[]> {
+    const url = `${this.EDSM_BASE}/sphere-systems`;
+    const params = { systemName, radius: String(radius) };
+    return this.http.get<{ distance: number; name: string }[]>(url, { params }).pipe(
+      tap((r) => console.log('[ApiExplorer] EDSM sphere-systems:', r?.length ?? 0, 'systèmes'))
+    );
+  }
+
+  /**
+   * Récupère les corps célestes d'un système (avec cache).
    * GET https://www.edsm.net/api-system-v1/bodies
    */
   testEdsnBodies(systemName: string): Observable<unknown> {
+    const key = systemName?.trim() ?? '';
+    console.log('[EDSM cache] lookup cache, clé:', JSON.stringify(key));
+
+    if (this.useEdsmCache) {
+      const cached = this.edsmBodiesCache.get(key);
+      if (cached !== undefined) {
+        this.edsmCacheStats.hits++;
+        console.log('[EDSM cache] cache hit, clé:', JSON.stringify(key), '| stats:', this.edsmCacheStats.hits, 'hits,', this.edsmCacheStats.misses, 'misses');
+        return of(cached);
+      }
+      this.edsmCacheStats.misses++;
+      console.log('[EDSM cache] cache miss, clé:', JSON.stringify(key), '| stats:', this.edsmCacheStats.hits, 'hits,', this.edsmCacheStats.misses, 'misses');
+    } else {
+      console.log('[EDSM cache] bypass actif (useEdsmCache=false), appel EDSM direct');
+    }
+
     const url = 'https://www.edsm.net/api-system-v1/bodies';
+    console.log('[EDSM cache] appel EDSM bodies lancé, systemName:', JSON.stringify(systemName));
     return this.http.get(url, { params: { systemName } }).pipe(
+      retry(1),
       tap((response) => {
-        console.log('[ApiExplorer] EDSM bodies:', response);
+        console.log('[EDSM cache] réponse EDSM reçue, clé:', JSON.stringify(key), 'bodyCount:', (response as { bodyCount?: number })?.bodyCount);
+        if (this.useEdsmCache) {
+          this.edsmBodiesCache.set(key, response);
+          console.log('[EDSM cache] mise en cache effectuée, clé:', JSON.stringify(key), '| Map size:', this.edsmBodiesCache.size);
+        }
+      }),
+      catchError((err) => {
+        console.warn('[EDSM cache] erreur EDSM bodies, clé:', JSON.stringify(key), err);
+        const empty: unknown = { bodyCount: 0, bodies: [] };
+        if (this.useEdsmCache) {
+          this.edsmBodiesCache.set(key, empty);
+          console.log('[EDSM cache] mise en cache (empty/fallback) effectuée, clé:', JSON.stringify(key));
+        }
+        return of(empty);
       })
     );
   }
@@ -96,12 +180,12 @@ export class ApiExplorerService {
   }
 
   /**
-   * Récupère le résultat d'une route colonisation Spansh (étape 2 après testSpanshColonisationRoute).
-   * GET /spansh-api/api/colonisation/results/{jobId}
+   * Récupère le résultat d'une route colonisation Spansh (étape 2).
+   * GET /spansh-api/api/results/{jobId}
    */
   getSpanshColonisationResult(jobId: string): Observable<unknown> {
-    const url = `/spansh-api/api/colonisation/route`;
-    return this.http.get<unknown>(url, { params: { job: jobId } }).pipe(
+    const url = `/spansh-api/api/results/${jobId}`;
+    return this.http.get<unknown>(url).pipe(
       tap((response) => {
         console.log('[ApiExplorer] Spansh result:', response);
       })
