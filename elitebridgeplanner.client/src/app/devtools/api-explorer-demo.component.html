@@ -19,7 +19,11 @@
         <input type="radio" name="enrichmentMode" [value]="'hybrid'" [(ngModel)]="enrichmentMode" />
         Hybrid
       </label>
-      @if (enrichmentMode === 'hybrid') {
+      <label class="source-option">
+        <input type="radio" name="enrichmentMode" [value]="'comparison'" [(ngModel)]="enrichmentMode" />
+        Comparaison
+      </label>
+      @if (enrichmentMode === 'hybrid' || enrichmentMode === 'comparison') {
         <label class="hybrid-top-n">
           Top
           <input type="number" [(ngModel)]="hybridTopN" min="1" max="20" style="width: 40px;" />
@@ -187,6 +191,70 @@
           </dl>
         }
       }
+    </section>
+        }
+        @if (comparisonResult) {
+    <section class="comparison-section">
+      <h2>Comparaison des modes</h2>
+      <dl class="comparison-metrics">
+        <dt>Temps d'analyse</dt>
+        <dd>{{ comparisonResult.metrics.totalTimeMs | number:'1.0-0' }} ms</dd>
+        <dt>Appels EDSM</dt>
+        <dd>{{ comparisonResult.metrics.edsmCalls }}</dd>
+        <dt>Systèmes enrichis</dt>
+        <dd>{{ comparisonResult.metrics.enrichedCount }}</dd>
+        <dt>Dépôts sans données</dt>
+        <dd>{{ comparisonResult.metrics.noDataCount }}</dd>
+      </dl>
+      <div class="comparison-table-wrap">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th>Dépôt</th>
+              <th>EDSM</th>
+              <th>Spansh Lite</th>
+              <th>Hybrid</th>
+              <th class="diff-col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of comparisonResult.rows; track row.pileIndex) {
+              <tr [class.has-diff]="row.hasDifferences">
+                <td class="depot-col">#{{ row.pileIndex }}</td>
+                <td>
+                  @if (row.edsm) {
+                    <span class="cand-name">{{ row.edsm.name }}</span>
+                    <span class="cand-score">{{ row.edsm.score | number:'1.1-1' }}</span>
+                  } @else {
+                    <span class="no-data">—</span>
+                  }
+                </td>
+                <td>
+                  @if (row.spanshLite) {
+                    <span class="cand-name">{{ row.spanshLite.name }}</span>
+                    <span class="cand-score">{{ row.spanshLite.score | number:'1.1-1' }}</span>
+                  } @else {
+                    <span class="no-data">—</span>
+                  }
+                </td>
+                <td>
+                  @if (row.hybrid) {
+                    <span class="cand-name">{{ row.hybrid.name }}</span>
+                    <span class="cand-score">{{ row.hybrid.score | number:'1.1-1' }}</span>
+                  } @else {
+                    <span class="no-data">—</span>
+                  }
+                </td>
+                <td class="diff-col">
+                  @if (row.hasDifferences) {
+                    <span class="diff-icon" title="Meilleur système différent entre les modes">⚠</span>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
     </section>
         }
         @if (spanshRouteAnalysis.localCandidatesByPile.length > 0) {

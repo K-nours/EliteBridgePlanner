@@ -2,7 +2,7 @@ import { Component, inject, ChangeDetectorRef, OnDestroy, ViewChild, ElementRef,
 import { DecimalPipe, JsonPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { from, of, Observable } from 'rxjs';
-import { concatMap, delay, catchError, finalize, map, toArray } from 'rxjs/operators';
+import { concatMap, delay, catchError, finalize, map, tap, toArray } from 'rxjs/operators';
 import { ApiExplorerService } from './api-explorer.service';
 import { analyzeColonisationRoute, getCandidatesInWindow, PILE_WINDOW_FALLBACK_LY, PILE_WINDOW_LY, type ColonisationRouteAnalysis, type LocalPileCandidate, type SpanshJump } from './colonisation-route.analyzer';
 import {
@@ -64,6 +64,23 @@ export type EnrichedCandidateEdsm = EdsBodiesSummary | { unknown: true };
 
 /** État d'enrichissement EDSM d'un dépôt */
 export type DepositEnrichmentState = 'not_started' | 'loading' | 'done' | 'no_data' | 'error';
+
+/** Ligne du tableau de comparaison (un dépôt) */
+export interface ComparisonRow {
+  pileIndex: number;
+  edsm: { name: string; score: number } | null;
+  spanshLite: { name: string; score: number } | null;
+  hybrid: { name: string; score: number } | null;
+  hasDifferences: boolean;
+}
+
+/** Métriques globales de comparaison */
+export interface ComparisonMetrics {
+  totalTimeMs: number;
+  edsmCalls: number;
+  enrichedCount: number;
+  noDataCount: number;
+}
 
 /**
  * Calcule le score métier d'un candidat PILE enrichi.
@@ -220,6 +237,8 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
   enrichingPileIndex: number | null = null;
   /** Statut de l'enrichissement automatique (null = inactif) */
   autoEnrichmentStatus: string | null = null;
+  /** Résultats du mode comparaison (null si pas en mode comparaison ou pas encore calculé) */
+  comparisonResult: { rows: ComparisonRow[]; metrics: ComparisonMetrics } | null = null;
 
   expandedEdsn = true;
 
@@ -517,6 +536,26 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
     return best;
   }
 
+  /** Capture le meilleur candidat par dépôt (pour le mode comparaison) */
+  private captureBestPerPile(): Map<number, { name: string; score: number } | null> {
+    const out = new Map<number, { name: string; score: number } | null>();
+    const piles = this.spanshRouteAnalysis?.localCandidatesByPile ?? [];
+    for (const pile of piles) {
+      const best = this.getBestCandidateInPile(pile);
+      out.set(pile.pileIndex, best ? { name: best.candidate.name, score: best.score } : null);
+    }
+    return out;
+  }
+
+  /** Réinitialise l'état des dépôts pour une nouvelle run (conserve le cache EDSM global) */
+  private clearPileStateForRun(): void {
+    this.pileEdsmEnrichment.clear();
+    this.pileEnrichmentState.clear();
+    this.pileFallbackUsed.clear();
+    this.sphereCandidatesByPile.clear();
+    this.sphereSystemCountByPile.clear();
+  }
+
   /** Récupère ou calcule le résumé EDSM pour un système (utilise le cache centralisé) */
   private getOrFetchEdsmSummary(
     systemName: string
@@ -686,18 +725,37 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
   }
 
   /**
-   * Lance l'enrichissement optimisé selon le mode : EDSM complet, Spansh Lite, ou Hybrid.
+   * Lance l'enrichissement selon le mode.
+   * En mode comparison, exécute les 3 analyses et affiche le tableau de comparaison.
    */
   private enrichAllDepositsAutomatically(): void {
+    if (this.enrichmentMode === 'comparison') {
+      this.runComparisonMode();
+      return;
+    }
+    this.enrichAllDepositsForMode(this.enrichmentMode as 'edsm' | 'spansh-lite' | 'hybrid').subscribe();
+  }
+
+  /**
+   * Lance l'enrichissement pour un mode donné. Retourne un Observable qui se complète à la fin.
+   */
+  private enrichAllDepositsForMode(mode: 'edsm' | 'spansh-lite' | 'hybrid'): Observable<void> {
     const allPiles = this.spanshRouteAnalysis?.localCandidatesByPile ?? [];
     const piles = allPiles.filter((p) => {
       const s = this.getDepositEnrichmentState(p.pileIndex);
       return s === 'not_started' || s === 'error';
     });
-    if (piles.length === 0) return;
-    if (this.enrichingPileIndex != null) return;
+    if (piles.length === 0) {
+      console.warn('[comparison] enrichAllDepositsForMode: no piles to process (filtered)', { total: allPiles.length });
+      return of(undefined);
+    }
+    if (this.enrichingPileIndex != null) {
+      console.warn('[comparison] enrichAllDepositsForMode: already enriching, skip', { mode });
+      return of(undefined);
+    }
 
     this.enrichingPileIndex = -1;
+    this.apiExplorer.enrichmentMode = mode;
     this.cdr.detectChanges();
     this.enrichmentDebugStats = {
       totalCandidates: 0,
@@ -709,30 +767,33 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
     };
 
     // Mode Spansh Lite : pas d'appel EDSM, remplissage immédiat depuis les données Spansh
-    if (this.enrichmentMode === 'spansh-lite') {
-      for (const pile of piles) {
-        if (!this.pileEdsmEnrichment.has(pile.pileIndex)) {
-          this.pileEdsmEnrichment.set(pile.pileIndex, new Map());
-        }
-        const results = this.pileEdsmEnrichment.get(pile.pileIndex)!;
-        for (const c of pile.candidates) {
-          results.set(c.name, buildSpanshLiteSummary(c));
-        }
-        this.pileEnrichmentState.set(pile.pileIndex, 'done');
-        this.sphereCandidatesByPile.delete(pile.pileIndex);
-        this.sphereSystemCountByPile.set(pile.pileIndex, 0);
-      }
-      this.enrichingPileIndex = null;
-      this.autoEnrichmentStatus = 'Analyse Spansh Lite terminée';
-      this.cdr.detectChanges();
-      return;
+    if (mode === 'spansh-lite') {
+      return of(undefined).pipe(
+        tap(() => {
+          for (const pile of piles) {
+            if (!this.pileEdsmEnrichment.has(pile.pileIndex)) {
+              this.pileEdsmEnrichment.set(pile.pileIndex, new Map());
+            }
+            const results = this.pileEdsmEnrichment.get(pile.pileIndex)!;
+            for (const c of pile.candidates) {
+              results.set(c.name, buildSpanshLiteSummary(c));
+            }
+            this.pileEnrichmentState.set(pile.pileIndex, 'done');
+            this.sphereCandidatesByPile.delete(pile.pileIndex);
+            this.sphereSystemCountByPile.set(pile.pileIndex, 0);
+          }
+          this.enrichingPileIndex = null;
+          this.autoEnrichmentStatus = 'Analyse Spansh Lite terminée';
+        }),
+        tap(() => this.cdr.detectChanges())
+      );
     }
 
     interface PileCandidates { pileIndex: number; pile: typeof allPiles[0]; candidates: LocalPileCandidate[]; fromSphere: boolean; systems?: { name: string; distance: number }[]; }
 
     const getCandidatesForPile = (pile: typeof allPiles[0]): Observable<PileCandidates> => {
       // Mode hybrid : uniquement pile.candidates (données Spansh pour pre-score)
-      if (this.enrichmentMode === 'hybrid') {
+      if (mode === 'hybrid') {
         return of({
           pileIndex: pile.pileIndex,
           pile,
@@ -767,7 +828,7 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
       );
     };
 
-    from(piles)
+    return from(piles)
       .pipe(
         concatMap((p) => getCandidatesForPile(p).pipe(delay(100))),
         toArray(),
@@ -787,7 +848,7 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
           // Mode hybrid : ne garder que les top N par dépôt (pre-score Spansh)
           let toEnrich: string[];
           const hybridTopNames = new Set<string>();
-          if (this.enrichmentMode === 'hybrid') {
+          if (mode === 'hybrid') {
             const topN = Math.max(1, this.hybridTopN);
             for (const pd of pileDataList) {
               const withPreScore = pd.candidates
@@ -803,13 +864,13 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
           } else {
             toEnrich = [...allNames].filter((n) => !this.globalEdsmSummaryCache.has(n));
           }
-          const alreadyInCache = (this.enrichmentMode === 'hybrid' ? hybridTopNames.size : uniqueCandidates) - toEnrich.length;
+          const alreadyInCache = (mode === 'hybrid' ? hybridTopNames.size : uniqueCandidates) - toEnrich.length;
 
           this.enrichmentDebugStats!.totalCandidates = totalCandidates;
           this.enrichmentDebugStats!.uniqueCandidates = uniqueCandidates;
           this.enrichmentDebugStats!.alreadyInCache = alreadyInCache;
 
-          const modeLabel = this.enrichmentMode === 'hybrid' ? 'Hybrid (top ' + this.hybridTopN + ')' : 'EDSM';
+          const modeLabel = mode === 'hybrid' ? 'Hybrid (top ' + this.hybridTopN + ')' : 'EDSM';
           this.autoEnrichmentStatus = `Enrichissement ${modeLabel} : ${toEnrich.length} systèmes à appeler (${alreadyInCache} en cache)…`;
           this.cdr.detectChanges();
 
@@ -846,7 +907,7 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
                       'unknown' in raw && raw.unknown
                         ? raw
                         : edsBodiesToAnalysisSummary(raw as EdsBodiesSummary, c.landmark_value ?? 0);
-                  } else if (this.enrichmentMode === 'hybrid') {
+                  } else if (mode === 'hybrid') {
                     enriched = buildSpanshLiteSummary(c);
                   } else {
                     continue;
@@ -869,14 +930,105 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
           }
           const allP = this.spanshRouteAnalysis?.localCandidatesByPile ?? [];
           const totalEnriched = allP.reduce((s, p) => s + this.getDepositCoverage(p).enriched, 0);
-          const modeLabel = this.enrichmentMode === 'hybrid' ? 'Hybrid' : 'EDSM';
+          const modeLabel = mode === 'hybrid' ? 'Hybrid' : 'EDSM';
           this.autoEnrichmentStatus = totalEnriched > 0
             ? `Analyse ${modeLabel} terminée`
             : `Analyse ${modeLabel} terminée (aucune donnée trouvée)`;
           this.cdr.detectChanges();
         })
+      );
+  }
+
+  /** Exécute les 3 modes et construit le tableau de comparaison */
+  private runComparisonMode(): void {
+    const allPiles = this.spanshRouteAnalysis?.localCandidatesByPile ?? [];
+    console.log('[comparison] start');
+    console.log('[comparison] deposits detected:', allPiles.length);
+    if (allPiles.length === 0) return;
+    if (this.enrichingPileIndex != null) {
+      console.warn('[comparison] blocked: enrichment already in progress');
+      return;
+    }
+
+    this.comparisonResult = null;
+    this.autoEnrichmentStatus = 'Comparaison : analyse EDSM…';
+    this.cdr.detectChanges();
+
+    const t0 = Date.now();
+    const edsmCallsBefore = this.apiExplorer.edsmCacheStats.misses;
+
+    const modes: Array<'edsm' | 'spansh-lite' | 'hybrid'> = ['edsm', 'spansh-lite', 'hybrid'];
+    for (const p of allPiles) {
+      console.log(`[comparison] deposit ${p.pileIndex} candidates:`, p.candidates?.length ?? 0);
+    }
+    from(modes)
+      .pipe(
+        concatMap((m, idx) => {
+          const labels = ['EDSM', 'Spansh Lite', 'Hybrid'];
+          console.log('[comparison] running mode', labels[idx]);
+          if (idx > 0) {
+            this.clearPileStateForRun();
+            this.autoEnrichmentStatus = `Comparaison : analyse ${labels[idx]}…`;
+            this.cdr.detectChanges();
+          }
+          return this.enrichAllDepositsForMode(m).pipe(
+            map(() => ({ mode: m, results: this.captureBestPerPile() }))
+          );
+        }),
+        toArray(),
+        finalize(() => {
+          this.enrichingPileIndex = null;
+          this.cdr.detectChanges();
+        })
       )
-      .subscribe();
+      .subscribe({
+        next: (allResults) => {
+          const [edsmRes, spanshRes, hybridRes] = allResults;
+          const rows: ComparisonRow[] = [];
+          const uniqueSystems = new Set<string>();
+          let noDataCount = 0;
+
+          for (const pile of allPiles) {
+            const edsm = edsmRes.results.get(pile.pileIndex) ?? null;
+            const spanshLite = spanshRes.results.get(pile.pileIndex) ?? null;
+            const hybrid = hybridRes.results.get(pile.pileIndex) ?? null;
+            if (edsm) uniqueSystems.add(edsm.name);
+            if (spanshLite) uniqueSystems.add(spanshLite.name);
+            if (hybrid) uniqueSystems.add(hybrid.name);
+            if (!edsm && !spanshLite && !hybrid) noDataCount++;
+
+            const bestNames = [edsm?.name, spanshLite?.name, hybrid?.name].filter(Boolean) as string[];
+            const hasDifferences = new Set(bestNames).size > 1;
+
+            rows.push({
+              pileIndex: pile.pileIndex,
+              edsm,
+              spanshLite,
+              hybrid,
+              hasDifferences
+            });
+          }
+
+          const totalTimeMs = Date.now() - t0;
+          const edsmCalls = this.apiExplorer.edsmCacheStats.misses - edsmCallsBefore;
+
+          this.comparisonResult = {
+            rows,
+            metrics: {
+              totalTimeMs,
+              edsmCalls,
+              enrichedCount: uniqueSystems.size,
+              noDataCount
+            }
+          };
+          this.autoEnrichmentStatus = 'Comparaison terminée';
+          this.cdr.detectChanges();
+        },
+        error: () => {
+          this.autoEnrichmentStatus = 'Erreur lors de la comparaison';
+          this.cdr.detectChanges();
+        }
+      });
   }
 
   /** Fallback ±60 LY pour les dépôts en no_data (une seule fois). */
@@ -1003,6 +1155,7 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
           this.pileFallbackUsed.clear();
           this.sphereCandidatesByPile.clear();
           this.sphereSystemCountByPile.clear();
+          this.comparisonResult = null;
           this.autoEnrichmentStatus = null;
           this.loadingSpanshColonisationResult = false;
           this.spanshStatusText =
@@ -1046,6 +1199,7 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
         this.pileFallbackUsed.clear();
         this.sphereCandidatesByPile.clear();
         this.sphereSystemCountByPile.clear();
+        this.comparisonResult = null;
         this.autoEnrichmentStatus = null;
         this.loadingSpanshColonisationResult = false;
         this.spanshStatusText = 'Résultat récupéré.';

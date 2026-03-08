@@ -3,8 +3,8 @@
  * Permet plusieurs sources : EDSM, Spansh Lite, Hybrid.
  */
 
-/** Mode d'enrichissement : EDSM complet, Spansh seul, ou hybride (pre-score Spansh + EDSM top N) */
-export type EnrichmentMode = 'edsm' | 'spansh-lite' | 'hybrid';
+/** Mode d'enrichissement : EDSM complet, Spansh seul, hybride, ou comparaison des trois */
+export type EnrichmentMode = 'edsm' | 'spansh-lite' | 'hybrid' | 'comparison';
 
 /**
  * Interface commune pour les données d'analyse d'un candidat.

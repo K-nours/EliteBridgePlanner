@@ -484,6 +484,101 @@ section {
   }
 }
 
+.comparison-section {
+  margin-top: 16px;
+  padding: 16px;
+  background: #111;
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+
+  h2 {
+    font-size: 1rem;
+    margin-bottom: 12px;
+    color: var(--text, #eee);
+  }
+}
+
+.comparison-metrics {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 24px;
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+  dt {
+    color: #888;
+    font-weight: normal;
+  }
+  dd {
+    margin: 0;
+    font-family: monospace;
+  }
+}
+
+.comparison-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border, #333);
+  border-radius: 4px;
+}
+
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+
+  th, td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    text-align: left;
+  }
+
+  th {
+    color: #888;
+    font-weight: 600;
+    background: #0a0a0a;
+  }
+
+  .depot-col {
+    font-weight: 600;
+    color: var(--accent, #0af);
+    width: 60px;
+  }
+
+  .diff-col {
+    width: 36px;
+    text-align: center;
+  }
+
+  .cand-name {
+    display: block;
+    font-family: monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+  }
+
+  .cand-score {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--accent, #0af);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .no-data {
+    color: #666;
+    font-style: italic;
+  }
+
+  .diff-icon {
+    color: #f90;
+    font-size: 1rem;
+  }
+
+  tr.has-diff {
+    background: rgba(255, 153, 0, 0.06);
+  }
+}
+
 .system-input-row {
   display: flex;
   align-items: center;

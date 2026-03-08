@@ -15,7 +15,7 @@ export class ApiExplorerService {
 
   private readonly EDSM_BASE = 'https://www.edsm.net/api-v1';
 
-  /** Mode d'enrichissement : edsm | spansh-lite | hybrid */
+  /** Mode d'enrichissement : edsm | spansh-lite | hybrid | comparison */
   enrichmentMode: EnrichmentMode = 'edsm';
 
   /** En mode hybrid : nombre de meilleurs candidats par dépôt à enrichir avec EDSM (défaut 3) */
