@@ -359,5 +359,18 @@ MigrationBackup/
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
 
+# Cursor IDE rules and context (local only)
+.cursor/
+
+# Documentation (local only)
+docs/
+
+# Artefacts de compilation .NET/Angular
+**/obj/
+**/bin/
+**/dist/
+**/Debug/
+**/Release/
+
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
