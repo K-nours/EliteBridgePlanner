@@ -365,12 +365,14 @@ MigrationBackup/
 # Documentation (local only)
 docs/
 
-# Artefacts de compilation .NET/Angular
+# Artefacts de compilation — tous les projets (.NET, Angular, Tests)
 **/obj/
 **/bin/
 **/dist/
+**/out/
 **/Debug/
 **/Release/
+**/.angular/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
