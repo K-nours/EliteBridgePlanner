@@ -68,13 +68,7 @@ builder.Services.AddAuthorization();
 // ── CORS — Angular dev server ─────────────────────────────────────────────
 builder.Services.AddCors(options =>
     options.AddPolicy("AngularDev", policy =>
-        policy.WithOrigins(
-                  "https://localhost:61358",
-                  "http://localhost:4200",
-                  "https://localhost:4200",
-                  "http://127.0.0.1:4200",
-                  "https://127.0.0.1:4200"
-              )
+        policy.WithOrigins("https://localhost:61358")
               .AllowAnyHeader()
               .AllowAnyMethod()
     )

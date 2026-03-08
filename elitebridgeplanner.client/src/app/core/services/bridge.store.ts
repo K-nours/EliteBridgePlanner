@@ -76,36 +76,6 @@ export const BridgeStore = signalStore(
       )
     ),
 
-    // ── Charger le premier pont disponible (évite l'erreur si le pont ID 1 n'existe pas)
-    loadFirstBridge: rxMethod<void>(
-      pipe(
-        tap(() => patchState(store, { isLoading: true, error: null })),
-        switchMap(() => api.getBridges().pipe(
-          switchMap((bridges: BridgeDto[]) => {
-            patchState(store, { bridges });
-            const first = bridges[0];
-            if (!first) {
-              patchState(store, { isLoading: false });
-              return EMPTY;
-            }
-            return api.getBridgeById(first.id).pipe(
-              tap((activeBridge: BridgeDto) =>
-                patchState(store, { activeBridge, isLoading: false })
-              ),
-              catchError((err: Error) => {
-                patchState(store, { error: err.message, isLoading: false });
-                return EMPTY;
-              })
-            );
-          }),
-          catchError((err: Error) => {
-            patchState(store, { error: err.message, isLoading: false });
-            return EMPTY;
-          })
-        ))
-      )
-    ),
-
     // ── Sélectionner un système ────────────────────────────────────────────
     selectSystem(system: StarSystemDto | null): void {
       patchState(store, { selectedSystem: system });

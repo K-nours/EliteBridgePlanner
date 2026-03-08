@@ -25,8 +25,7 @@ export class BridgeComponent implements OnInit {
   readonly authService = inject(AuthService);
 
   ngOnInit(): void {
-    // Charge le premier pont disponible (évite l'erreur si le pont ID 1 n'existe pas)
-    this.store.loadFirstBridge();
+    this.store.loadBridge(1);
   }
 
   logout(): void {
