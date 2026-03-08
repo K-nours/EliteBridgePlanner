@@ -24,6 +24,11 @@ export const routes: Routes = [
       import('./features/bridge/bridge.component').then(m => m.BridgeComponent)
   },
   {
+    path: 'devtools/api-explorer',
+    loadComponent: () =>
+      import('./devtools/api-explorer-demo.component').then(m => m.ApiExplorerDemoComponent)
+  },
+  {
     path: '**',
     redirectTo: 'bridges'
   }

@@ -1,0 +1,132 @@
+<div class="api-explorer-demo">
+  <h1>API Explorer (Devtools)</h1>
+  <p class="hint">Test rapide EDSM / Spansh — vérifier CORS et données.</p>
+
+  <div class="system-input-row">
+    <label for="system-name">Système source</label>
+    <input id="system-name" type="text" [value]="systemName" (input)="systemName = $any($event.target).value" placeholder="Mayang" />
+  </div>
+  <div class="system-input-row">
+    <label for="destination-name">Système destination</label>
+    <input id="destination-name" type="text" [value]="destinationSystem" (input)="destinationSystem = $any($event.target).value" placeholder="Colonia" />
+  </div>
+
+  <section class="edsm-section">
+    <h2>EDSM</h2>
+    <div class="edsm-buttons">
+      <button (click)="testEdsn()" [disabled]="loadingEdsn" [class.loading]="loadingEdsn">
+        @if (loadingEdsn) { <span class="spinner"></span> }
+        {{ loadingEdsn ? 'Chargement…' : 'Tester EDSM System' }}
+      </button>
+      <button (click)="testEdsnBodies()" [disabled]="loadingEdsnBodies" [class.loading]="loadingEdsnBodies">
+        @if (loadingEdsnBodies) { <span class="spinner"></span> }
+        {{ loadingEdsnBodies ? 'Chargement…' : 'Tester EDSM Bodies' }}
+      </button>
+    </div>
+    @if (edsnError) {
+      <div class="error">{{ edsnError }}</div>
+    }
+    @if (edsnResponse !== null) {
+      <div class="json-block" [class.collapsed]="!expandedEdsn">
+        <button type="button" class="collapse-trigger" (click)="toggleExpanded('edsn')" [attr.aria-expanded]="expandedEdsn">
+          <span class="chevron">{{ expandedEdsn ? '▼' : '▶' }}</span> JSON brut
+        </button>
+        @if (expandedEdsn) {
+          <pre>{{ edsnResponse | json }}</pre>
+        }
+      </div>
+    }
+    @if (edsnBodiesError) {
+      <div class="error">{{ edsnBodiesError }}</div>
+    }
+    @if (edsnBodiesResponse !== null && edsnBodiesEmpty) {
+      <div class="empty-warning">EDSM ne possède pas encore les données de ce système.</div>
+    }
+    @if (edsnBodiesSummary) {
+      <div class="summary">
+        <dl>
+          <dt>bodyCount</dt><dd>{{ edsnBodiesSummary.bodyCount }}</dd>
+          <dt>Landables</dt><dd>{{ edsnBodiesSummary.landable }}</dd>
+          <dt>Metal-rich</dt><dd>{{ edsnBodiesSummary.metalRich }}</dd>
+          <dt>High metal content</dt><dd>{{ edsnBodiesSummary.highMetalContent }}</dd>
+          <dt>Water world</dt><dd>{{ edsnBodiesSummary.waterWorld }}</dd>
+          <dt>Earth-like world</dt><dd>{{ edsnBodiesSummary.earthLike }}</dd>
+        </dl>
+      </div>
+    }
+    @if (edsnBodiesResponse !== null) {
+      <div class="json-block" [class.collapsed]="!expandedEdsnBodies">
+        <button type="button" class="collapse-trigger" (click)="toggleExpanded('edsnBodies')" [attr.aria-expanded]="expandedEdsnBodies">
+          <span class="chevron">{{ expandedEdsnBodies ? '▼' : '▶' }}</span> JSON brut
+        </button>
+        @if (expandedEdsnBodies) {
+          <pre>{{ edsnBodiesResponse | json }}</pre>
+        }
+      </div>
+    }
+  </section>
+
+  <section>
+    <h2>Spansh — Colonisation Plotter</h2>
+    <p class="hint-section">Route : <strong>{{ systemName || 'Système source' }}</strong> → <strong>{{ destinationSystem || 'Système destination' }}</strong></p>
+    <div class="system-input-row">
+      <label for="spansh-job-id">Job ID</label>
+      <input id="spansh-job-id" type="text" [value]="spanshJobId" (input)="spanshJobId = $any($event.target).value" placeholder="C1E5D9B2-1ACD-11F1-BFBB-B079545E58E4" />
+      <button (click)="fetchSpanshColonisationResult()" [disabled]="loadingSpanshColonisationResult">Récupérer résultat</button>
+    </div>
+    <div class="edsm-buttons">
+      <button (click)="testSpanshColonisationRoute()" [disabled]="loadingSpanshColonisation" [class.loading]="loadingSpanshColonisation">
+        @if (loadingSpanshColonisation) { <span class="spinner"></span> }
+        {{ loadingSpanshColonisation ? 'Chargement…' : 'Tester Spansh Colonisation Route' }}
+      </button>
+      <button (click)="testSpansh()" [disabled]="loadingSpansh" [class.loading]="loadingSpansh">
+        @if (loadingSpansh) { <span class="spinner"></span> }
+        {{ loadingSpansh ? 'Chargement…' : 'Tester Spansh (legacy)' }}
+      </button>
+    </div>
+    @if (spanshColonisationError) {
+      <div class="error">{{ spanshColonisationError }}</div>
+    }
+    @if (spanshColonisationResponse !== null) {
+      <div class="json-block" [class.collapsed]="!expandedSpanshColonisation">
+        <button type="button" class="collapse-trigger" (click)="toggleExpanded('spanshColonisation')" [attr.aria-expanded]="expandedSpanshColonisation">
+          <span class="chevron">{{ expandedSpanshColonisation ? '▼' : '▶' }}</span> JSON brut (Colonisation — job)
+        </button>
+        @if (expandedSpanshColonisation) {
+          <pre>{{ spanshColonisationResponse | json }}</pre>
+        }
+      </div>
+    }
+    @if (loadingSpanshColonisationResult) {
+      <div class="loading-result">
+        <span class="spinner"></span> Récupération du résultat (2 s)…
+      </div>
+    }
+    @if (spanshColonisationResultError) {
+      <div class="error">{{ spanshColonisationResultError }}</div>
+    }
+    @if (spanshColonisationResult !== null) {
+      <div class="json-block" [class.collapsed]="!expandedSpanshColonisationResult">
+        <button type="button" class="collapse-trigger" (click)="toggleExpanded('spanshColonisationResult')" [attr.aria-expanded]="expandedSpanshColonisationResult">
+          <span class="chevron">{{ expandedSpanshColonisationResult ? '▼' : '▶' }}</span> JSON brut (Résultat)
+        </button>
+        @if (expandedSpanshColonisationResult) {
+          <pre>{{ spanshColonisationResult | json }}</pre>
+        }
+      </div>
+    }
+    @if (spanshError) {
+      <div class="error">{{ spanshError }}</div>
+    }
+    @if (spanshResponse !== null) {
+      <div class="json-block" [class.collapsed]="!expandedSpansh">
+        <button type="button" class="collapse-trigger" (click)="toggleExpanded('spansh')" [attr.aria-expanded]="expandedSpansh">
+          <span class="chevron">{{ expandedSpansh ? '▼' : '▶' }}</span> JSON brut
+        </button>
+        @if (expandedSpansh) {
+          <pre>{{ spanshResponse | json }}</pre>
+        }
+      </div>
+    }
+  </section>
+</div>

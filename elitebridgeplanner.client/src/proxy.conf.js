@@ -8,11 +8,19 @@ const target = env.ASPNETCORE_HTTPS_PORT
 
 const PROXY_CONFIG = [
   {
-    context: [
-      "/api"          // Toutes les routes /api/* proxifiées vers le backend .NET
-    ],
+    context: ["/api"],
     target,
     secure: false
+  },
+  {
+    context: ["/spansh-api"],
+    target: "https://www.spansh.co.uk",
+    secure: true,
+    changeOrigin: true,
+    pathRewrite: {
+      "^/spansh-api": ""
+    },
+    logLevel: "debug"
   }
 ];
 
