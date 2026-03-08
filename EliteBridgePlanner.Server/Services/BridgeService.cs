@@ -81,17 +81,20 @@ public class BridgeService : IBridgeService
     /// InsertAtIndex = 2 → insérer après le 1er élément → retourne Id du 1er
     /// InsertAtIndex = N → retourne l'Id du (N-1)ème élément
     /// </summary>
-    private async Task<int?> ResolveInsertAfterId(int bridgeId, int insertAtIndex)
+    private async Task<int?> ResolveInsertAfterId(int bridgeId, int insertAtIndex, int? excludeSystemId = null)
     {
         if (insertAtIndex <= 1) return null; // Insertion en tête
 
         var current = await _db.StarSystems
-            .FirstOrDefaultAsync(s => s.BridgeId == bridgeId && s.PreviousSystemId == null);
+            .FirstOrDefaultAsync(s => s.BridgeId == bridgeId 
+                                   && s.PreviousSystemId == null
+                                   && (excludeSystemId == null || s.Id != excludeSystemId));
 
         int position = 1;
-        while (current is not null && position < insertAtIndex)
+        while (current is not null && position < insertAtIndex - 1)
         {
-            current = await _db.StarSystems.FirstOrDefaultAsync(p => p.PreviousSystemId == current.Id);
+            current = await _db.StarSystems.FirstOrDefaultAsync(p => p.PreviousSystemId == current.Id
+                                                                  && (excludeSystemId == null || p.Id != excludeSystemId));
             position++;
         }
 
@@ -105,6 +108,15 @@ public class BridgeService : IBridgeService
         {
             _db.StarSystems.Add(system);
             await _db.SaveChangesAsync();
+        }
+        else
+        {
+            // Si le système était déjà chaîné, le détacher d'abord
+            var actualSuccessor = await GetNextAsync(system.Id, system.BridgeId);
+            if (actualSuccessor is not null)
+            {
+                actualSuccessor.PreviousSystemId = system.PreviousSystemId;
+            }
         }
 
         if (insertAfterId is null)
@@ -122,22 +134,15 @@ public class BridgeService : IBridgeService
         }
         else
         {
-            // On commence par mettre a jour le lien actuelle
-            var actualSuccessor = await GetNextAsync(system.Id, system.BridgeId);
-            if (actualSuccessor is not null)
-            actualSuccessor.PreviousSystemId = system.PreviousSystemId;
-
-
-            //// Trouver l'actuel suivant du prédécesseur
+            // Trouver l'actuel suivant du prédécesseur
             var successor = await GetNextAsync(insertAfterId.Value, system.BridgeId);
 
-
-            //// Brancher newSystem après predecessor
+            // Brancher system après son nouveau prédécesseur
             system.PreviousSystemId = insertAfterId;
 
-            //// Le successeur pointe maintenant vers newSystem
+            // Le successeur du prédécesseur pointe maintenant vers system
             if (successor is not null && successor.Id != system.Id)
-                successor.PreviousSystemId = system.Id;            
+                successor.PreviousSystemId = system.Id;
         }
 
         await _db.SaveChangesAsync();
@@ -178,9 +183,55 @@ public class BridgeService : IBridgeService
     {
         var system = await _db.StarSystems.FindAsync(id);
         if (system is null) return null;
-        int? insertAfterId = await ResolveInsertAfterId(system.BridgeId, insertAtIndex);
-        await InsertInChain(system, insertAfterId, isNew: false); // ← système existant
+
+        // Étape 1 : Détacher le système de sa position actuelle
+        var nextSystem = await GetNextAsync(system.Id, system.BridgeId);
+        if (nextSystem is not null)
+        {
+            nextSystem.PreviousSystemId = system.PreviousSystemId;
+        }
+        await _db.SaveChangesAsync(); // Sauvegarder le détachement
+
+        // Étape 2 : Calculer insertAfterId sur la liste SANS le système (en l'excluant explicitement)
+        int? insertAfterId = await ResolveInsertAfterId(system.BridgeId, insertAtIndex, excludeSystemId: system.Id);
+
+        // Étape 3 : Réinsérer à la bonne position
+        await InsertSystemAtPosition(system, insertAfterId);
+
         return MapSystemToDto(system, insertAtIndex);
+    }
+
+    /// <summary>
+    /// Réinsère un système détaché à une position donnée.
+    /// Le système est supposé être détaché (ne pas être dans la chaîne).
+    /// </summary>
+    private async Task InsertSystemAtPosition(StarSystem system, int? insertAfterId)
+    {
+        if (insertAfterId is null)
+        {
+            // Insertion en tête
+            var currentHead = await _db.StarSystems
+                .FirstOrDefaultAsync(s => s.BridgeId == system.BridgeId
+                                       && s.PreviousSystemId == null
+                                       && s.Id != system.Id);
+
+            system.PreviousSystemId = null;
+
+            if (currentHead is not null)
+                currentHead.PreviousSystemId = system.Id;
+        }
+        else
+        {
+            // Insérer après le prédécesseur
+            var successor = await GetNextAsync(insertAfterId.Value, system.BridgeId);
+
+            system.PreviousSystemId = insertAfterId;
+
+            if (successor is not null && successor.Id != system.Id)
+                successor.PreviousSystemId = system.Id;
+        }
+
+        await _db.SaveChangesAsync();
     }
 
     private async Task<List<StarSystemDto>> GetOrderedSystemsAsync(int bridgeId)
@@ -229,13 +280,7 @@ public class BridgeService : IBridgeService
 
     private static BridgeDto MapToDto(Bridge b)
     {
-        var systems = b.Systems
-            .Select(MapSystemToDto)
-            .OrderBy(s => s.Order)
-            .ToList();
-
-        //var systems= GetOrderedSystems(b);
-
+        var systems= GetOrderedSystems(b);
         var total = systems.Count;
         var done = systems.Count(s => s.Status == nameof(ColonizationStatus.FINI));
 
@@ -249,27 +294,21 @@ public class BridgeService : IBridgeService
             b.CreatedAt
         );
     }
-    //private static List<StarSystemDto> GetOrderedSystems(Bridge bridge)
-    //{
-    //    //var all = await _db.StarSystems
-    //    //    .Include(s => s.Architect)
-    //    //    .Where(s => s.BridgeId == bridgeId)
-    //    //    .ToListAsync();
+    private static List<StarSystemDto> GetOrderedSystems(Bridge bridge)
+    {
 
-    //    var result = new List<StarSystemDto>();
-    //    var current = bridge.Systems.FirstOrDefault(s => s.PreviousSystemId == null);
-    //    int order = 1;
+        var result = new List<StarSystemDto>();
+        var current = bridge.Systems.FirstOrDefault(s => s.PreviousSystemId == null);
+        int order = 1;
 
-    //    while (current is not null)
-    //    {
-    //        result.Add(MapSystemToDto(current, order++));
-    //        current = current.NextSystemId.HasValue
-    //            ? bridge.Systems.FirstOrDefault(s => s.Id == current.NextSystemId.Value)
-    //            : null;
-    //    }
+        while (current is not null)
+        {
+            result.Add(MapSystemToDto(current, order++));
+            current = bridge.Systems.FirstOrDefault(s => s.PreviousSystemId == current.Id);                
+        }
 
-    //    return result;
-    //}
+        return result;
+    }
 
     private static StarSystemDto MapSystemToDto(StarSystem s, int order) => new(
         s.Id,

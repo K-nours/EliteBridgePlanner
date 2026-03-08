@@ -2,6 +2,7 @@
   <Folder Name="/CI/" />
   <Folder Name="/Éléments de solution/">
     <File Path="docker-compose.yml" />
+    <File Path="StarsSystem_SQL.sql" />
   </Folder>
   <Project Path="elitebridgeplanner.client/elitebridgeplanner.client.esproj">
     <Build />
