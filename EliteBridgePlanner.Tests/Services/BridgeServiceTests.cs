@@ -80,53 +80,77 @@ public class BridgeServiceTests
 
     // ── AddSystem ──────────────────────────────────────────────────────────
 
-    //[Test]
-    //public async Task AddSystemAsync_InsertsAtCorrectOrder()
-    //{
-    //    // Arrange
-    //    var db = DbContextFactory.CreateInMemory();
-    //    var bridge = TestData.CreateBridge();
-    //    bridge.Systems.Add(TestData.CreateSystem(1, 1, order: 1, SystemType.DEBUT));
-    //    bridge.Systems.Add(TestData.CreateSystem(2, 1, order: 2, SystemType.FIN));
-    //    db.Bridges.Add(bridge);
-    //    await db.SaveChangesAsync();
-    //    var svc = new BridgeService(db);
+    [Test]
+    public async Task AddSystemAsync_AtBeginning_InsertsAtHead()
+    {
+        // Arrange : 1 → 2 existant
+        var db = DbContextFactory.CreateInMemory();
+        var bridge = TestData.CreateBridge();
+        bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null));
+        bridge.Systems.Add(TestData.CreateSystem(2, 1, previousSystemId: 1));
+        db.Bridges.Add(bridge);
+        await db.SaveChangesAsync();
+        var svc = new BridgeService(db);
 
-    //    // Act — insérer après la position 1 (entre DEBUT et FIN)
-    //    var request = new CreateSystemRequest("Nouveau Système", "PILE", "PLANIFIE",
-    //        InsertAfterOrder: 1, ArchitectId: null, BridgeId: 1);
-    //    var result = await svc.AddSystemAsync(request);
+        // Act — ajouter à la position 1 (tête)
+        var request = new CreateSystemRequest("Nouveau", "TABLIER", "PLANIFIE", 
+            InsertAtIndex: 1, ArchitectId: null, BridgeId: 1);
+        var result = await svc.AddSystemAsync(request);
 
-    //    // Assert
-    //    Assert.That(result.Order, Is.EqualTo(2));
-    //    Assert.That(result.Name, Is.EqualTo("Nouveau Système"));
+        // Assert
+        Assert.That(result.Order, Is.EqualTo(1));
+        var newSystem = db.StarSystems.First(s => s.Name == "Nouveau");
+        Assert.That(newSystem.PreviousSystemId, Is.Null, "Nouveau doit devenir tête");
+        Assert.That(db.StarSystems.First(s => s.Id == 1).PreviousSystemId, Is.EqualTo(newSystem.Id), "Ancien système 1 doit pointer vers Nouveau");
+    }
 
-    //    // FIN doit avoir été décalée à la position 3
-    //    var fin = db.StarSystems.First(s => s.Type == SystemType.FIN);
-    //    Assert.That(fin.Order, Is.EqualTo(3));
-    //}
+    [Test]
+    public async Task AddSystemAsync_InMiddle_InsertsAtCorrectPosition()
+    {
+        // Arrange : 1 → 2 → 3
+        var db = DbContextFactory.CreateInMemory();
+        var bridge = TestData.CreateBridge();
+        bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null));
+        bridge.Systems.Add(TestData.CreateSystem(2, 1, previousSystemId: 1));
+        bridge.Systems.Add(TestData.CreateSystem(3, 1, previousSystemId: 2));
+        db.Bridges.Add(bridge);
+        await db.SaveChangesAsync();
+        var svc = new BridgeService(db);
 
-    //[Test]
-    //public async Task AddSystemAsync_AtBeginning_InsertsAtOrder1()
-    //{
-    //    // Arrange
-    //    var db = DbContextFactory.CreateInMemory();
-    //    var bridge = TestData.CreateBridge();
-    //    bridge.Systems.Add(TestData.CreateSystem(1, 1, order: 1, SystemType.FIN));
-    //    db.Bridges.Add(bridge);
-    //    await db.SaveChangesAsync();
-    //    var svc = new BridgeService(db);
+        // Act — ajouter à la position 3 (entre 2 et 3)
+        var request = new CreateSystemRequest("Nouveau", "TABLIER", "PLANIFIE", 
+            InsertAtIndex: 3, ArchitectId: null, BridgeId: 1);
+        var result = await svc.AddSystemAsync(request);
 
-    //    // Act — InsertAfterOrder: 0 = tout au début
-    //    var request = new CreateSystemRequest("Sol", "DEBUT", "PLANIFIE",
-    //        InsertAfterOrder: 0, ArchitectId: null, BridgeId: 1);
-    //    var result = await svc.AddSystemAsync(request);
+        // Assert : 1 → 2 → Nouveau → 3
+        Assert.That(result.Order, Is.EqualTo(3));
+        var newSystem = db.StarSystems.First(s => s.Name == "Nouveau");
+        Assert.That(newSystem.PreviousSystemId, Is.EqualTo(2), "Nouveau doit suivre 2");
+        Assert.That(db.StarSystems.First(s => s.Id == 3).PreviousSystemId, Is.EqualTo(newSystem.Id), "Système 3 doit suivre Nouveau");
+    }
 
-    //    // Assert
-    //    Assert.That(result.Order, Is.EqualTo(1));
-    //    var fin = db.StarSystems.First(s => s.Type == SystemType.FIN);
-    //    Assert.That(fin.Order, Is.EqualTo(2));
-    //}
+    [Test]
+    public async Task AddSystemAsync_AtEnd_InsertsAtQueue()
+    {
+        // Arrange : 1 → 2
+        var db = DbContextFactory.CreateInMemory();
+        var bridge = TestData.CreateBridge();
+        bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null));
+        bridge.Systems.Add(TestData.CreateSystem(2, 1, previousSystemId: 1));
+        db.Bridges.Add(bridge);
+        await db.SaveChangesAsync();
+        var svc = new BridgeService(db);
+
+        // Act — ajouter à la position 3 (après le dernier)
+        var request = new CreateSystemRequest("Nouveau", "TABLIER", "PLANIFIE", 
+            InsertAtIndex: 3, ArchitectId: null, BridgeId: 1);
+        var result = await svc.AddSystemAsync(request);
+
+        // Assert : 1 → 2 → Nouveau
+        Assert.That(result.Order, Is.EqualTo(3));
+        var newSystem = db.StarSystems.First(s => s.Name == "Nouveau");
+        Assert.That(newSystem.PreviousSystemId, Is.EqualTo(2), "Nouveau doit suivre 2");
+    }
 
     // ── UpdateSystem ───────────────────────────────────────────────────────
 
@@ -166,12 +190,12 @@ public class BridgeServiceTests
         Assert.That(result, Is.Null);
     }
 
-    // ── ReorderSystem ──────────────────────────────────────────────────────
+    // ── MoveSystem ─────────────────────────────────────────────────────────
 
     [Test]
-    public async Task ReorderSystemAsync_MovingDown_ShiftsIntermediatesUp()
+    public async Task MoveSystemAsync_MovingDown_ShiftsIntermediatesUp()
     {
-        // Arrange
+        // Arrange : 1 → 2 → 3
         var db = DbContextFactory.CreateInMemory();
         var bridge = TestData.CreateBridge();
         bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null));
@@ -181,13 +205,109 @@ public class BridgeServiceTests
         await db.SaveChangesAsync();
         var svc = new BridgeService(db);
 
-        // Act — déplacer le système 1 (ordre 1) à l'ordre 3
+        // Act — déplacer le système 1 (ordre 1) à l'ordre 3 → 2 → 3 → 1
         var result = await svc.MoveSystemAsync(1, insertAtIndex: 3);
 
         // Assert
         Assert.That(result!.Order, Is.EqualTo(3));
-        Assert.That(db.StarSystems.First(s => s.Id == 2).PreviousSystemId, Is.Null);
-        Assert.That(db.StarSystems.First(s => s.Id == 1).PreviousSystemId, Is.EqualTo(3));
+        Assert.That(db.StarSystems.First(s => s.Id == 2).PreviousSystemId, Is.Null, "Système 2 doit devenir tête");
+        Assert.That(db.StarSystems.First(s => s.Id == 3).PreviousSystemId, Is.EqualTo(2), "Système 3 doit suivre 2");
+        Assert.That(db.StarSystems.First(s => s.Id == 1).PreviousSystemId, Is.EqualTo(3), "Système 1 doit suivre 3");
+    }
+
+    [Test]
+    public async Task MoveSystemAsync_MovingUp_PreservesChain()
+    {
+        // Arrange : 1 → 2 → 3 → 4 → 5
+        var db = DbContextFactory.CreateInMemory();
+        var bridge = TestData.CreateBridge();
+        bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null));
+        bridge.Systems.Add(TestData.CreateSystem(2, 1, previousSystemId: 1));
+        bridge.Systems.Add(TestData.CreateSystem(3, 1, previousSystemId: 2));
+        bridge.Systems.Add(TestData.CreateSystem(4, 1, previousSystemId: 3));
+        bridge.Systems.Add(TestData.CreateSystem(5, 1, previousSystemId: 4));
+        db.Bridges.Add(bridge);
+        await db.SaveChangesAsync();
+        var svc = new BridgeService(db);
+
+        // Act — déplacer le système 5 (ordre 5) à l'ordre 2 → 1 → 5 → 2 → 3 → 4
+        var result = await svc.MoveSystemAsync(5, insertAtIndex: 2);
+
+        // Assert
+        Assert.That(result!.Order, Is.EqualTo(2));
+        Assert.That(db.StarSystems.First(s => s.Id == 1).PreviousSystemId, Is.Null, "Système 1 doit rester tête");
+        Assert.That(db.StarSystems.First(s => s.Id == 5).PreviousSystemId, Is.EqualTo(1), "Système 5 doit suivre 1");
+        Assert.That(db.StarSystems.First(s => s.Id == 2).PreviousSystemId, Is.EqualTo(5), "Système 2 doit suivre 5");
+        Assert.That(db.StarSystems.First(s => s.Id == 3).PreviousSystemId, Is.EqualTo(2), "Système 3 doit suivre 2");
+        Assert.That(db.StarSystems.First(s => s.Id == 4).PreviousSystemId, Is.EqualTo(3), "Système 4 doit suivre 3");
+    }
+
+    [Test]
+    public async Task MoveSystemAsync_MovingToHead_ChangesHead()
+    {
+        // Arrange : 1 → 2 → 3
+        var db = DbContextFactory.CreateInMemory();
+        var bridge = TestData.CreateBridge();
+        bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null));
+        bridge.Systems.Add(TestData.CreateSystem(2, 1, previousSystemId: 1));
+        bridge.Systems.Add(TestData.CreateSystem(3, 1, previousSystemId: 2));
+        db.Bridges.Add(bridge);
+        await db.SaveChangesAsync();
+        var svc = new BridgeService(db);
+
+        // Act — déplacer le système 3 à la position 1 (tête) → 3 → 1 → 2
+        var result = await svc.MoveSystemAsync(3, insertAtIndex: 1);
+
+        // Assert
+        Assert.That(result!.Order, Is.EqualTo(1));
+        Assert.That(db.StarSystems.First(s => s.Id == 3).PreviousSystemId, Is.Null, "Système 3 doit devenir tête");
+        Assert.That(db.StarSystems.First(s => s.Id == 1).PreviousSystemId, Is.EqualTo(3), "Système 1 doit suivre 3");
+        Assert.That(db.StarSystems.First(s => s.Id == 2).PreviousSystemId, Is.EqualTo(1), "Système 2 doit suivre 1");
+    }
+
+    [Test]
+    public async Task MoveSystemAsync_MovingByOnePosition_PreservesChain()
+    {
+        // Arrange : 1 → 2 → 3 → 4 → 5 (comme dans la BD de test)
+        var db = DbContextFactory.CreateInMemory();
+        var bridge = TestData.CreateBridge();
+        bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null));
+        bridge.Systems.Add(TestData.CreateSystem(2, 1, previousSystemId: 1));
+        bridge.Systems.Add(TestData.CreateSystem(3, 1, previousSystemId: 2));
+        bridge.Systems.Add(TestData.CreateSystem(4, 1, previousSystemId: 3));
+        bridge.Systems.Add(TestData.CreateSystem(5, 1, previousSystemId: 4));
+        db.Bridges.Add(bridge);
+        await db.SaveChangesAsync();
+        var svc = new BridgeService(db);
+
+        // Act — déplacer le système 4 (ordre 4) à l'ordre 5 → 1 → 2 → 3 → 5 → 4
+        var result = await svc.MoveSystemAsync(4, insertAtIndex: 5);
+
+        // Assert
+        Assert.That(result!.Order, Is.EqualTo(5));
+        Assert.That(db.StarSystems.First(s => s.Id == 1).PreviousSystemId, Is.Null);
+        Assert.That(db.StarSystems.First(s => s.Id == 2).PreviousSystemId, Is.EqualTo(1));
+        Assert.That(db.StarSystems.First(s => s.Id == 3).PreviousSystemId, Is.EqualTo(2));
+        Assert.That(db.StarSystems.First(s => s.Id == 5).PreviousSystemId, Is.EqualTo(3), "Système 5 doit suivre 3");
+        Assert.That(db.StarSystems.First(s => s.Id == 4).PreviousSystemId, Is.EqualTo(5), "Système 4 doit suivre 5 (et non pointer vers lui-même)");
+    }
+
+    [Test]
+    public async Task MoveSystemAsync_WhenNotExists_ReturnsNull()
+    {
+        // Arrange
+        var db = DbContextFactory.CreateInMemory();
+        var bridge = TestData.CreateBridge();
+        bridge.Systems.Add(TestData.CreateSystem(1, 1, previousSystemId: null));
+        db.Bridges.Add(bridge);
+        await db.SaveChangesAsync();
+        var svc = new BridgeService(db);
+
+        // Act
+        var result = await svc.MoveSystemAsync(999, insertAtIndex: 1);
+
+        // Assert
+        Assert.That(result, Is.Null);
     }
 
     // ── DeleteSystem ───────────────────────────────────────────────────────
