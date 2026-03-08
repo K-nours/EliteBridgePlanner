@@ -151,10 +151,26 @@
   overflow: hidden;
 }
 
+.detail-row {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
 .detail-area {
   flex: 1;
   overflow-y: auto;
   padding: v.$spacing-lg;
+}
+
+.stations-panel {
+  width: v.$stations-width;
+  flex-shrink: 0;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 // ── Boutons globaux ────────────────────────────────────────────────────────

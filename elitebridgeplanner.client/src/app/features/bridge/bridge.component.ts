@@ -5,6 +5,7 @@ import { ThemeSelectorComponent } from '../../shared/components/theme-selector/t
 import { BridgeVisualizerComponent } from './bridge-visualizer/bridge-visualizer.component';
 import { SystemListComponent } from './system-list/system-list.component';
 import { SystemDetailComponent } from './system-detail/system-detail.component';
+import { StationsPanelComponent } from './stations-panel/stations-panel.component';
 
 @Component({
   selector: 'app-bridge',
@@ -13,7 +14,8 @@ import { SystemDetailComponent } from './system-detail/system-detail.component';
     ThemeSelectorComponent,
     BridgeVisualizerComponent,
     SystemListComponent,
-    SystemDetailComponent
+    SystemDetailComponent,
+    StationsPanelComponent
   ],
   templateUrl: './bridge.component.html',
   styleUrl: './bridge.component.scss'
@@ -22,9 +24,7 @@ export class BridgeComponent implements OnInit {
   readonly store = inject(BridgeStore);
   readonly authService = inject(AuthService);
 
-  ngOnInit(): void {       
-    // TODO : ajouter la sélection de pont quand plusieurs ponts seront supportés
-    // Pour l'instant on charge directement le pont 1 après le chargement de la liste
+  ngOnInit(): void {
     this.store.loadBridge(1);
   }
 
