@@ -16,16 +16,24 @@
       <span class="cmdr-name">
         CMDR <strong>{{ authService.commanderName() }}</strong>
       </span>
-      <button class="btn btn-sm" (click)="logout()">DÉCONNEXION</button>
+<app-profile-menu />
     </div>
   </header>
+
+  <!-- Erreur API -->
+  @if (store.error()) {
+    <div class="error-banner">
+      ⚠ {{ store.error() }}
+      <button type="button" class="error-dismiss" (click)="store.clearError()" title="Fermer">×</button>
+    </div>
+  }
 
   <!-- STATS BAR -->
   @if (store.activeBridge()) {
     <div class="stats-bar">
       <div class="stat">
         <span class="stat-dot done"></span>
-        <span class="stat-label">Terminés</span>
+        <span class="stat-label">Opérationnels</span>
         <span class="stat-val">{{ store.stats().done }}</span>
       </div>
       <div class="stat-sep"></div>

@@ -12,8 +12,10 @@
 .section-title {
   font-family: v.$font-title;
   font-size: 0.7rem;
+  font-weight: 400;
   letter-spacing: 0.2em;
   color: var(--accent);
+  opacity: 1;
 }
 
 .action-btns { display: flex; gap: v.$spacing-sm; }
@@ -31,23 +33,34 @@
     height: 2px;
     background: linear-gradient(90deg, var(--accent), transparent);
   }
+
+  /* Couleur du dégradé = bordure gauche de la card sélectionnée */
+  &.type-DEBUT::before   { background: linear-gradient(90deg, var(--color-debut), transparent); }
+  &.type-FIN::before     { background: linear-gradient(90deg, var(--color-fin), transparent); }
+  &.type-PILE::before    { background: linear-gradient(90deg, var(--color-pile), transparent); }
+  &.type-TABLIER::before { background: linear-gradient(90deg, var(--color-tablier), transparent); }
 }
 
 .detail-heading {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   margin-bottom: v.$spacing-lg;
+}
+
+.detail-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
 }
 
 .sys-name {
   font-family: v.$font-title;
   font-size: 1rem;
   color: var(--accent);
-  margin-bottom: v.$spacing-xs;
 }
-
-.sys-badges { display: flex; gap: 6px; }
 
 .sys-order {
   font-family: v.$font-mono;
@@ -91,10 +104,30 @@
   option { background: var(--bg2); }
 }
 
-.status-row { display: flex; gap: v.$spacing-sm; flex-wrap: wrap; }
+.status-row {
+  display: flex;
+  width: 100%;
+  gap: 0;
+  flex-wrap: nowrap;
+
+  /* Chevauchement pour resserrer l'espace entre les flèches (comme dans la liste) */
+  > * + * {
+    margin-left: -6px;
+  }
+
+  > .status-btn {
+    flex: 1;
+    min-width: 0;
+  }
+}
 
 .status-btn {
-  padding: 6px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  line-height: 1;
+  padding: 2px 14px 0;
   font-size: 0.75rem;
   border: 1px solid var(--border);
   background: transparent;
@@ -105,12 +138,29 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   transition: all v.$transition-fast;
-  @include v.badge-clip;
 
   &:hover { border-color: var(--text); color: var(--text); }
-  &.active-PLANIFIE     { border-color: var(--status-plan);  color: var(--status-plan);  background: rgba(74,106,138,.15); }
-  &.active-CONSTRUCTION { border-color: var(--status-build); color: var(--status-build); background: rgba(255,140,0,.1); }
-  &.active-FINI         { border-color: var(--status-done);  color: var(--status-done);  background: rgba(0,204,102,.1); }
+  &.active-PLANIFIE     { border-color: color-mix(in srgb, var(--status-plan) 25%, transparent);  color: var(--status-plan);  background: rgba(74,106,138,.15); }
+  &.active-CONSTRUCTION { border-color: color-mix(in srgb, var(--status-build) 25%, transparent); color: var(--status-build); background: rgba(255,140,0,.1); }
+  &.active-FINI         { border-color: color-mix(in srgb, var(--status-done) 25%, transparent);  color: var(--status-done);  background: rgba(0,204,102,.1); }
+
+  /* Planifié / En construction / Opérationnel : bordure retirée uniquement sur les côtés obliques */
+  &.status-PLANIFIE     { border: 1px solid color-mix(in srgb, var(--status-plan) 25%, transparent); border-right: none; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); padding: 2px 16px 0 14px; }
+  &.status-CONSTRUCTION { border: 1px solid color-mix(in srgb, var(--status-build) 25%, transparent); border-left: none; border-right: none; clip-path: polygon(0 0, 10px 50%, 0 100%, calc(100% - 10px) 100%, 100% 50%, calc(100% - 10px) 0, 10px 0); padding: 2px 16px 0 16px; }
+  &.status-FINI         { border: 1px solid color-mix(in srgb, var(--status-done) 25%, transparent); border-left: none; clip-path: polygon(0 0, 10px 50%, 0 100%, 10px 100%, 100% 100%, 100% 0, 10px 0); padding: 2px 14px 0 16px; }
+
+  /* Items non sélectionnés : opacité globale 50% (tout l'item : texte, bordure, fond) */
+  &.status-PLANIFIE:not(.active-PLANIFIE),
+  &.status-CONSTRUCTION:not(.active-CONSTRUCTION),
+  &.status-FINI:not(.active-FINI) {
+    opacity: 0.5;
+  }
+  &.status-PLANIFIE:not(.active-PLANIFIE)     { background: rgba(74,106,138,.05); }
+  &.status-PLANIFIE:not(.active-PLANIFIE):hover { opacity: 0.5; background: rgba(74,106,138,.12); }
+  &.status-CONSTRUCTION:not(.active-CONSTRUCTION) { background: rgba(255,140,0,.05); }
+  &.status-CONSTRUCTION:not(.active-CONSTRUCTION):hover { opacity: 0.5; background: rgba(255,140,0,.12); }
+  &.status-FINI:not(.active-FINI)             { background: rgba(0,204,102,.05); }
+  &.status-FINI:not(.active-FINI):hover       { opacity: 0.5; background: rgba(0,204,102,.12); }
 }
 
 .btn {
@@ -129,26 +179,31 @@
 
   &:hover { background: var(--accent); color: var(--bg); box-shadow: var(--glow); }
   &.btn-sm { padding: 5px 14px; font-size: 0.75rem; }
-  &.btn-danger {
-    border-color: var(--color-fin); color: var(--color-fin);
-    &:hover { background: var(--color-fin); color: white; }
+  &.btn-critical {
+    @include v.btn-critical;
   }
 }
 
 .badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
   font-size: 0.6rem;
+  line-height: 1;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 2px 8px;
+  padding: 2px 10px 0;
   @include v.badge-clip;
 
-  &.badge-type-DEBUT   { background: rgba(0,255,136,.12);  color: var(--color-debut);   border: 1px solid var(--color-debut); }
-  &.badge-type-FIN     { background: rgba(255,51,102,.12); color: var(--color-fin);     border: 1px solid var(--color-fin); }
-  &.badge-type-PILE    { background: rgba(255,107,0,.12);  color: var(--color-pile);    border: 1px solid var(--color-pile); }
-  &.badge-type-TABLIER { background: rgba(0,212,255,.1);   color: var(--color-tablier); border: 1px solid var(--color-tablier); }
-  &.badge-status-PLANIFIE     { background: rgba(74,106,138,.15); color: var(--status-plan);  border: 1px solid var(--status-plan); }
-  &.badge-status-CONSTRUCTION { background: rgba(255,140,0,.12);  color: var(--status-build); border: 1px solid var(--status-build); }
-  &.badge-status-FINI         { background: rgba(0,204,102,.12);  color: var(--status-done);  border: 1px solid var(--status-done); }
+  &.badge-type-DEBUT   { background: rgba(0,255,136,.12);  color: var(--color-debut);   border: 1px solid color-mix(in srgb, var(--color-debut) 25%, transparent); }
+  &.badge-type-FIN     { background: rgba(255,51,102,.12); color: var(--color-fin);     border: 1px solid color-mix(in srgb, var(--color-fin) 25%, transparent); }
+  &.badge-type-PILE    { background: color-mix(in srgb, var(--color-pile) 12%, transparent);  color: var(--color-pile);    border: 1px solid color-mix(in srgb, var(--color-pile) 25%, transparent); }
+  &.badge-type-TABLIER { background: rgba(0,212,255,.1);   color: var(--color-tablier); border: 1px solid color-mix(in srgb, var(--color-tablier) 25%, transparent); }
+  /* Planifié / En construction / Opérationnel : bordure retirée uniquement sur les côtés obliques */
+  &.badge-status-PLANIFIE     { background: rgba(74,106,138,.15); color: var(--status-plan);  border: 1px solid color-mix(in srgb, var(--status-plan) 25%, transparent); border-right: none; clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%); padding: 2px 16px 0 10px; }
+  &.badge-status-CONSTRUCTION { background: rgba(255,140,0,.12);  color: var(--status-build); border: 1px solid color-mix(in srgb, var(--status-build) 25%, transparent); border-left: none; border-right: none; clip-path: polygon(0 0, 10px 50%, 0 100%, calc(100% - 10px) 100%, 100% 50%, calc(100% - 10px) 0, 10px 0); padding: 2px 16px 0 16px; }
+  &.badge-status-FINI         { background: rgba(0,204,102,.12);  color: var(--status-done);  border: 1px solid color-mix(in srgb, var(--status-done) 25%, transparent); border-left: none; clip-path: polygon(0 0, 10px 50%, 0 100%, 10px 100%, 100% 100%, 100% 0, 10px 0); padding: 2px 10px 0 16px; }
 }
 
 .empty-detail {

@@ -22,10 +22,26 @@ $transition-fast   : 0.15s ease;
 $transition-normal : 0.25s ease;
 
 // ── Mixins ────────────────────────────────────────────────────────────────
+// Style unifié pour badges et boutons : rectangulaires, sans radius
+@mixin rect-chip {
+  border-radius: 0;
+}
+
 @mixin badge-clip {
-  clip-path: polygon(4px 0%, 100% 0%, calc(100% - 4px) 100%, 0% 100%);
+  @include rect-chip;
 }
 
 @mixin btn-clip {
-  clip-path: polygon(6px 0%, 100% 0%, calc(100% - 6px) 100%, 0% 100%);
+  @include rect-chip;
+}
+
+/// Style du bouton critical (déconnexion, supprimer, etc.)
+@mixin btn-critical {
+  border-color: var(--color-fin);
+  color: var(--color-fin);
+  &:hover {
+    background: var(--color-fin);
+    color: white;
+    box-shadow: var(--glow);
+  }
 }

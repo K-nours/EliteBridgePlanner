@@ -4,7 +4,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  overflow: hidden;
+  overflow: visible; /* permet au tooltip Départ/Arrivée de s'afficher */
   background: var(--bg);
 }
 
@@ -52,6 +52,11 @@
   display: flex;
   align-items: center;
   gap: v.$spacing-md;
+
+  .theme-selector,
+  .cmdr-name {
+    line-height: 28px;
+  }
 }
 
 .divider {
@@ -92,7 +97,7 @@
 .stat-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: 0;
 
   &.done    { background: var(--status-done); }
   &.build   { background: var(--status-build); }
@@ -109,7 +114,7 @@
 
 .stat-label {
   font-size: 0.7rem;
-  color: var(--text-dim);
+  color: var(--text);
 }
 
 .stat-val {
@@ -131,15 +136,17 @@
 .app-body {
   display: flex;
   flex: 1;
-  overflow: hidden;
+  overflow: visible; /* permet au tooltip Départ/Arrivée de s'afficher */
+  min-height: 0;
 }
 
 .sidebar {
   width: v.$sidebar-width;
   flex-shrink: 0;
+  min-height: 0;
   background: var(--panel);
   border-right: 1px solid var(--border);
-  overflow: hidden;
+  overflow: visible; /* permet au tooltip Départ/Arrivée de s'afficher au-dessus du panneau adjacent */
   display: flex;
   flex-direction: column;
 }
@@ -190,4 +197,28 @@
 
   &:hover { background: var(--accent); color: var(--bg); box-shadow: var(--glow); }
   &.btn-sm { padding: 5px 14px; font-size: 0.75rem; }
+}
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+  background: rgba(255, 51, 102, 0.1);
+  border: 1px solid var(--color-fin);
+  color: var(--color-fin);
+  padding: v.$spacing-sm v.$spacing-lg;
+  font-size: 0.85rem;
+
+  .error-dismiss {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+
+    &:hover { opacity: 0.8; }
+  }
 }

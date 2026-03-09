@@ -2,11 +2,12 @@ import { Component, inject, effect, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { BridgeStore } from '../../../core/services/bridge.store';
 import { SystemType, ColonizationStatus } from '../../../core/models/models';
+import { CustomSelectComponent } from '../../../shared/components/custom-select/custom-select.component';
 
 @Component({
   selector: 'app-system-detail',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, CustomSelectComponent],
   templateUrl: './system-detail.component.html',
   styleUrl: './system-detail.component.scss'
 })
@@ -22,16 +23,16 @@ export class SystemDetailComponent {
   });
 
   readonly typeOptions: { value: SystemType; label: string }[] = [
-    { value: 'DEBUT',   label: 'Début' },
+    { value: 'DEBUT',   label: 'Départ' },
     { value: 'PILE',    label: 'Pile' },
     { value: 'TABLIER', label: 'Tablier' },
-    { value: 'FIN',     label: 'Fin' }
+    { value: 'FIN',     label: 'Arrivée' }
   ];
 
   readonly statusOptions: { value: ColonizationStatus; label: string }[] = [
     { value: 'PLANIFIE',     label: 'Planifié' },
     { value: 'CONSTRUCTION', label: 'En construction' },
-    { value: 'FINI',         label: 'Fini' }
+    { value: 'FINI',         label: 'Opérationnel' }
   ];
 
   constructor() {

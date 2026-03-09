@@ -40,26 +40,46 @@ body {
 }
 
 // ── Utilitaires globaux ───────────────────────────────────────────────────
-.font-title { font-family: v.$font-title; }
-.font-mono  { font-family: v.$font-mono; }
+.text-dim { color: var(--text-dim); }
 
-.text-accent  { color: var(--accent); }
-.text-dim     { color: var(--text-dim); }
+// ── Focus clavier (accessibilité WCAG) ────────────────────────────────────
+input:focus-visible,
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+// Priorité sur les outline: none des composants
+input:focus-visible,
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 2px;
+}
 
 // ── Animations globales ───────────────────────────────────────────────────
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.5; }
-}
-
-@keyframes scanline {
-  0%   { transform: translateY(-100%); }
-  100% { transform: translateY(100vh); }
-}
-
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 .animate-fadeIn { animation: fadeIn 0.2s ease forwards; }
+
+/* Tooltip flottant (position: fixed) — au-dessus de tout le contenu */
+.eb-tooltip-floating {
+  position: fixed;
+  z-index: 99999;
+  padding: 3px 6px;
+  font-family: v.$font-mono;
+  font-size: 0.75rem;
+  color: var(--accent);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  white-space: nowrap;
+  max-width: min(400px, calc(100vw - 48px));
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  &.visible { opacity: 1; }
+}

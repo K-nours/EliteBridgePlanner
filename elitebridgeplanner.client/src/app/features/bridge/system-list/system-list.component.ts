@@ -1,12 +1,15 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, computed } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { BridgeStore } from '../../../core/services/bridge.store';
 import { SystemType, ColonizationStatus } from '../../../core/models/models';
+import { TruncateMiddlePipe } from '../../../shared/pipes/truncate-middle.pipe';
+import { TruncateTooltipDirective } from '../../../shared/directives/truncate-tooltip.directive';
+import { CustomSelectComponent } from '../../../shared/components/custom-select/custom-select.component';
 
 @Component({
   selector: 'app-system-list',
   standalone: true,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, TruncateMiddlePipe, TruncateTooltipDirective, CustomSelectComponent],
   templateUrl: './system-list.component.html',
   styleUrl: './system-list.component.scss'
 })
@@ -15,6 +18,15 @@ export class SystemListComponent {
   private readonly fb = inject(FormBuilder);
 
   readonly showAddForm = signal(false);
+  readonly hideOperational = signal(false);
+
+  readonly displaySystems = computed(() => {
+    const systems = this.store.orderedSystems();
+    if (this.hideOperational()) {
+      return systems.filter(s => s.status === 'CONSTRUCTION');
+    }
+    return systems;
+  });
 
   readonly addForm = this.fb.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
@@ -25,22 +37,22 @@ export class SystemListComponent {
   });
 
   readonly typeOptions: { value: SystemType; label: string }[] = [
-    { value: 'DEBUT', label: 'Début' },
+    { value: 'DEBUT', label: 'Départ' },
     { value: 'PILE', label: 'Pile' },
     { value: 'TABLIER', label: 'Tablier' },
-    { value: 'FIN', label: 'Fin' }
+    { value: 'FIN', label: 'Arrivée' }
   ];
 
   readonly statusOptions: { value: ColonizationStatus; label: string }[] = [
     { value: 'PLANIFIE', label: 'Planifié' },
     { value: 'CONSTRUCTION', label: 'En construction' },
-    { value: 'FINI', label: 'Fini' }
+    { value: 'FINI', label: 'Opérationnel' }
   ];
 
   toggleAddForm(): void {
     this.showAddForm.update(v => !v);
     if (this.showAddForm()) {
-      this.addForm.patchValue({ insertAtIndex: this.store.orderedSystems().length });
+      this.addForm.patchValue({ insertAtIndex: this.store.orderedSystems().length + 1 });
     }
   }
 
@@ -55,7 +67,7 @@ export class SystemListComponent {
       architectId: val.architectId ?? null,
       bridgeId: this.store.activeBridge()!.id
     });
-    this.addForm.reset({ type: 'TABLIER', status: 'PLANIFIE', insertAtIndex: 0 });
+    this.addForm.reset({ type: 'TABLIER', status: 'PLANIFIE', insertAtIndex: 1 });
     this.showAddForm.set(false);
   }
 

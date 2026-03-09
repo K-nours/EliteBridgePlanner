@@ -1,10 +1,12 @@
 import { Component, inject } from '@angular/core';
 import { ThemeService } from '../../themes/theme.service';
 import { THEMES, ThemeId } from '../../themes/theme.model';
+import { TruncateTooltipDirective } from '../../directives/truncate-tooltip.directive';
 
 @Component({
   selector: 'app-theme-selector',
   standalone: true,
+  imports: [TruncateTooltipDirective],
   template: `
     <div class="theme-selector">
       <span class="label">THEME</span>
@@ -13,7 +15,8 @@ import { THEMES, ThemeId } from '../../themes/theme.model';
           class="theme-dot"
           [class.active]="themeService.activeTheme() === theme.id"
           [style.background]="theme.color"
-          [title]="theme.label"
+          [truncateTooltip]="theme.label"
+          [truncateTooltipForce]="true"
           (click)="setTheme(theme.id)"
           [attr.aria-label]="'Thème ' + theme.label"
         ></button>
