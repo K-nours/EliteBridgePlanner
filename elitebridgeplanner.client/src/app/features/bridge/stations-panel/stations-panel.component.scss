@@ -71,6 +71,15 @@
   flex: 1;
   overflow-y: auto;
   padding: v.$spacing-lg;
+
+  .term-pile {
+    color: var(--color-pile);
+    font-weight: 600;
+  }
+  .term-tablier {
+    color: var(--color-tablier);
+    font-weight: 600;
+  }
 }
 
 .tutorial-heading {
@@ -84,6 +93,9 @@
   &:not(:first-child) {
     margin-top: v.$spacing-lg;
   }
+
+  .term-pile { color: var(--color-pile); font-weight: 600; }
+  .term-tablier { color: var(--color-tablier); font-weight: 600; }
 }
 
 .tutorial-text {
@@ -91,11 +103,6 @@
   line-height: 1.6;
   color: var(--text);
   margin: 0;
-
-  strong {
-    color: var(--accent);
-    font-weight: 600;
-  }
 }
 
 .tutorial-hint {

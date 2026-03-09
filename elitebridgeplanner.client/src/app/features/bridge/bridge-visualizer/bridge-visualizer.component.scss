@@ -343,12 +343,12 @@
 /* Crochets [ ] sur le segment sélectionné — dépassent au-dessus et en dessous */
 .minimap-bracket {
   position: absolute;
-  top: -5px;
-  bottom: -5px;
+  top: -8px;
+  bottom: -8px;
   display: flex;
   align-items: center;
   font-family: v.$font-mono;
-  font-size: 12px;
+  font-size: 18px;
   font-weight: 700;
   line-height: 1;
   color: var(--accent);
