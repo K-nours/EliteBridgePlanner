@@ -6,6 +6,7 @@ import { ProfileMenuComponent } from '../../shared/components/profile-menu/profi
 import { BridgeVisualizerComponent } from './bridge-visualizer/bridge-visualizer.component';
 import { SystemListComponent } from './system-list/system-list.component';
 import { SystemDetailComponent } from './system-detail/system-detail.component';
+import { StationsPanelComponent } from './stations-panel/stations-panel.component';
 
 @Component({
   selector: 'app-bridge',
@@ -15,7 +16,8 @@ import { SystemDetailComponent } from './system-detail/system-detail.component';
     ProfileMenuComponent,
     BridgeVisualizerComponent,
     SystemListComponent,
-    SystemDetailComponent
+    SystemDetailComponent,
+    StationsPanelComponent
   ],
   templateUrl: './bridge.component.html',
   styleUrl: './bridge.component.scss'
@@ -25,8 +27,7 @@ export class BridgeComponent implements OnInit {
   readonly authService = inject(AuthService);
 
   ngOnInit(): void {
-    // Charge le premier pont disponible (évite l'erreur FK si l'id 1 n'existe pas)
-    this.store.loadFirstBridge();
+    this.store.loadBridge(1);
   }
 
   logout(): void {
