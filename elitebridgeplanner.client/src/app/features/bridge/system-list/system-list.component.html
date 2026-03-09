@@ -89,8 +89,8 @@
 <!-- Liste des systèmes -->
 <div class="systems-list">
   @for (system of displaySystems(); track system.id) {
-  <div class="system-card" [class]="'type-' + system.type" [class.selected]="store.selectedSystem()?.id === system.id"
-    (click)="store.selectSystem(system)">
+  <div class="system-card" [class]="'type-' + system.type" [class.selected]="store.selectedSystemIds().has(system.id)"
+    (click)="onSystemClick(system, $event)">
     <div class="card-row card-row-1">
       <span class="badge" [class]="'badge-type-' + system.type">{{ typeLabel(system.type) }}</span>
       <div class="order-controls" (click)="$event.stopPropagation()">

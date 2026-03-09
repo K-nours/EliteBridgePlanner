@@ -1,9 +1,9 @@
 import { signalStore, withState, withMethods, withComputed, patchState } from '@ngrx/signals';
 import { inject, computed } from '@angular/core';
 import { rxMethod } from '@ngrx/signals/rxjs-interop';
-import { pipe, switchMap, tap, catchError, EMPTY } from 'rxjs';
+import { pipe, switchMap, tap, catchError, EMPTY, forkJoin } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
-import { BridgeDto, StarSystemDto, CreateSystemRequest, UpdateSystemRequest } from '../models/models';
+import { BridgeDto, StarSystemDto, CreateSystemRequest, UpdateSystemRequest, ColonizationStatus } from '../models/models';
 import { BridgeApiService } from '../services/bridge-api.service';
 
 const getErrorMessage = (err: unknown): string =>
@@ -15,6 +15,8 @@ interface BridgeState {
   bridges: BridgeDto[];
   activeBridge: BridgeDto | null;
   selectedSystem: StarSystemDto | null;
+  selectedSystemIds: Set<number>;
+  selectionAnchorOrder: number | null;
   isLoading: boolean;
   error: string | null;
 }
@@ -23,6 +25,8 @@ const initialState: BridgeState = {
   bridges: [],
   activeBridge: null,
   selectedSystem: null,
+  selectedSystemIds: new Set(),
+  selectionAnchorOrder: null,
   isLoading: false,
   error: null
 };
@@ -73,7 +77,13 @@ export const BridgeStore = signalStore(
       pipe(
         tap(() => patchState(store, { isLoading: true, error: null })),
         switchMap((id: number) => api.getBridgeById(id).pipe(
-          tap((activeBridge: BridgeDto) => patchState(store, { activeBridge, isLoading: false })),
+          tap((activeBridge: BridgeDto) => patchState(store, {
+            activeBridge,
+            isLoading: false,
+            selectedSystem: null,
+            selectedSystemIds: new Set(),
+            selectionAnchorOrder: null
+          })),
           catchError((err: unknown) => {
             patchState(store, { error: getErrorMessage(err), isLoading: false });
             return EMPTY;
@@ -94,7 +104,13 @@ export const BridgeStore = signalStore(
             return EMPTY;
           }
           return api.getBridgeById(first.id).pipe(
-            tap((activeBridge: BridgeDto) => patchState(store, { activeBridge, isLoading: false })),
+            tap((activeBridge: BridgeDto) => patchState(store, {
+              activeBridge,
+              isLoading: false,
+              selectedSystem: null,
+              selectedSystemIds: new Set(),
+              selectionAnchorOrder: null
+            })),
             catchError((err: unknown) => {
               patchState(store, { error: getErrorMessage(err), isLoading: false });
               return EMPTY;
@@ -109,8 +125,34 @@ export const BridgeStore = signalStore(
     },
 
     // ── Sélectionner un système ────────────────────────────────────────────
-    selectSystem(system: StarSystemDto | null): void {
-      patchState(store, { selectedSystem: system });
+    selectSystem(system: StarSystemDto | null, options?: { shiftKey?: boolean; systems?: StarSystemDto[] }): void {
+      if (!system) {
+        patchState(store, { selectedSystem: null, selectedSystemIds: new Set(), selectionAnchorOrder: null });
+        return;
+      }
+      const systems = options?.systems ?? (store.activeBridge()?.systems ?? []).sort((a, b) => a.order - b.order);
+      const shiftKey = options?.shiftKey ?? false;
+      const anchor = store.selectionAnchorOrder();
+
+      if (shiftKey && anchor !== null) {
+        const lo = Math.min(anchor, system.order);
+        const hi = Math.max(anchor, system.order);
+        const ids = new Set<number>();
+        for (const s of systems) {
+          if (s.order >= lo && s.order <= hi) ids.add(s.id);
+        }
+        patchState(store, {
+          selectedSystem: system,
+          selectedSystemIds: ids,
+          selectionAnchorOrder: anchor
+        });
+      } else {
+        patchState(store, {
+          selectedSystem: system,
+          selectedSystemIds: new Set([system.id]),
+          selectionAnchorOrder: system.order
+        });
+      }
     },
 
     clearError(): void {
@@ -176,6 +218,26 @@ export const BridgeStore = signalStore(
       )
     ),
 
+    // ── Modification en masse ──────────────────────────────────────────────
+    bulkUpdateStatus(status: ColonizationStatus): void {
+      const ids = Array.from(store.selectedSystemIds());
+      const bridgeId = store.activeBridge()?.id;
+      if (ids.length === 0 || !bridgeId) return;
+      forkJoin(
+        ids.map(id => api.updateSystem(id, { status }))
+      ).pipe(
+        tap(() => {
+          api.getBridgeById(bridgeId).subscribe(
+            (activeBridge) => patchState(store, { activeBridge })
+          );
+        }),
+        catchError((err) => {
+          patchState(store, { error: getErrorMessage(err) });
+          return EMPTY;
+        })
+      ).subscribe();
+    },
+
     // ── Supprimer un système ───────────────────────────────────────────────
     deleteSystem: rxMethod<number>(
       pipe(
@@ -186,7 +248,9 @@ export const BridgeStore = signalStore(
             const systems = bridge.systems.filter(s => s.id !== id);
             patchState(store, {
               activeBridge: { ...bridge, systems },
-              selectedSystem: null
+              selectedSystem: null,
+              selectedSystemIds: new Set(),
+              selectionAnchorOrder: null
             });
           }),
           catchError((err: unknown) => {

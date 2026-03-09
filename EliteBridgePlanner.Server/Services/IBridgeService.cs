@@ -16,4 +16,9 @@ public interface IBridgeService
     Task<StarSystemDto?> UpdateSystemAsync(int id, UpdateSystemRequest request);
     Task<bool> DeleteSystemAsync(int id);
     Task<StarSystemDto?> MoveSystemAsync(int id, int insertAfterId);
+
+    /// <summary>Importe une route Spansh — crée un nouveau pont ou remplit un pont existant.</summary>
+    Task<BridgeDto> ImportSpanshRouteAsync(string userId, string bridgeName, IEnumerable<SpanshSystemImport> systems, int? replaceBridgeId = null);
 }
+
+public record SpanshSystemImport(string Name, string Type);

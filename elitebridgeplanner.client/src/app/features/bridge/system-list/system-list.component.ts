@@ -1,4 +1,5 @@
 import { Component, inject, signal, computed } from '@angular/core';
+import type { StarSystemDto } from '../../../core/models/models';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { BridgeStore } from '../../../core/services/bridge.store';
 import { SystemType, ColonizationStatus } from '../../../core/models/models';
@@ -88,5 +89,12 @@ export class SystemListComponent {
 
   statusLabel(status: string): string {
     return this.statusOptions.find(s => s.value === status)?.label ?? status;
+  }
+
+  onSystemClick(system: StarSystemDto, event: MouseEvent): void {
+    this.store.selectSystem(system, {
+      shiftKey: event.shiftKey,
+      systems: this.store.orderedSystems()
+    });
   }
 }

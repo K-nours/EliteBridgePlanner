@@ -1,0 +1,162 @@
+<div class="viz-container">
+  <div class="viz-header">
+    <div class="viz-title">▸ VISUALISATION DU PONT STELLAIRE</div>
+    @if (isDetailView()) {
+      <button
+        type="button"
+        class="viz-back-btn"
+        (click)="backToMacro()"
+        title="Revenir à la vue d'ensemble"
+      >
+        ← Vue d'ensemble
+      </button>
+    }
+  </div>
+
+  <div class="viz-scroll-area">
+    <div class="viz-scroll-inner">
+  <!-- Vue complète (≤ seuil) : tous les nœuds -->
+  @if (isFullView()) {
+    <div class="bridge-track">
+      @for (system of displayedSystems(); track system.id; let i = $index) {
+        @if (i > 0) {
+          <div
+            class="line-segment"
+            [class.segment-green]="system.order <= lastOperationalOrder()"
+            [class.segment-normal]="system.order > lastOperationalOrder()"
+          ></div>
+        }
+        <div
+          [class]="'bridge-node type-' + system.type + (system.status === 'FINI' ? ' status-FINI' : '')"
+          [class.selected]="store.selectedSystemIds().has(system.id)"
+          (click)="selectSystem(system)"
+        >
+          <div
+            [class]="'node-shape type-' + system.type + (system.status === 'FINI' ? ' status-FINI' : '')"
+          ></div>
+          <div
+            class="node-label"
+            [truncateTooltip]="system.name"
+            [truncateTooltipForce]="system.name.length > 14"
+            [truncateTooltipAbove]="true"
+          >
+            <span class="node-label-name">{{ system.name | truncateMiddle:14 }}</span>
+            <span class="node-label-order">#{{ system.order }}</span>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Vue macro : PILE + DEBUT + FIN + liens cliquables -->
+  @if (isMacroView()) {
+    <div class="bridge-track macro-track">
+      @for (item of macroItems(); track item.kind === 'node' ? item.system.id : item.fromOrder + '-' + item.toOrder) {
+        @if (item.kind === 'link') {
+          <button
+            type="button"
+            class="macro-link"
+            [class.macro-link-operative]="item.toOrder - 1 <= lastOperationalOrder()"
+            (click)="zoomIntoSegment(item.fromOrder, item.toOrder)"
+            [title]="'Zoom : systèmes #' + (item.fromOrder + 1) + ' à #' + (item.toOrder - 1) + ' (' + item.count + ')'"
+          >
+            <span class="macro-link-line"></span>
+            <span class="macro-link-label">{{ item.count }} système{{ item.count > 1 ? 's' : '' }}</span>
+            <span class="macro-link-line"></span>
+          </button>
+        } @else {
+          <div
+            [class]="'bridge-node type-' + item.system.type + (item.system.status === 'FINI' ? ' status-FINI' : '')"
+            [class.selected]="store.selectedSystemIds().has(item.system.id)"
+            (click)="selectSystem(item.system)"
+          >
+            <div
+              [class]="'node-shape type-' + item.system.type + (item.system.status === 'FINI' ? ' status-FINI' : '')"
+            ></div>
+            <div
+              class="node-label"
+              [truncateTooltip]="item.system.name"
+              [truncateTooltipForce]="item.system.name.length > 14"
+              [truncateTooltipAbove]="true"
+            >
+              <span class="node-label-name">{{ item.system.name | truncateMiddle:14 }}</span>
+              <span class="node-label-order">#{{ item.system.order }}</span>
+            </div>
+          </div>
+        }
+      }
+    </div>
+  }
+
+  <!-- Vue détaillée : tronçon zoomé -->
+  @if (isDetailView()) {
+    <div class="bridge-track">
+      @for (system of displayedSystems(); track system.id; let i = $index) {
+        @if (i > 0) {
+          <div
+            class="line-segment"
+            [class.segment-green]="system.order <= lastOperationalOrder()"
+            [class.segment-normal]="system.order > lastOperationalOrder()"
+          ></div>
+        }
+        <div
+          [class]="'bridge-node type-' + system.type + (system.status === 'FINI' ? ' status-FINI' : '')"
+          [class.selected]="store.selectedSystemIds().has(system.id)"
+          (click)="selectSystem(system)"
+        >
+          <div
+            [class]="'node-shape type-' + system.type + (system.status === 'FINI' ? ' status-FINI' : '')"
+          ></div>
+          <div
+            class="node-label"
+            [truncateTooltip]="system.name"
+            [truncateTooltipForce]="system.name.length > 14"
+            [truncateTooltipAbove]="true"
+          >
+            <span class="node-label-name">{{ system.name | truncateMiddle:14 }}</span>
+            <span class="node-label-order">#{{ system.order }}</span>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  @if (orderedSystems().length === 0) {
+    <span class="empty-viz">Aucun système — ajoutez-en un pour commencer</span>
+  }
+    </div>
+
+    @if (totalCount() > macroThreshold && isDetailView()) {
+      <div class="viz-minimap-zone">
+      <div class="viz-minimap" role="slider">
+        <span class="minimap-marker minimap-depart" title="Départ" aria-label="Départ"></span>
+        <div class="minimap-track">
+          @for (seg of minimapSegments(); track seg.fromOrder + '-' + seg.toOrder) {
+            <button
+              type="button"
+              class="minimap-segment"
+              [class.operative]="seg.toOrder - 1 <= lastOperationalOrder()"
+              [class.selected]="isSelectedSegment(seg.fromOrder, seg.toOrder)"
+              (click)="zoomIntoSegment(seg.fromOrder, seg.toOrder)"
+              [title]="'Systèmes #' + (seg.fromOrder + 1) + ' à #' + (seg.toOrder - 1) + ' (' + seg.count + ')'"
+            ></button>
+          }
+          @if (minimapBrackets(); as brackets) {
+            <span
+              class="minimap-bracket minimap-bracket-left"
+              [style.left.%]="brackets.left * 100"
+              aria-hidden="true"
+            >[</span>
+            <span
+              class="minimap-bracket minimap-bracket-right"
+              [style.left.%]="brackets.right * 100"
+              aria-hidden="true"
+            >]</span>
+          }
+        </div>
+        <span class="minimap-marker minimap-arrivee" title="Arrivée" aria-label="Arrivée"></span>
+      </div>
+      </div>
+    }
+  </div>
+</div>

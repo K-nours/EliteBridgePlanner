@@ -1,7 +1,7 @@
 <div class="detail-wrapper">
   <div class="section-header">
     <span class="section-title">▸ DÉTAIL DU SYSTÈME</span>
-    @if (store.selectedSystem()) {
+    @if (isSingleSelection()) {
       <div class="action-btns">
         <button class="btn btn-critical btn-sm" (click)="onDelete()">SUPPRIMER</button>
         <button class="btn btn-sm" (click)="onSave()">SAUVEGARDER</button>
@@ -9,7 +9,7 @@
     }
   </div>
 
-  @if (store.selectedSystem(); as sys) {
+  @if (isSingleSelection(); as sys) {
     <div
         class="detail-panel animate-fadeIn"
         [class.type-DEBUT]="sys.type === 'DEBUT'"
@@ -17,7 +17,6 @@
         [class.type-PILE]="sys.type === 'PILE'"
         [class.type-TABLIER]="sys.type === 'TABLIER'"
       >
-      <!-- En-tête du système sélectionné : badge type + nom sur la même ligne -->
       <div class="detail-heading">
         <div class="detail-heading-row">
           <span class="badge" [class]="'badge-type-' + sys.type">{{ typeLabel(sys.type) }}</span>
@@ -26,7 +25,6 @@
         <div class="sys-order">#{{ sys.order }}</div>
       </div>
 
-      <!-- Formulaire d'édition -->
       <div class="edit-grid">
         <div class="field-group full-width">
           <label class="field-label">Nom du Système</label>
@@ -58,6 +56,24 @@
               >{{ opt.label }}</button>
             }
           </div>
+        </div>
+      </div>
+    </div>
+  } @else if (isMultiSelection()) {
+    <div class="detail-panel bulk-panel animate-fadeIn">
+      <div class="detail-heading bulk-heading">
+        <span class="bulk-count">{{ selectedCount() }} système{{ selectedCount() > 1 ? 's' : '' }} sélectionné{{ selectedCount() > 1 ? 's' : '' }}</span>
+      </div>
+      <div class="field-group full-width">
+        <label class="field-label">Statut (modification en masse)</label>
+        <div class="status-row">
+          @for (opt of statusOptions; track opt.value) {
+            <button
+              [class]="'status-btn status-' + opt.value"
+              type="button"
+              (click)="onBulkStatus(opt.value)"
+            >{{ opt.label }}</button>
+          }
         </div>
       </div>
     </div>

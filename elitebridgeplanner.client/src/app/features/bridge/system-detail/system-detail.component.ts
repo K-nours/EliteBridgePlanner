@@ -1,4 +1,4 @@
-import { Component, inject, effect, signal } from '@angular/core';
+import { Component, inject, effect, computed } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { BridgeStore } from '../../../core/services/bridge.store';
 import { SystemType, ColonizationStatus } from '../../../core/models/models';
@@ -14,6 +14,17 @@ import { CustomSelectComponent } from '../../../shared/components/custom-select/
 export class SystemDetailComponent {
   readonly store = inject(BridgeStore);
   private readonly fb = inject(FormBuilder);
+
+  readonly selectedCount = computed(() => this.store.selectedSystemIds().size);
+
+  readonly isSingleSelection = computed(() => {
+    const ids = this.store.selectedSystemIds();
+    if (ids.size !== 1) return null;
+    const sys = this.store.selectedSystem();
+    return sys ?? null;
+  });
+
+  readonly isMultiSelection = computed(() => this.store.selectedSystemIds().size > 1);
 
   readonly form = this.fb.group({
     name:        [''],
@@ -36,9 +47,9 @@ export class SystemDetailComponent {
   ];
 
   constructor() {
-    // Quand le système sélectionné change, mettre à jour le formulaire
+    // Quand un seul système est sélectionné, mettre à jour le formulaire
     effect(() => {
-      const sys = this.store.selectedSystem();
+      const sys = this.isSingleSelection();
       if (sys) {
         this.form.patchValue({
           name:        sys.name,
@@ -79,5 +90,9 @@ export class SystemDetailComponent {
 
   statusLabel(status: string): string {
     return this.statusOptions.find(s => s.value === status)?.label ?? status;
+  }
+
+  onBulkStatus(status: ColonizationStatus): void {
+    this.store.bulkUpdateStatus(status);
   }
 }

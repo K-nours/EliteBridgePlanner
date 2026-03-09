@@ -74,9 +74,13 @@ builder.Services.AddCors(options =>
     )
 );
 
+// ── HttpClient (Spansh API) ───────────────────────────────────────────────
+builder.Services.AddHttpClient();
+
 // ── Services métier (tous via leurs interfaces pour testabilité) ───────────
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IBridgeService, BridgeService>();
+builder.Services.AddScoped<ISpanshRouteService, SpanshRouteService>();
 builder.Services.AddScoped<DataSeeder>();
 
 // ── Controllers + JSON ────────────────────────────────────────────────────

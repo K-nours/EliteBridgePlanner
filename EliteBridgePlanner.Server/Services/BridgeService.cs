@@ -258,6 +258,56 @@ public class BridgeService : IBridgeService
 
     
 
+    public async Task<BridgeDto> ImportSpanshRouteAsync(string userId, string bridgeName, IEnumerable<SpanshSystemImport> systems, int? replaceBridgeId = null)
+    {
+        var list = systems.ToList();
+        if (list.Count == 0) throw new ArgumentException("Aucun système à importer.");
+
+        Bridge bridge;
+        if (replaceBridgeId.HasValue)
+        {
+            bridge = await _db.Bridges.FindAsync(replaceBridgeId.Value)
+                ?? throw new ArgumentException($"Pont {replaceBridgeId} introuvable.");
+            var existing = await _db.StarSystems.Where(s => s.BridgeId == bridge.Id).ToListAsync();
+            _db.StarSystems.RemoveRange(existing);
+            bridge.Name = bridgeName;
+            bridge.Description = $"Import Spansh — {list.Count} systèmes";
+            await _db.SaveChangesAsync();
+        }
+        else
+        {
+            bridge = new Bridge
+            {
+                Name = bridgeName,
+                Description = $"Import Spansh — {list.Count} systèmes",
+                CreatedByUserId = userId
+            };
+            _db.Bridges.Add(bridge);
+            await _db.SaveChangesAsync();
+        }
+
+        var entities = list.Select(s => new StarSystem
+        {
+            Name = s.Name,
+            Type = Enum.Parse<SystemType>(s.Type, true),
+            Status = ColonizationStatus.PLANIFIE,
+            BridgeId = bridge.Id,
+            PreviousSystemId = null,
+            ArchitectId = null
+        }).ToList();
+
+        _db.StarSystems.AddRange(entities);
+        await _db.SaveChangesAsync();
+
+        for (var i = 1; i < entities.Count; i++)
+        {
+            entities[i].PreviousSystemId = entities[i - 1].Id;
+        }
+        await _db.SaveChangesAsync();
+
+        return (await GetBridgeByIdAsync(bridge.Id))!;
+    }
+
     public async Task<bool> DeleteSystemAsync(int id)
     {
         var system = await _db.StarSystems.FindAsync(id);

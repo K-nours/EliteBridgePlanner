@@ -206,6 +206,16 @@
   &.badge-status-FINI         { background: rgba(0,204,102,.12);  color: var(--status-done);  border: 1px solid color-mix(in srgb, var(--status-done) 25%, transparent); border-left: none; clip-path: polygon(0 0, 10px 50%, 0 100%, 10px 100%, 100% 100%, 100% 0, 10px 0); padding: 2px 10px 0 16px; }
 }
 
+.bulk-panel .bulk-heading {
+  margin-bottom: v.$spacing-lg;
+}
+
+.bulk-count {
+  font-family: v.$font-mono;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
 .empty-detail {
   text-align: center;
   padding: v.$spacing-xl * 2;

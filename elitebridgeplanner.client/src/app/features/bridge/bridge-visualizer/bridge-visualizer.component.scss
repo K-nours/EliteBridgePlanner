@@ -3,13 +3,43 @@
 /* ── Plan de métro / RER — style Elite Dangerous ───────────────────────────── */
 
 .viz-container {
-  padding: v.$spacing-md v.$spacing-lg;
-  padding-bottom: 32px; /* 16px base + 16px ajouté en dessous */
+  display: flex;
+  flex-direction: column;
+  padding: v.$spacing-md v.$spacing-lg 0;
   border-bottom: 1px solid var(--border);
   background: var(--bg2);
-  min-height: 100px;
-  overflow-x: auto;
+  min-height: 165px;
   flex-shrink: 0;
+}
+
+/* Zone scroll pleine largeur/hauteur, padding à l'intérieur du contenu */
+.viz-scroll-area {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-width: 0;
+  flex: 1;
+  min-height: 0;
+  margin-left: calc(-1 * v.$spacing-lg);
+  margin-right: calc(-1 * v.$spacing-lg);
+  width: calc(100% + 2 * v.$spacing-lg);
+}
+
+.viz-scroll-inner {
+  min-width: max-content;
+  flex-shrink: 0;
+  padding: 0 v.$spacing-lg v.$spacing-md;
+}
+
+.viz-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$spacing-md;
+  margin-bottom: 0;
+  padding-bottom: v.$spacing-md;
 }
 
 .viz-title {
@@ -19,7 +49,69 @@
   letter-spacing: 0.2em;
   color: var(--accent);
   opacity: 1;
-  margin-bottom: 0;
+}
+
+.viz-back-btn {
+  font-family: v.$font-ui;
+  font-size: 0.75rem;
+  padding: v.$spacing-xs v.$spacing-sm;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  cursor: pointer;
+  transition: v.$transition-fast;
+
+  &:hover {
+    background: var(--accent);
+    color: var(--bg);
+  }
+}
+
+/* Macro : lien cliquable entre deux nœuds */
+.macro-link {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-sm;
+  padding: 0 v.$spacing-sm;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: v.$transition-fast;
+
+  &:hover .macro-link-label {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  &:hover .macro-link-line {
+    background: var(--accent);
+    opacity: 0.9;
+  }
+}
+
+.macro-link-line {
+  width: 24px;
+  min-width: 24px;
+  height: 2px;
+  background: var(--accent);
+  opacity: 0.5;
+  transition: v.$transition-fast;
+
+  .macro-link.macro-link-operative & {
+    background: var(--color-debut);
+    opacity: 0.8;
+  }
+}
+
+.macro-link-label {
+  font-family: v.$font-mono;
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  transition: v.$transition-fast;
 }
 
 .bridge-track {
@@ -176,4 +268,98 @@
   color: var(--text-dim);
   font-size: 0.85rem;
   padding: v.$spacing-md;
+}
+
+/* Minimap : sticky, ne scroll pas horizontalement */
+.viz-minimap-zone {
+  position: sticky;
+  left: 0;
+  flex-shrink: 0;
+  margin-top: 16px;
+  padding: 0 v.$spacing-lg v.$spacing-md;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg2);
+  z-index: 2;
+}
+
+.viz-minimap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.minimap-marker {
+  flex-shrink: 0;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid;
+  box-sizing: border-box;
+  &.minimap-depart {
+    background: color-mix(in srgb, var(--color-debut) 75%, transparent);
+    border-color: var(--color-debut);
+  }
+  &.minimap-arrivee {
+    background: color-mix(in srgb, var(--color-fin) 25%, transparent);
+    border-color: var(--color-fin);
+  }
+}
+
+.minimap-track {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 10px;
+}
+
+/* 1 segment = 1 tronçon entre 2 piles, même taille */
+.minimap-segment {
+  flex: 1 1 0;
+  min-width: 0;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: var(--accent);
+  opacity: 0.6;
+  transition: opacity v.$transition-fast;
+
+  &.operative {
+    background: var(--color-debut);
+  }
+
+  &.selected {
+    opacity: 1;
+  }
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+/* Crochets [ ] sur le segment sélectionné — dépassent au-dessus et en dessous */
+.minimap-bracket {
+  position: absolute;
+  top: -5px;
+  bottom: -5px;
+  display: flex;
+  align-items: center;
+  font-family: v.$font-mono;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+  text-shadow: 0 0 0 1px var(--bg);
+  transition: left v.$transition-normal;
+  pointer-events: none;
+
+  &.minimap-bracket-left {
+    transform: translateX(0);
+  }
+  &.minimap-bracket-right {
+    transform: translateX(-100%);
+  }
 }
