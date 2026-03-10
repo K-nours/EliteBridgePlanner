@@ -2,7 +2,7 @@ import { Injectable, signal, effect, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { TranslateService } from '@ngx-translate/core';
 import { Observable } from 'rxjs';
-import { tap, catchError } from 'rxjs/operators';
+import { catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
 
 export interface UserPreferences {
@@ -28,6 +28,15 @@ export class LanguageService {
   readonly timeZone = this._timeZone.asReadonly();
 
   constructor() {
+    // Initialiser la langue par défaut
+    this.translate.setDefaultLang(DEFAULT_LANGUAGE);
+
+    // Charger la langue détectée IMMÉDIATEMENT au démarrage
+    const initialLanguage = this._language();
+    if (initialLanguage && SUPPORTED_LANGUAGES.includes(initialLanguage)) {
+      this.translate.use(initialLanguage);
+    }
+
     // Observer : chaque fois que la langue change, met à jour le traducteur
     effect(() => {
       const lang = this._language();
@@ -91,7 +100,7 @@ export class LanguageService {
       console.warn(`Invalid language: ${language}`);
       return of(null);
     }
-
+    
     this._language.set(language);
     return this.http.put('/api/user/preferences', {
       preferredLanguage: language,
@@ -113,7 +122,7 @@ export class LanguageService {
       console.warn(`Invalid timezone: ${timeZone}`);
       return of(null);
     }
-
+    
     this._timeZone.set(timeZone);
     return this.http.put('/api/user/preferences', {
       preferredLanguage: null, // On ne change que la timezone
@@ -134,7 +143,7 @@ export class LanguageService {
       console.warn(`Invalid language: ${language}`);
       return of(null);
     }
-
+    
     this._language.set(language);
     this._timeZone.set(timeZone);
     return this.http.put('/api/user/preferences', {

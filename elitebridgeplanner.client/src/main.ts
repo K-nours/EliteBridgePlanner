@@ -10,7 +10,9 @@ import { routes } from './app/app.routes';
 import { jwtInterceptor } from './app/core/interceptors/jwt.interceptor';
 
 export function HttpLoaderFactory(http: HttpClient) {
-  return new TranslateHttpLoader(http, './assets/i18n/', '.json');
+  // En développement (ng serve), les assets sont à /assets/
+  // En production, vérifier angular.json pour la configuration
+  return new TranslateHttpLoader(http, '/assets/i18n/', '.json');
 }
 
 bootstrapApplication(App, {
