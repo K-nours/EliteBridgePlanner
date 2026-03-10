@@ -44,14 +44,14 @@ export class BridgeVisualizerComponent {
     return systems.filter((s) => s.order >= range.start && s.order <= range.end);
   });
 
-  /** En vue macro : PILE + DEBUT + FIN uniquement, avec liens (N systèmes) */
+  /** En vue macro : départ (toujours) + PILE + DEBUT + FIN, avec liens (N systèmes) */
   readonly macroItems = computed(() => {
     const systems = this.orderedSystems();
     if (systems.length <= MACRO_THRESHOLD) return [];
     const items: MacroItem[] = [];
     let lastNodeOrder = 0;
     for (const s of systems) {
-      const showNode = s.type === 'DEBUT' || s.type === 'PILE' || s.type === 'FIN';
+      const showNode = s.order === 1 || s.type === 'DEBUT' || s.type === 'PILE' || s.type === 'FIN';
       if (showNode) {
         const count = s.order - lastNodeOrder - 1;
         if (count > 0) {

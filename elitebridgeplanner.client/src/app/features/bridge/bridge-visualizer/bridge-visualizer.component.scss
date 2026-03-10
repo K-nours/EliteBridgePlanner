@@ -154,6 +154,19 @@
   z-index: 1;
   flex-shrink: 0;
 
+  .construction-indicator {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #f0c000;
+    pointer-events: auto;
+  }
+
   &.selected .node-shape {
     filter: brightness(1.4);
     transform: scale(1.1);
@@ -226,6 +239,14 @@
       background: color-mix(in srgb, var(--status-done) 75%, transparent);
     }
   }
+}
+
+.node-check {
+  color: white;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: 0 0 1px rgba(0, 0, 0, 0.5);
 }
 
 .node-label {

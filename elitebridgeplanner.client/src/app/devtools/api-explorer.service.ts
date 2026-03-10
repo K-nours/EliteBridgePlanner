@@ -4,6 +4,16 @@ import { Observable, of } from 'rxjs';
 import { tap, catchError, retry } from 'rxjs/operators';
 
 import type { EnrichmentMode } from './enrichment-types';
+import type { ColonisationRouteAnalysis } from './colonisation-route.analyzer';
+
+/** Session persistante : dernière route calculée (conservée au changement de page) */
+export interface PersistedRouteSession {
+  colonisationResult: unknown;
+  routeAnalysis: ColonisationRouteAnalysis;
+  source: string | null;
+  destination: string | null;
+  statusText: string;
+}
 
 /**
  * Service de test pour explorer les APIs externes (EDSM, Spansh).
@@ -33,12 +43,38 @@ export class ApiExplorerService {
    */
   useEdsmCache = true;
 
+  /** Dernière route calculée — persistante au changement de page */
+  lastRouteSession: PersistedRouteSession | null = null;
+
+  saveRouteSession(session: PersistedRouteSession): void {
+    this.lastRouteSession = session;
+  }
+
+  clearRouteSession(): void {
+    this.lastRouteSession = null;
+  }
+
   /** Réinitialise le cache (utile entre analyses) */
   clearEdsmBodiesCache(): void {
     this.edsmBodiesCache.clear();
     this.edsmCacheStats.hits = 0;
     this.edsmCacheStats.misses = 0;
     console.log('[EDSM cache] cache vidé, stats réinitialisées');
+  }
+
+  /** Clé de cache normalisée (trim + toLowerCase) — source unique pour lecture et écriture */
+  normalizeCacheKey(systemName: string): string {
+    return (systemName?.trim() ?? '').toLowerCase();
+  }
+
+  /** Comptabilise un hit sur le cache global (quand getOrFetchEdsmSummary sert depuis le cache sans appeler EDSM) */
+  recordGlobalCacheHit(): void {
+    this.edsmCacheStats.hits++;
+  }
+
+  /** Comptabilise les systèmes filtrés au planification (déjà en cache, jamais passés à getOrFetchEdsmSummary) */
+  recordPlannedCacheHits(count: number): void {
+    this.edsmCacheStats.hits += count;
   }
 
   /**
@@ -50,7 +86,7 @@ export class ApiExplorerService {
    */
   private readonly SPANSH_PLOTTER_URL = 'https://spansh.co.uk/api/galaxy/plot';
 
-  /** API Spansh Colonisation — proxifié via spansh.co.uk pour contourner CORS */
+  /** API Spansh Colonisation — proxifié via Angular (ng serve) ou backend (.NET) */
   private readonly SPANSH_COLONISATION_URL = '/spansh-api/api/colonisation/route';
 
   /**
@@ -101,39 +137,38 @@ export class ApiExplorerService {
    * GET https://www.edsm.net/api-system-v1/bodies
    */
   testEdsnBodies(systemName: string): Observable<unknown> {
-    const key = systemName?.trim() ?? '';
-    console.log('[EDSM cache] lookup cache, clé:', JSON.stringify(key));
+    const key = this.normalizeCacheKey(systemName);
+    console.log('[EDSM cache] READ key:', JSON.stringify(key), '| raw:', JSON.stringify(systemName));
 
     if (this.useEdsmCache) {
       const cached = this.edsmBodiesCache.get(key);
       if (cached !== undefined) {
         this.edsmCacheStats.hits++;
-        console.log('[EDSM cache] cache hit, clé:', JSON.stringify(key), '| stats:', this.edsmCacheStats.hits, 'hits,', this.edsmCacheStats.misses, 'misses');
+        console.log('[EDSM cache] HIT  key:', JSON.stringify(key), '| stats:', this.edsmCacheStats.hits, 'hits,', this.edsmCacheStats.misses, 'misses');
         return of(cached);
       }
       this.edsmCacheStats.misses++;
-      console.log('[EDSM cache] cache miss, clé:', JSON.stringify(key), '| stats:', this.edsmCacheStats.hits, 'hits,', this.edsmCacheStats.misses, 'misses');
+      console.log('[EDSM cache] MISS key:', JSON.stringify(key), '| stats:', this.edsmCacheStats.hits, 'hits,', this.edsmCacheStats.misses, 'misses');
     } else {
-      console.log('[EDSM cache] bypass actif (useEdsmCache=false), appel EDSM direct');
+      console.log('[EDSM cache] BYPASS useEdsmCache=false, appel EDSM direct');
     }
 
     const url = 'https://www.edsm.net/api-system-v1/bodies';
-    console.log('[EDSM cache] appel EDSM bodies lancé, systemName:', JSON.stringify(systemName));
+    console.log('[EDSM cache] APPEL EDSM RÉEL key:', JSON.stringify(key), '| systemName:', JSON.stringify(systemName));
     return this.http.get(url, { params: { systemName } }).pipe(
       retry(1),
       tap((response) => {
-        console.log('[EDSM cache] réponse EDSM reçue, clé:', JSON.stringify(key), 'bodyCount:', (response as { bodyCount?: number })?.bodyCount);
         if (this.useEdsmCache) {
           this.edsmBodiesCache.set(key, response);
-          console.log('[EDSM cache] mise en cache effectuée, clé:', JSON.stringify(key), '| Map size:', this.edsmBodiesCache.size);
+          console.log('[EDSM cache] WRITE key:', JSON.stringify(key), '| bodyCount:', (response as { bodyCount?: number })?.bodyCount, '| Map size:', this.edsmBodiesCache.size);
         }
       }),
       catchError((err) => {
-        console.warn('[EDSM cache] erreur EDSM bodies, clé:', JSON.stringify(key), err);
+        console.warn('[EDSM cache] erreur EDSM key:', JSON.stringify(key), err);
         const empty: unknown = { bodyCount: 0, bodies: [] };
         if (this.useEdsmCache) {
           this.edsmBodiesCache.set(key, empty);
-          console.log('[EDSM cache] mise en cache (empty/fallback) effectuée, clé:', JSON.stringify(key));
+          console.log('[EDSM cache] WRITE (empty/fallback) key:', JSON.stringify(key));
         }
         return of(empty);
       })

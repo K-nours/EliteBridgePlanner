@@ -27,8 +27,26 @@ export class BridgeApiService {
     return this.http.get<BridgeDto>(`${this.baseUrl}/bridges/${id}`);
   }
 
+  clearAllSystems(bridgeId: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/bridges/${bridgeId}/systems`);
+  }
+
   createBridge(request: CreateBridgeRequest): Observable<BridgeDto> {
     return this.http.post<BridgeDto>(`${this.baseUrl}/bridges`, request);
+  }
+
+  importRoute(systems: { name: string; type: string }[], options?: { bridgeName?: string; replaceBridgeId?: number }): Observable<BridgeDto> {
+    const body = {
+      systems: systems.map(s => ({ name: s.name, type: s.type })),
+      bridgeName: options?.bridgeName,
+      replaceBridgeId: options?.replaceBridgeId
+    };
+    return this.http.post<BridgeDto>(`${this.baseUrl}/bridges/import-route`, body);
+  }
+
+  /** Import via endpoint dev (source/destination) — fonctionne sans JWT, utilise l'utilisateur démo. */
+  importSpanshBySourceDest(source: string, destination: string): Observable<{ bridge: BridgeDto }> {
+    return this.http.post<{ bridge: BridgeDto }>(`${this.baseUrl}/dev/import-spansh`, { source, destination });
   }
 
   // ── Systems ───────────────────────────────────────────────────────────────

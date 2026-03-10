@@ -11,7 +11,16 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 
-var builder = WebApplication.CreateBuilder(args);
+var contentRoot = Directory.GetCurrentDirectory();
+var spaBrowserPath = Path.Combine(contentRoot, "..", "elitebridgeplanner.client", "dist", "elitebridgeplanner.client", "browser");
+var webRootPath = Directory.Exists(spaBrowserPath) ? spaBrowserPath : null;
+
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = contentRoot,
+    WebRootPath = webRootPath
+});
 
 // ── Base de données (Docker SQL Server) ───────────────────────────────────
 builder.Services.AddDbContext<AppDbContext>(options =>

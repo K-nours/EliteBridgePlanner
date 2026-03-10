@@ -1,4 +1,5 @@
 import { Component, inject, signal, computed } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import type { StarSystemDto } from '../../../core/models/models';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { BridgeStore } from '../../../core/services/bridge.store';
@@ -10,7 +11,7 @@ import { CustomSelectComponent } from '../../../shared/components/custom-select/
 @Component({
   selector: 'app-system-list',
   standalone: true,
-  imports: [ReactiveFormsModule, TruncateMiddlePipe, TruncateTooltipDirective, CustomSelectComponent],
+  imports: [ReactiveFormsModule, RouterLink, TruncateMiddlePipe, TruncateTooltipDirective, CustomSelectComponent],
   templateUrl: './system-list.component.html',
   styleUrl: './system-list.component.scss'
 })
@@ -19,6 +20,7 @@ export class SystemListComponent {
   private readonly fb = inject(FormBuilder);
 
   readonly showAddForm = signal(false);
+  readonly showClearConfirm = signal(false);
   readonly hideOperational = signal(false);
 
   readonly displaySystems = computed(() => {
@@ -96,5 +98,18 @@ export class SystemListComponent {
       shiftKey: event.shiftKey,
       systems: this.store.orderedSystems()
     });
+  }
+
+  requestClearAll(): void {
+    this.showClearConfirm.set(true);
+  }
+
+  cancelClearAll(): void {
+    this.showClearConfirm.set(false);
+  }
+
+  confirmClearAll(): void {
+    this.store.clearAllSystems();
+    this.showClearConfirm.set(false);
   }
 }

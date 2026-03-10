@@ -6,10 +6,18 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { BridgeDto, StarSystemDto, CreateSystemRequest, UpdateSystemRequest, ColonizationStatus } from '../models/models';
 import { BridgeApiService } from '../services/bridge-api.service';
 
-const getErrorMessage = (err: unknown): string =>
-  err instanceof HttpErrorResponse && typeof err.error?.message === 'string'
-    ? err.error.message
-    : err instanceof Error ? err.message : 'Erreur inconnue';
+const getErrorMessage = (err: unknown): string => {
+  if (err instanceof HttpErrorResponse) {
+    const e = err.error;
+    if (e && typeof e === 'object') {
+      if (typeof e.message === 'string' && e.message) return e.message;
+      if (typeof e.detail === 'string' && e.detail) return e.detail;
+      if (typeof e.title === 'string' && e.title) return e.title;
+    }
+    return `${err.status ?? '?'} ${err.statusText ?? err.message ?? 'Erreur'}`;
+  }
+  return err instanceof Error ? err.message : 'Erreur inconnue';
+};
 
 interface BridgeState {
   bridges: BridgeDto[];
@@ -159,6 +167,16 @@ export const BridgeStore = signalStore(
       patchState(store, { error: null });
     },
 
+    /** Revient à la liste des ponts (efface le pont actif) */
+    clearActiveBridge(): void {
+      patchState(store, {
+        activeBridge: null,
+        selectedSystem: null,
+        selectedSystemIds: new Set(),
+        selectionAnchorOrder: null
+      });
+    },
+
     // ── Ajouter un système ─────────────────────────────────────────────────
     addSystem(request: CreateSystemRequest): void {
       api.addSystem(request).pipe(
@@ -259,6 +277,27 @@ export const BridgeStore = signalStore(
           })
         ))
       )
-    )
+    ),
+
+    /** Vide tous les systèmes du pont actif pour repartir sur un nouveau pont. */
+    clearAllSystems(): void {
+      const bridge = store.activeBridge();
+      const bridgeId = bridge?.id;
+      if (!bridgeId || (bridge?.systems?.length ?? 0) === 0) return;
+      api.clearAllSystems(bridgeId).pipe(
+        tap(() => {
+          patchState(store, {
+            activeBridge: bridge ? { ...bridge, systems: [] } : null,
+            selectedSystem: null,
+            selectedSystemIds: new Set(),
+            selectionAnchorOrder: null
+          });
+        }),
+        catchError((err: unknown) => {
+          patchState(store, { error: getErrorMessage(err) });
+          return EMPTY;
+        })
+      ).subscribe();
+    }
   }))
 );

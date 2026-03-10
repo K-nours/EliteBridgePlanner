@@ -1,5 +1,10 @@
 <div class="sidebar-header">
-  <h2 class="sidebar-title">▸ PONT ACTIF</h2>
+  <div class="sidebar-title-row">
+    <h2 class="sidebar-title">▸ PONT ACTIF</h2>
+    <a routerLink="/devtools/api-explorer" class="btn-new-route" title="Planifier une nouvelle route (Spansh)">
+      Nouvelle route
+    </a>
+  </div>
   @if (store.activeBridge()) {
   <div class="bridge-meta">
     <div class="meta-item meta-depart" tabindex="0">
@@ -28,9 +33,23 @@
     </div>
   </div>
   }
-  <button class="btn-add" (click)="toggleAddForm()">
-    {{ showAddForm() ? '✕ ANNULER' : '+ SYSTÈME' }}
-  </button>
+  <div class="sidebar-actions">
+    <button class="btn-add" (click)="toggleAddForm()">
+      {{ showAddForm() ? '✕ ANNULER' : '+ SYSTÈME' }}
+    </button>
+    @if (store.stats().total > 0 && !showClearConfirm()) {
+      <button class="btn-clear" (click)="requestClearAll()" title="Vider le pont pour repartir à zéro">
+        VIDER
+      </button>
+    }
+    @if (showClearConfirm()) {
+      <div class="clear-confirm">
+        <span class="clear-confirm-text">Confirmer ?</span>
+        <button type="button" class="btn-clear-cancel" (click)="cancelClearAll()">Annuler</button>
+        <button type="button" class="btn-clear-confirm" (click)="confirmClearAll()">Vider le pont</button>
+      </div>
+    }
+  </div>
 </div>
 
 <!-- Formulaire d'ajout -->

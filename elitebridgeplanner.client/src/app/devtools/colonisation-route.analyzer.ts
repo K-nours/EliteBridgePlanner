@@ -36,6 +36,10 @@ export interface LocalPileCandidate {
   landmark_value?: number;
   estimated_scan_value?: number;
   estimated_mapping_value?: number;
+  /** Coordonnées 3D (Spansh) — nécessaires pour l'optimisation de route */
+  x?: number;
+  y?: number;
+  z?: number;
 }
 
 export interface PileLocalCandidates {
@@ -125,6 +129,9 @@ export function analyzeColonisationRoute(jumps: SpanshJump[]): ColonisationRoute
     landmark_value?: number;
     estimated_scan_value?: number;
     estimated_mapping_value?: number;
+    x?: number;
+    y?: number;
+    z?: number;
   }> = [];
 
   for (let i = 0; i < jumps.length; i++) {
@@ -153,7 +160,10 @@ export function analyzeColonisationRoute(jumps: SpanshJump[]): ColonisationRoute
       body_count: jump.body_count,
       landmark_value: jump.landmark_value,
       estimated_scan_value: jump.estimated_scan_value,
-      estimated_mapping_value: jump.estimated_mapping_value
+      estimated_mapping_value: jump.estimated_mapping_value,
+      x: typeof jump.x === 'number' ? jump.x : undefined,
+      y: typeof jump.y === 'number' ? jump.y : undefined,
+      z: typeof jump.z === 'number' ? jump.z : undefined
     });
 
     analyzed.push({
@@ -189,7 +199,10 @@ export function analyzeColonisationRoute(jumps: SpanshJump[]): ColonisationRoute
         body_count: c.body_count,
         landmark_value: c.landmark_value,
         estimated_scan_value: c.estimated_scan_value,
-        estimated_mapping_value: c.estimated_mapping_value
+        estimated_mapping_value: c.estimated_mapping_value,
+        x: c.x,
+        y: c.y,
+        z: c.z
       }))
     };
   });

@@ -10,7 +10,9 @@ const PROXY_CONFIG = [
   {
     context: ["/api"],
     target,
-    secure: false
+    secure: false,
+    changeOrigin: true,
+    logLevel: "debug"
   },
   {
     context: ["/spansh-api"],

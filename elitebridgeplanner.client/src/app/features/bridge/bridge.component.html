@@ -31,34 +31,42 @@
   <!-- STATS BAR -->
   @if (store.activeBridge()) {
     <div class="stats-bar">
-      <div class="stat">
-        <span class="stat-dot done"></span>
-        <span class="stat-label">Opérationnels</span>
-        <span class="stat-val">{{ store.stats().done }}</span>
+      <div class="stats-bar-left">
+        <button type="button" class="stats-back-btn" (click)="backToBridges()" title="Retour à la liste des ponts">
+          ← Retour
+        </button>
+        <span class="stats-bridge-label">{{ bridgeLabel() }}</span>
       </div>
-      <div class="stat-sep"></div>
-      <div class="stat">
-        <span class="stat-dot build"></span>
-        <span class="stat-label">En cours</span>
-        <span class="stat-val">{{ store.stats().inProgress }}</span>
-      </div>
-      <div class="stat-sep"></div>
-      <div class="stat">
-        <span class="stat-dot plan"></span>
-        <span class="stat-label">Planifiés</span>
-        <span class="stat-val">{{ store.stats().planned }}</span>
-      </div>
-      <div class="stat-sep"></div>
-      <div class="stat">
-        <span class="stat-dot pile"></span>
-        <span class="stat-label">Piles</span>
-        <span class="stat-val">{{ store.stats().piles }}</span>
-      </div>
-      <div class="stat-sep"></div>
-      <div class="stat">
-        <span class="stat-dot tablier"></span>
-        <span class="stat-label">Tabliers</span>
-        <span class="stat-val">{{ store.stats().tabliers }}</span>
+      <div class="stats-legend">
+        <div class="stat">
+          <span class="stat-dot done"></span>
+          <span class="stat-label">Opérationnels</span>
+          <span class="stat-val">{{ store.stats().done }}</span>
+        </div>
+        <div class="stat-sep"></div>
+        <div class="stat">
+          <span class="stat-dot build"></span>
+          <span class="stat-label">En cours</span>
+          <span class="stat-val">{{ store.stats().inProgress }}</span>
+        </div>
+        <div class="stat-sep"></div>
+        <div class="stat">
+          <span class="stat-dot plan"></span>
+          <span class="stat-label">Planifiés</span>
+          <span class="stat-val">{{ store.stats().planned }}</span>
+        </div>
+        <div class="stat-sep"></div>
+        <div class="stat">
+          <span class="stat-dot pile"></span>
+          <span class="stat-label">Piles</span>
+          <span class="stat-val">{{ store.stats().piles }}</span>
+        </div>
+        <div class="stat-sep"></div>
+        <div class="stat">
+          <span class="stat-dot tablier"></span>
+          <span class="stat-label">Tabliers</span>
+          <span class="stat-val">{{ store.stats().tabliers }}</span>
+        </div>
       </div>
       <div class="stat-progress">
         <span class="stat-label">Progression</span>

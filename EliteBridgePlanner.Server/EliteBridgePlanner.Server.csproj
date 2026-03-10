@@ -92,4 +92,12 @@
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
   </ItemGroup>
+
+  <!-- Build Angular avant Run si le SPA n'est pas encore compilé -->
+  <Target Name="BuildSpaBeforeRun" BeforeTargets="Run">
+    <PropertyGroup>
+      <SpaBuildOutput>$(ProjectDir)..\elitebridgeplanner.client\dist\elitebridgeplanner.client\browser</SpaBuildOutput>
+    </PropertyGroup>
+    <Exec Condition="!Exists('$(SpaBuildOutput)\index.html')" Command="cd &quot;$(ProjectDir)..\elitebridgeplanner.client&quot; &amp;&amp; npm run build" />
+  </Target>
 </Project>

@@ -1,10 +1,13 @@
-import { Component, inject, ChangeDetectorRef, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
-import { DecimalPipe, JsonPipe } from '@angular/common';
+import { Component, inject, ChangeDetectorRef, OnInit, OnDestroy, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Router, RouterLink } from '@angular/router';
+import { DecimalPipe, JsonPipe, NgStyle } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { from, of, Observable } from 'rxjs';
 import { concatMap, delay, catchError, finalize, map, tap, toArray } from 'rxjs/operators';
 import { ApiExplorerService } from './api-explorer.service';
+import { BridgeApiService } from '../core/services/bridge-api.service';
 import { analyzeColonisationRoute, getCandidatesInWindow, PILE_WINDOW_FALLBACK_LY, PILE_WINDOW_LY, type ColonisationRouteAnalysis, type LocalPileCandidate, type SpanshJump } from './colonisation-route.analyzer';
+import { optimizeRoute, type OptimizedRoute, type RouteModification } from './route-optimizer';
 import {
   buildSpanshLiteSummary,
   computeScoreFromAnalysis,
@@ -105,12 +108,14 @@ export function computePileCandidateScore(
 @Component({
   selector: 'app-api-explorer-demo',
   standalone: true,
-  imports: [DecimalPipe, JsonPipe, FormsModule],
+  imports: [DecimalPipe, JsonPipe, NgStyle, FormsModule, RouterLink],
   templateUrl: './api-explorer-demo.component.html',
   styleUrl: './api-explorer-demo.component.scss'
 })
-export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
+export class ApiExplorerDemoComponent implements OnInit, OnDestroy, AfterViewChecked {
   private readonly apiExplorer = inject(ApiExplorerService);
+  private readonly bridgeApi = inject(BridgeApiService);
+  private readonly router = inject(Router);
 
   /** Statistiques cache EDSM (pour affichage debug) */
   get edsmCacheStats(): { hits: number; misses: number } {
@@ -197,6 +202,8 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
   loadingSpansh = false;
   loadingSpanshColonisation = false;
   loadingSpanshColonisationResult = false;
+  loadingImport = false;
+  importError: string | null = null;
 
   systemName = 'Prieluia BP-R d4-105';
   destinationSystem = 'Blae Hypue NH-V e2-2';
@@ -239,11 +246,37 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
   autoEnrichmentStatus: string | null = null;
   /** Résultats du mode comparaison (null si pas en mode comparaison ou pas encore calculé) */
   comparisonResult: { rows: ComparisonRow[]; metrics: ComparisonMetrics } | null = null;
+  /** Route optimisée (remplacements de dépôts par meilleurs candidats) */
+  optimizedRoute: OptimizedRoute | null = null;
 
   expandedEdsn = true;
 
+  ngOnInit(): void {
+    const session = this.apiExplorer.lastRouteSession;
+    if (session) {
+      this.spanshColonisationResult = session.colonisationResult;
+      this.spanshRouteAnalysis = session.routeAnalysis;
+      this.spanshResultSource = session.source;
+      this.spanshResultDestination = session.destination;
+      this.spanshStatusText = session.statusText;
+      this.cdr.detectChanges();
+    }
+  }
+
   ngOnDestroy(): void {
     this.stopSpanshPolling();
+  }
+
+  private saveRouteSession(): void {
+    if (this.spanshColonisationResult != null && this.spanshRouteAnalysis != null) {
+      this.apiExplorer.saveRouteSession({
+        colonisationResult: this.spanshColonisationResult,
+        routeAnalysis: this.spanshRouteAnalysis,
+        source: this.spanshResultSource,
+        destination: this.spanshResultDestination,
+        statusText: this.spanshStatusText
+      });
+    }
   }
 
   private stopSpanshPolling(): void {
@@ -402,6 +435,31 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
     return jump.type === 'PILE' && jump.pileIndex != null ? `${label} #${jump.pileIndex}` : label;
   }
 
+  /** Styles inline pour colorer les lignes selon le type (débordement de priorité sur tout autre style). */
+  getJumpRowStyle(jump: { type: 'START' | 'TABLIER' | 'PILE' | 'END' }): Record<string, string> {
+    const t = jump?.type;
+    if (!t) return {};
+    const styles: Record<string, string> = {};
+    if (t === 'START') {
+      styles['border-left'] = '4px solid var(--color-debut)';
+      styles['background'] = 'rgba(0,255,136,0.04)';
+      styles['color'] = 'var(--color-debut)';
+    } else if (t === 'END') {
+      styles['border-left'] = '4px solid var(--color-fin)';
+      styles['background'] = 'rgba(255,51,102,0.04)';
+      styles['color'] = 'var(--color-fin)';
+    } else if (t === 'PILE') {
+      styles['border-left'] = '4px solid var(--color-pile)';
+      styles['background'] = 'rgba(170,102,255,0.05)';
+      styles['color'] = 'var(--color-pile)';
+    } else if (t === 'TABLIER') {
+      styles['border-left'] = '4px solid var(--color-tablier)';
+      styles['background'] = 'rgba(0,212,255,0.04)';
+      styles['color'] = 'var(--color-tablier)';
+    }
+    return styles;
+  }
+
   /** Récupère les données enrichies pour un candidat (EDSM, Spansh Lite ou Hybrid) */
   getEdsmEnrichment(pileIndex: number, candidateName: string): EnrichedCandidate | undefined {
     return this.pileEdsmEnrichment.get(pileIndex)?.get(candidateName);
@@ -547,6 +605,50 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
     return out;
   }
 
+  /** Calcule la route optimisée (remplacements de dépôts). À appeler après enrichissement. */
+  computeOptimizedRoute(): void {
+    const analysis = this.spanshRouteAnalysis;
+    const data = this.spanshColonisationResult as { result?: { jumps?: SpanshJump[] } } | null;
+    const rawJumps = data?.result?.jumps;
+    if (!analysis || !rawJumps?.length) {
+      this.optimizedRoute = null;
+      return;
+    }
+
+    const bestPerPile = new Map<number, { name: string; score: number; candidate: LocalPileCandidate }>();
+    const depositScoreByPile = new Map<number, number>();
+
+    for (const pile of analysis.localCandidatesByPile) {
+      const best = this.getBestCandidateInPile(pile);
+      const depositCand = pile.candidates.find((c) => c.name === pile.pileName);
+      const depositScore = depositCand ? (this.getCandidateScore(pile.pileIndex, depositCand) ?? 0) : 0;
+      depositScoreByPile.set(pile.pileIndex, depositScore);
+
+      if (best) {
+        const fullCand = pile.candidates.find((c) => c.name === best.candidate.name);
+        const localCand: LocalPileCandidate = fullCand ?? {
+          name: best.candidate.name,
+          distance: 0,
+          cumulativeDistance: 0,
+          landmark_value: best.candidate.landmark_value
+        };
+        bestPerPile.set(pile.pileIndex, {
+          name: best.candidate.name,
+          score: best.score,
+          candidate: localCand
+        });
+      }
+    }
+
+    this.optimizedRoute = optimizeRoute({
+      analysis,
+      rawJumps,
+      bestPerPile,
+      depositScoreByPile
+    });
+    this.cdr.detectChanges();
+  }
+
   /** Réinitialise l'état des dépôts pour une nouvelle run (conserve le cache EDSM global) */
   private clearPileStateForRun(): void {
     this.pileEdsmEnrichment.clear();
@@ -554,22 +656,27 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
     this.pileFallbackUsed.clear();
     this.sphereCandidatesByPile.clear();
     this.sphereSystemCountByPile.clear();
+    this.optimizedRoute = null;
   }
 
-  /** Récupère ou calcule le résumé EDSM pour un système (utilise le cache centralisé) */
+  /** Récupère ou calcule le résumé EDSM pour un système (utilise le cache centralisé). Tous les enrichissements passent par ici. */
   private getOrFetchEdsmSummary(
     systemName: string
   ): Observable<EnrichedCandidateEdsm> {
-    const key = systemName?.trim() ?? '';
+    const key = this.apiExplorer.normalizeCacheKey(systemName);
     const cached = this.globalEdsmSummaryCache.get(key);
     if (cached !== undefined) {
+      this.apiExplorer.recordGlobalCacheHit();
+      console.log('[EDSM cache] HIT globalCache key:', JSON.stringify(key), '| stats:', this.apiExplorer.edsmCacheStats.hits, 'hits,', this.apiExplorer.edsmCacheStats.misses, 'misses');
       return of(cached);
     }
+    console.log('[EDSM cache] MISS globalCache key:', JSON.stringify(key), '→ appel testEdsnBodies');
     return this.apiExplorer.testEdsnBodies(systemName).pipe(
       map((data) => {
         const isEmpty = this.isBodiesResponseEmpty(data as EdsBodiesData);
         const enriched: EnrichedCandidateEdsm = isEmpty ? { unknown: true } : this.computeBodiesSummary(data as EdsBodiesData);
         this.globalEdsmSummaryCache.set(key, enriched);
+        console.log('[EDSM cache] WRITE globalCache key:', JSON.stringify(key), '| Map size:', this.globalEdsmSummaryCache.size);
         if (this.enrichmentDebugStats) {
           this.enrichmentDebugStats.httpCalls++;
           this.enrichmentDebugStats.cacheHits = this.apiExplorer.edsmCacheStats.hits;
@@ -580,6 +687,7 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
       catchError(() => {
         const fallback: EnrichedCandidateEdsm = { unknown: true };
         this.globalEdsmSummaryCache.set(key, fallback);
+        console.log('[EDSM cache] WRITE globalCache (fallback) key:', JSON.stringify(key));
         if (this.enrichmentDebugStats) this.enrichmentDebugStats.httpCalls++;
         return of(fallback);
       })
@@ -718,6 +826,7 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
       .pipe(
         finalize(() => {
           this.enrichingPileIndex = null;
+          this.computeOptimizedRoute();
           this.cdr.detectChanges();
         })
       )
@@ -784,6 +893,7 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
           }
           this.enrichingPileIndex = null;
           this.autoEnrichmentStatus = 'Analyse Spansh Lite terminée';
+          this.computeOptimizedRoute();
         }),
         tap(() => this.cdr.detectChanges())
       );
@@ -860,11 +970,12 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
                 .slice(0, topN);
               for (const { c } of withPreScore) hybridTopNames.add(c.name);
             }
-            toEnrich = [...hybridTopNames].filter((n) => !this.globalEdsmSummaryCache.has(n));
+            toEnrich = [...hybridTopNames].filter((n) => !this.globalEdsmSummaryCache.has(this.apiExplorer.normalizeCacheKey(n)));
           } else {
-            toEnrich = [...allNames].filter((n) => !this.globalEdsmSummaryCache.has(n));
+            toEnrich = [...allNames].filter((n) => !this.globalEdsmSummaryCache.has(this.apiExplorer.normalizeCacheKey(n)));
           }
           const alreadyInCache = (mode === 'hybrid' ? hybridTopNames.size : uniqueCandidates) - toEnrich.length;
+          this.apiExplorer.recordPlannedCacheHits(alreadyInCache);
 
           this.enrichmentDebugStats!.totalCandidates = totalCandidates;
           this.enrichmentDebugStats!.uniqueCandidates = uniqueCandidates;
@@ -900,7 +1011,7 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
                   this.sphereSystemCountByPile.set(pd.pileIndex, 0);
                 }
                 for (const c of pd.candidates) {
-                  const raw = this.globalEdsmSummaryCache.get(c.name);
+                  const raw = this.globalEdsmSummaryCache.get(this.apiExplorer.normalizeCacheKey(c.name));
                   let enriched: EnrichedCandidate;
                   if (raw !== undefined) {
                     enriched =
@@ -934,6 +1045,7 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
           this.autoEnrichmentStatus = totalEnriched > 0
             ? `Analyse ${modeLabel} terminée`
             : `Analyse ${modeLabel} terminée (aucune donnée trouvée)`;
+          this.computeOptimizedRoute();
           this.cdr.detectChanges();
         })
       );
@@ -1049,7 +1161,7 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
       pileToWiderCandidates.set(p.pileIndex, wider);
       for (const c of wider) allNames.add(c.name);
     }
-    const toEnrich = [...allNames].filter((n) => !this.globalEdsmSummaryCache.has(n));
+    const toEnrich = [...allNames].filter((n) => !this.globalEdsmSummaryCache.has(this.apiExplorer.normalizeCacheKey(n)));
     if (toEnrich.length === 0) return of(undefined);
 
     this.autoEnrichmentStatus = `Fallback ±60 LY : ${toEnrich.length} systèmes à enrichir…`;
@@ -1071,7 +1183,7 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
           this.sphereCandidatesByPile.set(pileIndex, candidates);
           this.sphereSystemCountByPile.set(pileIndex, candidates.length);
           for (const c of candidates) {
-            const raw = this.globalEdsmSummaryCache.get(c.name);
+            const raw = this.globalEdsmSummaryCache.get(this.apiExplorer.normalizeCacheKey(c.name));
             if (raw === undefined) continue;
             const enriched: EnrichedCandidate =
               'unknown' in raw && raw.unknown
@@ -1150,11 +1262,14 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
         if (this.isSpanshResultReady(result)) {
           this.spanshColonisationResult = result;
           this.spanshRouteAnalysis = this.computeRouteAnalysis(result);
+          this.importError = null;
+          this.saveRouteSession();
           this.pileEdsmEnrichment.clear();
           this.pileEnrichmentState.clear();
           this.pileFallbackUsed.clear();
           this.sphereCandidatesByPile.clear();
           this.sphereSystemCountByPile.clear();
+          this.optimizedRoute = null;
           this.comparisonResult = null;
           this.autoEnrichmentStatus = null;
           this.loadingSpanshColonisationResult = false;
@@ -1194,11 +1309,14 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
       next: (result) => {
         this.spanshColonisationResult = result;
         this.spanshRouteAnalysis = this.computeRouteAnalysis(result);
+        this.importError = null;
+        this.saveRouteSession();
         this.pileEdsmEnrichment.clear();
         this.pileEnrichmentState.clear();
         this.pileFallbackUsed.clear();
         this.sphereCandidatesByPile.clear();
         this.sphereSystemCountByPile.clear();
+        this.optimizedRoute = null;
         this.comparisonResult = null;
         this.autoEnrichmentStatus = null;
         this.loadingSpanshColonisationResult = false;
@@ -1211,6 +1329,49 @@ export class ApiExplorerDemoComponent implements OnDestroy, AfterViewChecked {
         console.error('[ApiExplorerDemo] Spansh Colonisation result error:', err);
         this.loadingSpanshColonisationResult = false;
         this.spanshStatusText = 'Erreur lors de la récupération du résultat.';
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  addRouteToBridge(): void {
+    const source = this.spanshResultSource?.trim() || this.systemName?.trim();
+    const dest = this.spanshResultDestination?.trim() || this.destinationSystem?.trim();
+    if (!source || !dest) {
+      this.importError = 'Départ et arrivée requis.';
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.importError = null;
+    this.loadingImport = true;
+    this.cdr.detectChanges();
+
+    // Utilise le endpoint dev (source/destination) — même flux que l'import direct, pas de JWT requis
+    this.bridgeApi.importSpanshBySourceDest(source, dest).subscribe({
+      next: (res) => {
+        this.loadingImport = false;
+        this.cdr.detectChanges();
+        const bridgeId = res?.bridge?.id;
+        if (bridgeId != null) {
+          this.router.navigate(['/bridges'], { queryParams: { bridgeId } });
+        }
+      },
+      error: (err: unknown) => {
+        this.loadingImport = false;
+        const httpErr = err as { status?: number; error?: string | { message?: string }; message?: string };
+        if (httpErr?.status === 401) {
+          this.importError = 'Connexion requise. Connectez-vous pour ajouter la route au pont.';
+        } else if (httpErr?.status === 405) {
+          this.importError = 'Erreur 405 : le backend ne reçoit pas la requête. Lancez l\'app avec "dotnet run" depuis EliteBridgePlanner.Server (démarre backend + frontend).';
+        } else if (httpErr?.status === 500 && httpErr?.error && typeof httpErr.error === 'object' && httpErr.error !== null && 'message' in httpErr.error) {
+          this.importError = String((httpErr.error as { message?: string }).message);
+        } else if (httpErr?.error && typeof httpErr.error === 'string') {
+          this.importError = httpErr.error;
+        } else {
+          this.importError = httpErr?.message ?? 'Erreur lors de l\'import de la route.';
+        }
+        console.error('[ApiExplorerDemo] Import route error:', err);
         this.cdr.detectChanges();
       }
     });

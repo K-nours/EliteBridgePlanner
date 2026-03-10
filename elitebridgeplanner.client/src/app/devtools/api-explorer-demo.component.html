@@ -1,5 +1,8 @@
 <div class="api-explorer-demo">
-  <h1>Route Colonisation Spansh</h1>
+  <div class="page-header-row">
+    <a routerLink="/bridges" class="btn-back">← Retour</a>
+    <h1>Route Colonisation Spansh</h1>
+  </div>
   <p class="hint">Planifier une route et analyser les systèmes potentiels pour vous ravitailler sur votre pont.</p>
 
   <!-- 1. Zone de saisie -->
@@ -39,24 +42,35 @@
       <label for="arrivee">Arrivée</label>
       <input id="arrivee" type="text" [(ngModel)]="destinationSystem" placeholder="Blae Hypue NH-V e2-2" />
     </div>
-    <button
-      class="btn btn-primary"
-      (click)="testSpanshColonisationRoute()"
-      [disabled]="loadingSpanshColonisation || loadingSpanshColonisationResult"
-      [class.loading]="loadingSpanshColonisation || loadingSpanshColonisationResult"
-    >
-      @if (loadingSpanshColonisation || loadingSpanshColonisationResult) {
-        <span class="spinner"></span> Calcul en cours…
-      } @else {
-        Calculer la route
-      }
-    </button>
+    <div class="calc-buttons-row">
+      <button
+        class="btn btn-primary"
+        (click)="testSpanshColonisationRoute()"
+        [disabled]="loadingSpanshColonisation || loadingSpanshColonisationResult"
+        [class.loading]="loadingSpanshColonisation || loadingSpanshColonisationResult"
+      >
+        @if (loadingSpanshColonisation || loadingSpanshColonisationResult) {
+          <span class="spinner"></span> Calcul en cours…
+        } @else {
+          Calculer la route
+        }
+      </button>
+      <button type="button" class="btn btn-add-to-bridge" [disabled]="!spanshRouteAnalysis || loadingImport" (click)="addRouteToBridge()">
+        @if (loadingImport) {
+          <span class="spinner"></span> Import…
+        } @else {
+          Ajouter au pont
+        }
+      </button>
+    </div>
+    @if (importError) {
+      <p class="import-error">{{ importError }}</p>
+    }
     <div class="cache-controls">
-      <span
-        class="cache-indicator-icon"
-        [title]="edsmCacheTooltip"
-        aria-label="État du cache EDSM"
-      >ⓘ</span>
+      <span class="cache-indicator-wrapper" aria-label="État du cache EDSM">
+        <span class="cache-indicator-icon">ⓘ</span>
+        <span class="cache-tooltip" role="tooltip">{{ edsmCacheTooltip }}</span>
+      </span>
       <span class="cache-stats-inline">Cache EDSM : {{ edsmCacheStats.hits }} hit(s), {{ edsmCacheStats.misses }} miss(es)</span>
       <button type="button" class="btn-sm cache-clear-btn" (click)="clearEdsmCache()">Vider le cache</button>
       @if (cacheClearedFeedback) {
@@ -124,8 +138,15 @@
             <span class="anchor-col">depuis ancrage</span>
           </div>
           <div class="jumps-table-body">
-            @for (j of spanshRouteAnalysis.jumps; track j.index) {
-              <div class="jump-row" [class.pile]="j.type === 'PILE'" [class.start]="j.type === 'START'" [class.end]="j.type === 'END'">
+            @for (j of (optimizedRoute?.jumps ?? spanshRouteAnalysis.jumps); track j.index) {
+              <div
+                class="jump-row"
+                [class.type-DEBUT]="j.type === 'START'"
+                [class.type-FIN]="j.type === 'END'"
+                [class.type-PILE]="j.type === 'PILE'"
+                [class.type-TABLIER]="j.type === 'TABLIER'"
+                [ngStyle]="getJumpRowStyle(j)"
+              >
                 <span>{{ j.index }}</span>
                 <span>{{ getDisplayTypeWithIndex(j) }}</span>
                 <span>{{ j.name }}</span>
@@ -324,6 +345,52 @@
         }
       </div>
     </section>
+    @if (optimizedRoute) {
+      <section class="optimization-section">
+        <h2>Route optimisée V1</h2>
+        <div class="optimization-stats">
+          <span>Dépôts analysés : {{ optimizedRoute.stats.depositsAnalyzed }}</span>
+          <span>Remplacés : {{ optimizedRoute.stats.depositsReplaced }}</span>
+          <span>Rejetés (non insérables) : {{ optimizedRoute.stats.depositsRejectedNotInsertable }}</span>
+          <span>Rejetés (score insuffisant) : {{ optimizedRoute.stats.depositsRejectedLowerScore }}</span>
+          <span>Score total gagné : {{ optimizedRoute.stats.totalScoreGained | number:'1.1-1' }}</span>
+        </div>
+        @if (optimizedRoute.modifications.length > 0) {
+        <table class="optimization-table">
+          <thead>
+            <tr>
+              <th>Dépôt</th>
+              <th>Système original</th>
+              <th>Candidat proposé</th>
+              <th>Coût détour</th>
+              <th>Insérable</th>
+              <th>Système retenu</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (mod of optimizedRoute.modifications; track mod.depositIndex) {
+              <tr [class.inserted]="mod.inserted">
+                <td>#{{ mod.depositIndex }}</td>
+                <td>{{ mod.originalSystem }}</td>
+                <td>{{ mod.replacementSystem }}</td>
+                <td>{{ mod.deviationCost | number:'1.2-2' }} LY</td>
+                <td>
+                  @if (mod.hasCoords) {
+                    {{ (mod.distPrevCandidate != null && mod.distPrevCandidate <= 15 && mod.distCandidateNext != null && mod.distCandidateNext <= 15) ? 'Oui' : 'Non' }}
+                  } @else {
+                    — (coords manquantes)
+                  }
+                </td>
+                <td>{{ mod.inserted ? mod.replacementSystem : mod.originalSystem }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+        } @else {
+          <p class="optimization-empty">Aucun meilleur candidat distinct du dépôt géométrique.</p>
+        }
+      </section>
+    }
         }
       </div>
     </div>

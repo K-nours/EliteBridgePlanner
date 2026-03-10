@@ -27,13 +27,26 @@
           ></div>
         }
         <div
-          [class]="'bridge-node type-' + system.type + (system.status === 'FINI' ? ' status-FINI' : '')"
+          [class]="'bridge-node ' + (system.order === 1 ? 'type-DEBUT' : 'type-' + system.type) + (system.status === 'FINI' && system.order !== 1 ? ' status-FINI' : '')"
           [class.selected]="store.selectedSystemIds().has(system.id)"
           (click)="selectSystem(system)"
         >
+          @if (system.status === 'CONSTRUCTION') {
+            <span
+              class="construction-indicator"
+              truncateTooltip="Port principal en cours de construction"
+              [truncateTooltipForce]="true"
+              [truncateTooltipAbove]="true"
+              aria-label="Port principal en cours de construction"
+            ></span>
+          }
           <div
-            [class]="'node-shape type-' + system.type + (system.status === 'FINI' ? ' status-FINI' : '')"
-          ></div>
+            [class]="'node-shape ' + (system.order === 1 ? 'type-DEBUT' : 'type-' + system.type) + (system.status === 'FINI' && system.order !== 1 ? ' status-FINI' : '')"
+          >
+            @if (system.type === 'PILE' && system.status === 'FINI') {
+              <span class="node-check">✓</span>
+            }
+          </div>
           <div
             class="node-label"
             [truncateTooltip]="system.name"
@@ -66,13 +79,26 @@
           </button>
         } @else {
           <div
-            [class]="'bridge-node type-' + item.system.type + (item.system.status === 'FINI' ? ' status-FINI' : '')"
+            [class]="'bridge-node ' + (item.system.order === 1 ? 'type-DEBUT' : 'type-' + item.system.type) + (item.system.status === 'FINI' && item.system.order !== 1 ? ' status-FINI' : '')"
             [class.selected]="store.selectedSystemIds().has(item.system.id)"
             (click)="selectSystem(item.system)"
           >
+            @if (item.system.status === 'CONSTRUCTION') {
+              <span
+                class="construction-indicator"
+                truncateTooltip="Port principal en cours de construction"
+                [truncateTooltipForce]="true"
+                [truncateTooltipAbove]="true"
+                aria-label="Port principal en cours de construction"
+              ></span>
+            }
             <div
-              [class]="'node-shape type-' + item.system.type + (item.system.status === 'FINI' ? ' status-FINI' : '')"
-            ></div>
+              [class]="'node-shape ' + (item.system.order === 1 ? 'type-DEBUT' : 'type-' + item.system.type) + (item.system.status === 'FINI' && item.system.order !== 1 ? ' status-FINI' : '')"
+            >
+              @if (item.system.type === 'PILE' && item.system.status === 'FINI') {
+                <span class="node-check">✓</span>
+              }
+            </div>
             <div
               class="node-label"
               [truncateTooltip]="item.system.name"
@@ -100,13 +126,26 @@
           ></div>
         }
         <div
-          [class]="'bridge-node type-' + system.type + (system.status === 'FINI' ? ' status-FINI' : '')"
+          [class]="'bridge-node ' + (system.order === 1 ? 'type-DEBUT' : 'type-' + system.type) + (system.status === 'FINI' && system.order !== 1 ? ' status-FINI' : '')"
           [class.selected]="store.selectedSystemIds().has(system.id)"
           (click)="selectSystem(system)"
         >
+          @if (system.status === 'CONSTRUCTION') {
+            <span
+              class="construction-indicator"
+              truncateTooltip="Port principal en cours de construction"
+              [truncateTooltipForce]="true"
+              [truncateTooltipAbove]="true"
+              aria-label="Port principal en cours de construction"
+            ></span>
+          }
           <div
-            [class]="'node-shape type-' + system.type + (system.status === 'FINI' ? ' status-FINI' : '')"
-          ></div>
+            [class]="'node-shape ' + (system.order === 1 ? 'type-DEBUT' : 'type-' + system.type) + (system.status === 'FINI' && system.order !== 1 ? ' status-FINI' : '')"
+          >
+            @if (system.type === 'PILE' && system.status === 'FINI') {
+              <span class="node-check">✓</span>
+            }
+          </div>
           <div
             class="node-label"
             [truncateTooltip]="system.name"

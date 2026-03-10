@@ -79,13 +79,20 @@
 .stats-bar {
   display: flex;
   align-items: center;
-  gap: v.$spacing-md;
+  justify-content: center;
+  position: relative;
   padding: 0 v.$spacing-lg;
   height: v.$statsbar-height;
   background: var(--bg3);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   flex-wrap: wrap;
+}
+
+.stats-legend {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-md;
 }
 
 .stat {
@@ -125,11 +132,45 @@
   &.accent { color: var(--accent); }
 }
 
+.stats-bar-left {
+  position: absolute;
+  left: v.$spacing-lg;
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-sm;
+}
+
+.stats-back-btn {
+  font-family: v.$font-ui;
+  font-size: 0.75rem;
+  padding: v.$spacing-xs v.$spacing-sm;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  transition: v.$transition-fast;
+
+  &:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+}
+
+.stats-bridge-label {
+  font-family: v.$font-title;
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  text-shadow: var(--glow);
+}
+
 .stat-progress {
+  position: absolute;
+  right: v.$spacing-lg;
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
 }
 
 // ── Body layout ───────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 
 namespace EliteBridgePlanner.Server.Middleware;
 
@@ -29,8 +30,9 @@ public class ExceptionMiddleware
         catch (Exception ex)
         {
             _logger.LogError(ex, "Erreur non gérée : {Message}", ex.Message);
-            await WriteResponse(context, HttpStatusCode.InternalServerError,
-                "Une erreur interne est survenue.");
+            var isDev = context.RequestServices.GetService<IWebHostEnvironment>()?.IsDevelopment() == true;
+            var message = isDev ? $"{ex.GetType().Name}: {ex.Message}" : "Une erreur interne est survenue.";
+            await WriteResponse(context, HttpStatusCode.InternalServerError, message);
         }
     }
 

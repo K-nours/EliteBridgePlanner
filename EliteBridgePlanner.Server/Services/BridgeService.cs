@@ -326,6 +326,15 @@ public class BridgeService : IBridgeService
         return true;
     }
 
+    public async Task ClearAllSystemsAsync(int bridgeId)
+    {
+        var systems = await _db.StarSystems
+            .Where(s => s.BridgeId == bridgeId)
+            .ToListAsync();
+        _db.StarSystems.RemoveRange(systems);
+        await _db.SaveChangesAsync();
+    }
+
     // ── Mappers privés ────────────────────────────────────────────────────
 
     private static BridgeDto MapToDto(Bridge b)

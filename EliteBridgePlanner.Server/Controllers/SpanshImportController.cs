@@ -30,7 +30,7 @@ public class SpanshImportController : ControllerBase
     /// <summary>Importe Sol→Colonia par défaut. ?replace=1 pour remplir le pont 1 existant.</summary>
     [HttpPost]
     public async Task<IActionResult> ImportRoute(
-        [FromBody] ImportRouteRequest? request,
+        [FromBody] SpanshImportRequest? request,
         [FromQuery] int? replace,
         CancellationToken ct)
     {
@@ -96,4 +96,4 @@ public class SpanshImportController : ControllerBase
     }
 }
 
-public record ImportRouteRequest(string? Source, string? Destination);
+public record SpanshImportRequest(string? Source, string? Destination);

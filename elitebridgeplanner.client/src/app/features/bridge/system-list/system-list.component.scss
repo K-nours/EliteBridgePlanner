@@ -15,6 +15,14 @@
   flex-shrink: 0;
 }
 
+.sidebar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: v.$spacing-sm;
+  margin-bottom: v.$spacing-sm;
+}
+
 .sidebar-title {
   font-family: v.$font-title;
   font-size: 0.7rem;
@@ -22,7 +30,26 @@
   letter-spacing: 0.2em;
   color: var(--accent);
   opacity: 1;
-  margin-bottom: v.$spacing-sm;
+  margin: 0;
+}
+
+.btn-new-route {
+  font-family: v.$font-ui;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 5px 10px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
+  @include v.btn-clip;
+  transition: all v.$transition-fast;
+  text-transform: uppercase;
+  white-space: nowrap;
+
+  &:hover { background: var(--accent); color: var(--bg); }
 }
 
 .bridge-meta {
@@ -69,8 +96,14 @@
 .meta-arrivee .meta-label,
 .meta-arrivee .meta-value { color: var(--color-fin); }
 
+.sidebar-actions {
+  display: flex;
+  gap: v.$spacing-xs;
+  margin-top: v.$spacing-xs;
+}
+
 .btn-add {
-  width: 100%;
+  flex: 1;
   font-family: v.$font-ui;
   font-size: 0.8rem;
   font-weight: 600;
@@ -83,9 +116,68 @@
   @include v.btn-clip;
   transition: all v.$transition-fast;
   text-transform: uppercase;
-  margin-top: v.$spacing-xs;
 
   &:hover { background: var(--accent); color: var(--bg); }
+}
+
+.btn-clear {
+  font-family: v.$font-ui;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 7px 10px;
+  border: 1px solid var(--status-build);
+  background: transparent;
+  color: var(--status-build);
+  cursor: pointer;
+  @include v.btn-clip;
+  transition: all v.$transition-fast;
+  text-transform: uppercase;
+
+  &:hover { background: var(--status-build); color: var(--bg); }
+}
+
+.clear-confirm {
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-xs;
+  flex-wrap: wrap;
+}
+
+.clear-confirm-text {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin-right: 4px;
+}
+
+.btn-clear-cancel {
+  font-family: v.$font-ui;
+  font-size: 0.7rem;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  @include v.btn-clip;
+  transition: v.$transition-fast;
+
+  &:hover { border-color: var(--accent); color: var(--accent); }
+}
+
+.btn-clear-confirm {
+  font-family: v.$font-ui;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  background: var(--status-build);
+  border: 1px solid var(--status-build);
+  color: var(--bg);
+  cursor: pointer;
+  @include v.btn-clip;
+  transition: v.$transition-fast;
+  text-transform: uppercase;
+
+  &:hover { opacity: 0.9; }
 }
 
 // ── Formulaire d'ajout ────────────────────────────────────────────────────
