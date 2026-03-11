@@ -1,0 +1,87 @@
+{
+  "AUTH": {
+    "LOGIN": {
+      "CONNECTING": "CONNEXION...",
+      "CONNECTION": "SE CONNECTER",
+      "EMAIL": "Email",
+      "INVALID_CREDENTIALS": "Email ou mot de passe invalide",
+      "INVALID_EMAIL": "Email invalide",
+      "NO_REGISTER": "Pas encore de compte ?",
+      "PASSWORD": "Mot de passe",
+      "REGISTER": "S'inscrire"
+    },
+    "REGISTER": {
+      "ALREDY_REGISTER": "Déjà un compte ?",
+      "COMMANDER_NAME": "Nom de commandant",
+      "LOGIN": "Se connecter",
+      "MIN_CHAR_3": "Minimum 3 caractères",
+      "MIN_CHAR_8": "Minimum 8 caractères",
+      "REGISTERING": "INSCRIPTION...",
+      "REGISTRATION_FAILED": "Impossible de créer le compte. Si vous avez déjà un compte, essayez de vous connecter.",
+      "TITLE": "NOUVEAU CMDR"
+    }
+  },
+  "BRIDGE": {
+    "MAP": {
+      "EMPTY": "Aucun système — ajoutez-en un pour commencer",
+      "TITLE": "visualisation du pont stellaire"
+    },
+    "STATION_PANEL": {
+      "EMPTY_STATE": "Sélectionnez un système pour afficher les stations en construction",
+      "EMPTY_STATION": "Aucune station en construction répertoriée pour ce système.",
+      "EMPTY_STATION_SUB": "Les données pourront être enrichies via EDSM ou une autre source.",
+      "SELECTED_SYSTEM": "Système sélectionné",
+      "TITLE": "Station en construction"
+    },
+    "SYSTEM-DETAIL": {
+      "ARCHITECT": "Architecte (nom du CMDR )",
+      "CONSTRUCTION_STATE": "Statut de Construction",
+      "EMPTY": "Sélectionnez un système dans la liste",
+      "EMPTY_SUB": "ou ajoutez-en un nouveau",
+      "SYSTEM_NAME": "Nom du Système",
+      "TITLE": "détail du système"
+    },
+    "SYSTEM-DETAILDELETE_CONFIRM": "Supprimer \"{{ name }}\" ?",
+    "SYSTEM-LIST": {
+      "EMPTY": "Aucun système",
+      "EMPTY_FILTER": "Tous les systèmes sont opérationnels",
+      "EMPTY_FILTER_TIP": "(masqués par le filtre)",
+      "EMPTY_TIP": "Ajoutez-en un pour commencer",
+      "INSERT_AT_INDEX": "Insérer à l'index",
+      "INSERT_AT_INDEX_HINT": " 1 = en tête · {{ bridgeLength }} = en queue",
+      "TITLE": "Pont actif"
+    }
+  },
+  "COMMON": {
+    "ADD": "Ajouter",
+    "ALL": "Tous",
+    "CANCEL": "Annuler",
+    "COMPLETION": "Progression",
+    "DELETE": "Supprimer",
+    "DOWN": "Descendre",
+    "IN_PROGRESS": "En cours",
+    "SAVE": "Enregistrer",
+    "STATE": "Statut",
+    "SYSTEM": "Système",
+    "SYSTEMS": "Systèmes",
+    "TYPE": "Type",
+    "UP": "Monter"
+  },
+  "SYSTEM": {
+    "STATUS": {
+      "BUILDING": "En construction",
+      "COMPLETE": "Opérationnel",
+      "COMPLETES": "Opérationnels",
+      "PLANNED": "Planifié",
+      "PLANNED_PLR": "Planifiés"
+    },
+    "TYPE": {
+      "DECK": "Tablier",
+      "DECKS": "Tabliers",
+      "END": "Arrivée",
+      "PIER": "Pile",
+      "PIERS": "Piles",
+      "START": "Départ"
+    }
+  }
+}

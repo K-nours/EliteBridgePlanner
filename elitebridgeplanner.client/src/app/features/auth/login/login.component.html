@@ -8,46 +8,32 @@
 
     <form [formGroup]="form" (ngSubmit)="onSubmit()" class="login-form">
       <div class="field-group">
-        <label class="field-label">EMAIL</label>
-        <input
-          class="field-input"
-          type="email"
-          formControlName="email"
-          placeholder="cmdr@example.com"
-          autocomplete="email"
-        />
+        <label class="field-label">{{'AUTH.LOGIN.EMAIL' | translate}}</label>
+        <input class="field-input" type="email" formControlName="email" placeholder="cmdr@example.com"
+          autocomplete="email" />
         @if (form.get('email')?.invalid && form.get('email')?.touched) {
-          <span class="field-error">Email invalide</span>
+        <span class="field-error">{{'AUTH.LOGIN.INVALID_EMAIL' | translate}}</span>
         }
       </div>
 
       <div class="field-group">
-        <label class="field-label">MOT DE PASSE</label>
-        <input
-          class="field-input"
-          type="password"
-          formControlName="password"
-          placeholder="••••••••"
-          autocomplete="current-password"
-        />
+        <label class="field-label">{{'AUTH.LOGIN.PASSWORD' | translate}}</label>
+        <input class="field-input" type="password" formControlName="password" placeholder="••••••••"
+          autocomplete="current-password" />
       </div>
 
       @if (error()) {
-        <div class="error-banner">⚠ {{ error() }}</div>
+      <div class="error-banner">⚠ {{ error() }}</div>
       }
 
-      <button
-        type="submit"
-        class="btn btn-primary"
-        [disabled]="form.invalid || isLoading()"
-      >
-        {{ isLoading() ? 'CONNEXION...' : 'SE CONNECTER' }}
+      <button type="submit" class="btn btn-primary" [disabled]="form.invalid || isLoading()">
+        {{ (isLoading() ? 'AUTH.LOGIN.CONNECTING' : 'AUTH.LOGIN.CONNECTION') | translate }}
       </button>
     </form>
 
     <div class="login-footer">
-      <span class="text-dim">Pas encore de compte ?</span>
-      <a routerLink="/register" class="link">S'inscrire</a>
+      <span class="text-dim">{{'AUTH.LOGIN.NO_REGISTER' | translate}}</span>
+      <a routerLink="/register" class="link">{{'AUTH.LOGIN.REGISTER' | translate}}</a>
     </div>
   </div>
 </div>

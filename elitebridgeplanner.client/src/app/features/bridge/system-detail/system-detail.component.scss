@@ -16,6 +16,7 @@
   letter-spacing: 0.2em;
   color: var(--accent);
   opacity: 1;
+  text-transform: uppercase;
 }
 
 .action-btns { display: flex; gap: v.$spacing-sm; }

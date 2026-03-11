@@ -2,16 +2,18 @@ import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-register',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, TranslateModule],
   templateUrl: './register.component.html',
   styleUrl: './register.component.scss'
 })
 export class RegisterComponent {
   private readonly fb = inject(FormBuilder);
+  private readonly translate = inject(TranslateService);
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
 
@@ -39,7 +41,7 @@ export class RegisterComponent {
     }).subscribe({
       next: () => this.router.navigate(['/bridges']),
       error: () => {
-        this.error.set('Inscription impossible — email déjà utilisé');
+        this.error.set(this.translate.instant('AUTH.REGISTER.REGISTRATION_FAILED'));
         this.isLoading.set(false);
       }
     });

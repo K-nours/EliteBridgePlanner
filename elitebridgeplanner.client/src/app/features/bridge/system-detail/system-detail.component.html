@@ -1,70 +1,60 @@
 <div class="detail-wrapper">
   <div class="section-header">
-    <span class="section-title">▸ DÉTAIL DU SYSTÈME</span>
+    <span class="section-title">▸ {{'BRIDGE.SYSTEM-DETAIL.TITLE' | translate}}</span>
     @if (store.selectedSystem()) {
-      <div class="action-btns">
-        <button class="btn btn-critical btn-sm" (click)="onDelete()">SUPPRIMER</button>
-        <button class="btn btn-sm" (click)="onSave()">SAUVEGARDER</button>
-      </div>
+    <div class="action-btns">
+      <button class="btn btn-critical btn-sm" (click)="onDelete()">{{'COMMON.DELETE' | translate}}</button>
+      <button class="btn btn-sm" (click)="onSave()">{{'COMMON.SAVE' | translate}}</button>
+    </div>
     }
   </div>
 
   @if (store.selectedSystem(); as sys) {
-    <div
-        class="detail-panel animate-fadeIn"
-        [class.type-DEBUT]="sys.type === 'DEBUT'"
-        [class.type-FIN]="sys.type === 'FIN'"
-        [class.type-PILE]="sys.type === 'PILE'"
-        [class.type-TABLIER]="sys.type === 'TABLIER'"
-      >
-      <!-- En-tête du système sélectionné : badge type + nom sur la même ligne -->
-      <div class="detail-heading">
-        <div class="detail-heading-row">
-          <span class="badge" [class]="'badge-type-' + sys.type">{{ typeLabel(sys.type) }}</span>
-          <div class="sys-name">{{ sys.name }}</div>
-        </div>
-        <div class="sys-order">#{{ sys.order }}</div>
+  <div class="detail-panel animate-fadeIn" [class.type-DEBUT]="sys.type === 'DEBUT'"
+    [class.type-FIN]="sys.type === 'FIN'" [class.type-PILE]="sys.type === 'PILE'"
+    [class.type-TABLIER]="sys.type === 'TABLIER'">
+    <!-- En-tête du système sélectionné : badge type + nom sur la même ligne -->
+    <div class="detail-heading">
+      <div class="detail-heading-row">
+        <span class="badge" [class]="'badge-type-' + sys.type">{{ typeLabel(sys.type) }}</span>
+        <div class="sys-name">{{ sys.name }}</div>
+      </div>
+      <div class="sys-order">#{{ sys.order }}</div>
+    </div>
+
+    <!-- Formulaire d'édition -->
+    <div class="edit-grid">
+      <div class="field-group full-width">
+        <label class="field-label">{{'BRIDGE.SYSTEM-DETAIL.SYSTEM_NAME' | translate}}</label>
+        <input class="field-input" [formControl]="form.controls.name" />
       </div>
 
-      <!-- Formulaire d'édition -->
-      <div class="edit-grid">
-        <div class="field-group full-width">
-          <label class="field-label">Nom du Système</label>
-          <input class="field-input" [formControl]="form.controls.name" />
-        </div>
+      <div class="field-group">
+        <label class="field-label" [id]="'edit-type-label'">{{'COMMON.TYPE' | translate}}</label>
+        <app-custom-select [options]="typeOptions" [labelId]="'edit-type-label'" [formControl]="form.controls.type" />
+      </div>
 
-        <div class="field-group">
-          <label class="field-label" [id]="'edit-type-label'">Type</label>
-          <app-custom-select
-            [options]="typeOptions"
-            [labelId]="'edit-type-label'"
-            [formControl]="form.controls.type"
-          />
-        </div>
+      <div class="field-group">
+        <label class="field-label">{{'BRIDGE.SYSTEM-DETAIL.ARCHITECT' | translate}}</label>
+        <input class="field-input" [formControl]="form.controls.architectId" placeholder="ID ou vide = Inconnu" />
+      </div>
 
-        <div class="field-group">
-          <label class="field-label">Architecte (ID utilisateur)</label>
-          <input class="field-input" [formControl]="form.controls.architectId" placeholder="ID ou vide = Inconnu" />
-        </div>
-
-        <div class="field-group full-width">
-          <label class="field-label">Statut de Construction</label>
-          <div class="status-row">
-            @for (opt of statusOptions; track opt.value) {
-              <button
-                [class]="'status-btn status-' + opt.value + (form.controls.status.value === opt.value ? ' active-' + opt.value : '')"
-                type="button"
-                (click)="form.controls.status.setValue(opt.value)"
-              >{{ opt.label }}</button>
-            }
-          </div>
+      <div class="field-group full-width">
+        <label class="field-label">{{'BRIDGE.SYSTEM-DETAIL.CONSTRUCTION_STATE' | translate}}</label>
+        <div class="status-row">
+          @for (opt of statusOptions; track opt.value) {
+          <button
+            [class]="'status-btn status-' + opt.value + (form.controls.status.value === opt.value ? ' active-' + opt.value : '')"
+            type="button" (click)="form.controls.status.setValue(opt.value)">{{ opt.label | translate}}</button>
+          }
         </div>
       </div>
     </div>
+  </div>
   } @else {
-    <div class="empty-detail">
-      <span class="empty-icon">◈</span>
-      <p>Sélectionnez un système dans la liste<br>ou ajoutez-en un nouveau</p>
-    </div>
+  <div class="empty-detail">
+    <span class="empty-icon">◈</span>
+    <p>{{'BRIDGE.SYSTEM-DETAIL.EMPTY' | translate}}<br>{{'BRIDGE.SYSTEM-DETAIL.EMPTY_SUB' | translate}}</p>
+  </div>
   }
 </div>
