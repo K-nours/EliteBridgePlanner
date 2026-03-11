@@ -5,21 +5,24 @@ import { SystemType, ColonizationStatus } from '../../../core/models/models';
 import { TruncateMiddlePipe } from '../../../shared/pipes/truncate-middle.pipe';
 import { TruncateTooltipDirective } from '../../../shared/directives/truncate-tooltip.directive';
 import { CustomSelectComponent } from '../../../shared/components/custom-select/custom-select.component';
+import { systemTypeOptions, systemStatusOptions } from '@app/core/enums/enums';
+import { TranslateModule } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-system-list',
   standalone: true,
-  imports: [ReactiveFormsModule, TruncateMiddlePipe, TruncateTooltipDirective, CustomSelectComponent],
+  imports: [ReactiveFormsModule, TruncateMiddlePipe, TruncateTooltipDirective, CustomSelectComponent, TranslateModule],
   templateUrl: './system-list.component.html',
   styleUrl: './system-list.component.scss'
 })
-export class SystemListComponent {
-  readonly store = inject(BridgeStore);
+export class SystemListComponent {  
   private readonly fb = inject(FormBuilder);
 
+  readonly typeOptions = systemTypeOptions;  
+  readonly statusOptions = systemStatusOptions;
+  readonly store = inject(BridgeStore);  
   readonly showAddForm = signal(false);
   readonly hideOperational = signal(false);
-
   readonly displaySystems = computed(() => {
     const systems = this.store.orderedSystems();
     if (this.hideOperational()) {
@@ -35,19 +38,6 @@ export class SystemListComponent {
     insertAtIndex: [this.store.orderedSystems().length + 1, [Validators.required, Validators.min(1)]],
     architectId: [null as string | null]
   });
-
-  readonly typeOptions: { value: SystemType; label: string }[] = [
-    { value: 'DEBUT', label: 'Départ' },
-    { value: 'PILE', label: 'Pile' },
-    { value: 'TABLIER', label: 'Tablier' },
-    { value: 'FIN', label: 'Arrivée' }
-  ];
-
-  readonly statusOptions: { value: ColonizationStatus; label: string }[] = [
-    { value: 'PLANIFIE', label: 'Planifié' },
-    { value: 'CONSTRUCTION', label: 'En construction' },
-    { value: 'FINI', label: 'Opérationnel' }
-  ];
 
   toggleAddForm(): void {
     this.showAddForm.update(v => !v);

@@ -1,17 +1,6 @@
-import {
-  Component,
-  Input,
-  HostBinding,
-  HostListener,
-  ElementRef,
-  ViewChild,
-  inject,
-  signal,
-  computed,
-  afterNextRender,
-  Injector,
-} from '@angular/core';
+import { Component, Input, HostBinding, HostListener, ElementRef, ViewChild, inject, signal, computed, afterNextRender, Injector, } from '@angular/core';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
+import { TranslateModule } from '@ngx-translate/core';
 
 export interface CustomSelectOption<T = string> {
   value: T;
@@ -21,49 +10,8 @@ export interface CustomSelectOption<T = string> {
 @Component({
   selector: 'app-custom-select',
   standalone: true,
-  template: `
-    <div class="custom-select" [class.open]="isOpen()">
-      <button
-        #triggerRef
-        type="button"
-        class="select-trigger"
-        [id]="triggerId"
-        [attr.aria-haspopup]="'listbox'"
-        [attr.aria-expanded]="isOpen()"
-        [attr.aria-labelledby]="labelId || null"
-        [attr.aria-label]="label || null"
-        [attr.aria-activedescendant]="isOpen() && highlightedIndex() >= 0 ? optionId(highlightedIndex()) : null"
-        (click)="toggle()"
-        (keydown)="onTriggerKeydown($event)"
-      >
-        <span class="select-value">{{ displayedLabel() }}</span>
-        <span class="select-arrow" aria-hidden="true">▼</span>
-      </button>
-      @if (isOpen()) {
-        <ul
-          class="select-dropdown"
-          role="listbox"
-          [attr.aria-labelledby]="labelId || null"
-          [attr.aria-label]="label || null"
-          [attr.aria-activedescendant]="highlightedIndex() >= 0 ? optionId(highlightedIndex()) : null"
-        >
-          @for (opt of options; track opt.value; let i = $index) {
-            <li
-              [id]="optionId(i)"
-              role="option"
-              [attr.aria-selected]="value() === opt.value"
-              [class.selected]="value() === opt.value"
-              [class.highlighted]="highlightedIndex() === i"
-              (click)="select(opt)"
-              (mouseenter)="highlightedIndex.set(i)"
-            >
-              {{ opt.label }}
-            </li>
-          }
-        </ul>
-      }
-    </div>
-  `,
+  imports: [TranslateModule],
+  templateUrl: './custom-select.component.html',
   styleUrl: './custom-select.component.scss',
   providers: [
     {
@@ -106,8 +54,8 @@ export class CustomSelectComponent<T = string> implements ControlValueAccessor {
     return `${this.triggerId}-option-${index}`;
   }
 
-  private onChange: (value: T | null) => void = () => {};
-  private onTouched: () => void = () => {};
+  private onChange: (value: T | null) => void = () => { };
+  private onTouched: () => void = () => { };
 
   writeValue(value: T | null): void {
     this.value.set(value);

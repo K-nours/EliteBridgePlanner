@@ -1,0 +1,21 @@
+<div class="custom-select" [class.open]="isOpen()">
+  <button #triggerRef type="button" class="select-trigger" [id]="triggerId" [attr.aria-haspopup]="'listbox'"
+    [attr.aria-expanded]="isOpen()" [attr.aria-labelledby]="labelId || null" [attr.aria-label]="label || null"
+    [attr.aria-activedescendant]="isOpen() && highlightedIndex() >= 0 ? optionId(highlightedIndex()) : null"
+    (click)="toggle()" (keydown)="onTriggerKeydown($event)">
+    <span class="select-value">{{ displayedLabel() | translate}}</span>
+    <span class="select-arrow" aria-hidden="true">▼</span>
+  </button>
+  @if (isOpen()) {
+  <ul class="select-dropdown" role="listbox" [attr.aria-labelledby]="labelId || null" [attr.aria-label]="label || null"
+    [attr.aria-activedescendant]="highlightedIndex() >= 0 ? optionId(highlightedIndex()) : null">
+    @for (opt of options; track opt.value; let i = $index) {
+    <li [id]="optionId(i)" role="option" [attr.aria-selected]="value() === opt.value"
+      [class.selected]="value() === opt.value" [class.highlighted]="highlightedIndex() === i" (click)="select(opt)"
+      (mouseenter)="highlightedIndex.set(i)">
+      {{ opt.label | translate }}
+    </li>
+    }
+  </ul>
+  }
+</div>
