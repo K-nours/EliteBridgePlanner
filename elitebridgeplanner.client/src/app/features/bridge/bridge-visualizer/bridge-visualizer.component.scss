@@ -4,7 +4,8 @@
 
 .viz-container {
   padding: v.$spacing-md v.$spacing-lg;
-  padding-bottom: 32px; /* 16px base + 16px ajouté en dessous */
+  padding-bottom: 32px;
+  /* 16px base + 16px ajouté en dessous */
   border-bottom: 1px solid var(--border);
   background: var(--bg2);
   min-height: 100px;
@@ -21,8 +22,6 @@
   opacity: 1;
   margin-bottom: 0;
   text-transform: uppercase;
-
-
 }
 
 .bridge-track {
@@ -154,11 +153,19 @@
 
   /* Aligné sur DEBUT/FIN (28px) : 8px sous le rond = référence */
   .bridge-node.type-DEBUT &,
-  .bridge-node.type-FIN & { margin-top: 8px; }
+  .bridge-node.type-FIN & {
+    margin-top: 8px;
+  }
+
   /* TABLIER (14px) : compenser pour même ligne que DEBUT/FIN */
-  .bridge-node.type-TABLIER & { margin-top: 15px; }
+  .bridge-node.type-TABLIER & {
+    margin-top: 15px;
+  }
+
   /* PILE (22px) : compenser pour même ligne que DEBUT/FIN */
-  .bridge-node.type-PILE & { margin-top: 11px; }
+  .bridge-node.type-PILE & {
+    margin-top: 11px;
+  }
 }
 
 .node-label-name {
