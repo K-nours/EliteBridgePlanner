@@ -1,0 +1,115 @@
+<section class="panel guild-systems">
+  <div class="panel-header">
+    <h2 class="panel-title">THE 501ST GUILD SYSTEMS</h2>
+    <app-data-source-badge [source]="dataSource()" [tooltip]="dataSource() === 'live' ? 'Donnée depuis l\'API' : 'Donnée mock (API indisponible)'" />
+  </div>
+  <div class="systems-list">
+    @if (loading()) {
+      <p class="empty">Chargement...</p>
+    } @else {
+      @if (systems().origin.length > 0) {
+        <div class="category category--highlight">
+          <span class="category-label">Origine</span>
+          @for (sys of systems().origin; track sys.id) {
+            <div class="system-row" [class]="getInfluenceClass(sys)">
+              <span class="system-name">{{ sys.name }}</span>
+              <span class="system-meta">
+                @if (sys.isThreatened || sys.isExpansionCandidate) {
+                  <span class="indicators">
+                    @if (sys.isThreatened) { <span class="ind-threatened" title="Système menacé">⚠</span> }
+                    @if (sys.isExpansionCandidate) { <span class="ind-expansion" title="Candidat expansion">🚀</span> }
+                  </span>
+                }
+                @if (sys.influenceDelta24h != null) {
+                  <span class="delta" [class.delta-up]="sys.influenceDelta24h > 0" [class.delta-down]="sys.influenceDelta24h < 0">{{ getDeltaDisplay(sys.influenceDelta24h) }}</span>
+                }
+                @if (sys.state) {
+                  <span class="state-badge">{{ sys.state }}</span>
+                }
+                <span class="influence" [class]="getInfluenceClass(sys)">{{ sys.influencePercent }}%</span>
+              </span>
+            </div>
+          }
+        </div>
+      }
+      @if (systems().headquarter.length > 0) {
+        <div class="category category--highlight">
+          <span class="category-label">Headquarter</span>
+          @for (sys of systems().headquarter; track sys.id) {
+            <div class="system-row" [class]="getInfluenceClass(sys)">
+              <span class="system-name">{{ sys.name }}</span>
+              <span class="system-meta">
+                @if (sys.isThreatened || sys.isExpansionCandidate) {
+                  <span class="indicators">
+                    @if (sys.isThreatened) { <span class="ind-threatened" title="Système menacé">⚠</span> }
+                    @if (sys.isExpansionCandidate) { <span class="ind-expansion" title="Candidat expansion">🚀</span> }
+                  </span>
+                }
+                @if (sys.influenceDelta24h != null) {
+                  <span class="delta" [class.delta-up]="sys.influenceDelta24h > 0" [class.delta-down]="sys.influenceDelta24h < 0">{{ getDeltaDisplay(sys.influenceDelta24h) }}</span>
+                }
+                @if (sys.state) {
+                  <span class="state-badge">{{ sys.state }}</span>
+                }
+                <span class="influence" [class]="getInfluenceClass(sys)">{{ sys.influencePercent }}%</span>
+              </span>
+            </div>
+          }
+        </div>
+      }
+      @if (criticalSystems.length > 0) {
+        <div class="category">
+          <span class="category-label">Systèmes critiques</span>
+          @for (sys of criticalSystems; track sys.id) {
+            <div class="system-row" [class]="getInfluenceClass(sys)">
+              <span class="system-name">{{ sys.name }}</span>
+              <span class="system-meta">
+                @if (sys.isThreatened || sys.isExpansionCandidate) {
+                  <span class="indicators">
+                    @if (sys.isThreatened) { <span class="ind-threatened" title="Système menacé">⚠</span> }
+                    @if (sys.isExpansionCandidate) { <span class="ind-expansion" title="Candidat expansion">🚀</span> }
+                  </span>
+                }
+                @if (sys.influenceDelta24h != null) {
+                  <span class="delta" [class.delta-up]="sys.influenceDelta24h > 0" [class.delta-down]="sys.influenceDelta24h < 0">{{ getDeltaDisplay(sys.influenceDelta24h) }}</span>
+                }
+                @if (sys.state) {
+                  <span class="state-badge">{{ sys.state }}</span>
+                }
+                <span class="influence" [class]="getInfluenceClass(sys)">{{ sys.influencePercent }}%</span>
+              </span>
+            </div>
+          }
+        </div>
+      }
+      @if (otherSystems.length > 0) {
+        <div class="category">
+          <span class="category-label">Autres systèmes</span>
+          @for (sys of otherSystems; track sys.id) {
+            <div class="system-row" [class]="getInfluenceClass(sys)">
+              <span class="system-name">{{ sys.name }}</span>
+              <span class="system-meta">
+                @if (sys.isThreatened || sys.isExpansionCandidate) {
+                  <span class="indicators">
+                    @if (sys.isThreatened) { <span class="ind-threatened" title="Système menacé">⚠</span> }
+                    @if (sys.isExpansionCandidate) { <span class="ind-expansion" title="Candidat expansion">🚀</span> }
+                  </span>
+                }
+                @if (sys.influenceDelta24h != null) {
+                  <span class="delta" [class.delta-up]="sys.influenceDelta24h > 0" [class.delta-down]="sys.influenceDelta24h < 0">{{ getDeltaDisplay(sys.influenceDelta24h) }}</span>
+                }
+                @if (sys.state) {
+                  <span class="state-badge">{{ sys.state }}</span>
+                }
+                <span class="influence" [class]="getInfluenceClass(sys)">{{ sys.influencePercent }}%</span>
+              </span>
+            </div>
+          }
+        </div>
+      }
+      @if (systems().origin.length === 0 && systems().headquarter.length === 0 && systems().others.length === 0) {
+        <p class="empty">Aucun système</p>
+      }
+    }
+  </div>
+</section>
