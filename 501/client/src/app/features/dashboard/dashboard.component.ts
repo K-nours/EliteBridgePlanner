@@ -1,10 +1,15 @@
-import { Component } from '@angular/core';
+import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { TruncateTooltipDirective } from '../../shared/directives/truncate-tooltip.directive';
+import { DataSourceBadgeComponent } from '../../shared/components/data-source-badge/data-source-badge.component';
+import { DashboardApiService } from '../../core/services/dashboard-api.service';
+import { CommandersApiService } from '../../core/services/commanders-api.service';
+import type { DashboardResponseDto } from '../../core/models/dashboard.model';
+import type { CommandersResponseDto } from '../../core/models/commanders.model';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [TruncateTooltipDirective],
+  imports: [TruncateTooltipDirective, DataSourceBadgeComponent],
   template: `
     <div class="page">
       <div class="page-bg">
@@ -12,13 +17,23 @@ import { TruncateTooltipDirective } from '../../shared/directives/truncate-toolt
         <div class="page-bg-overlay"></div>
       </div>
       <header class="header-zone">
-        <h1 class="title">{{ factionName }}</h1>
+        <h1 class="title">{{ factionName() }}</h1>
         <div class="header-emblem-wrapper">
           <span class="header-emblem-flank header-emblem-flank--left">GALACTIC</span>
-          <button type="button" class="emblem-box" (click)="onSquadronSync()"
-            truncateTooltip="Synchroniser les données" [truncateTooltipForce]="true" [truncateTooltipAbove]="true">
-            <img class="emblem-img" src="assets/squadron-emblem.png" alt="Squadron emblem" />
-          </button>
+          <div class="emblem-box-wrapper">
+            @if (refreshProgress() > 0) {
+            <svg class="emblem-progress" viewBox="0 0 72 72">
+              <circle class="emblem-progress-bg" cx="36" cy="36" r="34" fill="none" stroke-width="2" />
+              <circle class="emblem-progress-fill" cx="36" cy="36" r="34" fill="none" stroke-width="2"
+                [attr.stroke-dasharray]="strokeCircumference"
+                [attr.stroke-dashoffset]="strokeDashOffset()" />
+            </svg>
+          }
+            <button type="button" class="emblem-box" (click)="onSquadronSync()" [disabled]="refreshProgress() > 0"
+              truncateTooltip="Synchroniser les données" [truncateTooltipForce]="true" [truncateTooltipAbove]="true">
+              <img class="emblem-img" src="assets/squadron-emblem.png" alt="Squadron emblem" />
+            </button>
+          </div>
           <span class="header-emblem-flank header-emblem-flank--right">CONTROL</span>
         </div>
       </header>
@@ -31,7 +46,16 @@ import { TruncateTooltipDirective } from '../../shared/directives/truncate-toolt
           <div class="map-section">
             <div class="box map-box"><h3>The 501st Guild Map</h3></div>
           </div>
-          <div class="box"><h3>Sync Status</h3></div>
+          <div class="box box-sync-status">
+            <div class="sync-status-header">
+              <h3>Sync Status</h3>
+              <div class="sync-buttons">
+                <button type="button" class="btn-copy" (click)="copyLogsToClipboard()" [disabled]="syncLogs().length === 0">Copy to clipboard</button>
+                <button type="button" class="btn-clear" (click)="clearLogs()" [disabled]="syncLogs().length === 0">Clear log</button>
+              </div>
+            </div>
+            <pre class="sync-logs">{{ syncLogsText() }}</pre>
+          </div>
           <div class="center-row">
             <div class="box box-no-title"></div>
             <div class="box"><h3>Thargoid War</h3></div>
@@ -40,7 +64,40 @@ import { TruncateTooltipDirective } from '../../shared/directives/truncate-toolt
         <aside class="col col-right">
           <div class="box"><h3>In Progress Missions</h3></div>
           <div class="box"><h3>Diplomatic Pipeline</h3></div>
-          <div class="box"><h3>CMDRs</h3></div>
+          <div class="box box-cmdrs">
+            <div class="box-cmdrs-header">
+              <h3>CMDRs</h3>
+              @if (commanders(); as data) {
+                <app-data-source-badge [source]="data.dataSource"
+                  [tooltip]="data.lastSyncedAt ? 'Dernière sync: ' + data.lastSyncedAt : ''" />
+              }
+            </div>
+            @if (commanders(); as data) {
+            @if (data.commanders.length > 0) {
+            <div class="cmdrs-list">
+              @for (cmdr of data.commanders; track cmdr.name) {
+                <div class="cmdr-item">
+                  <div class="cmdr-avatar">
+                    @if (cmdr.avatarUrl) {
+                      <img [src]="cmdr.avatarUrl" [alt]="cmdr.name" referrerpolicy="no-referrer" />
+                    } @else {
+                      <span class="cmdr-initial">{{ cmdr.name.charAt(0) }}</span>
+                    }
+                  </div>
+                  <span class="cmdr-name">{{ cmdr.name }}</span>
+                  @if (cmdr.role) {
+                    <span class="cmdr-role">{{ cmdr.role }}</span>
+                  }
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="cmdrs-empty">Aucun CMDR. Cliquez sur l'écusson pour synchroniser.</div>
+          }
+          } @else {
+            <div class="cmdrs-empty">Chargement...</div>
+          }
+          </div>
         </aside>
       </main>
     </div>
@@ -111,6 +168,36 @@ import { TruncateTooltipDirective } from '../../shared/directives/truncate-toolt
       text-transform: uppercase;
       letter-spacing: 0.15em;
     }
+    .title {
+      margin: 0;
+      font-size: 26px;
+      font-family: 'Orbitron', sans-serif;
+      color: #00eaff;
+      text-shadow:
+        0 0 5px rgba(0, 234, 255, 0.7),
+        0 0 10px rgba(0, 234, 255, 0.5),
+        0 0 20px rgba(0, 234, 255, 0.3);
+    }
+    .emblem-box-wrapper {
+      position: relative;
+      display: inline-block;
+    }
+    .emblem-progress {
+      position: absolute;
+      inset: -2px;
+      width: 76px;
+      height: 76px;
+      pointer-events: none;
+      transform: rotate(-90deg);
+    }
+    .emblem-progress-bg {
+      stroke: rgba(0, 212, 255, 0.2);
+    }
+    .emblem-progress-fill {
+      stroke: rgba(0, 234, 255, 0.9);
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.1s linear;
+    }
     .emblem-box {
       width: 72px;
       height: 72px;
@@ -128,7 +215,11 @@ import { TruncateTooltipDirective } from '../../shared/directives/truncate-toolt
       font: inherit;
       transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
     }
-    .emblem-box:hover {
+    .emblem-box:disabled {
+      cursor: wait;
+      opacity: 0.9;
+    }
+    .emblem-box:hover:not(:disabled) {
       transform: scale(1.06);
       border-color: rgba(0, 234, 255, 0.9);
       box-shadow: 0 0 14px rgba(0, 234, 255, 0.6), 0 0 24px rgba(0, 234, 255, 0.3);
@@ -141,16 +232,6 @@ import { TruncateTooltipDirective } from '../../shared/directives/truncate-toolt
       width: 100%;
       height: 100%;
       object-fit: contain;
-    }
-    .title {
-      margin: 0;
-      font-size: 26px;
-      font-family: 'Orbitron', sans-serif;
-      color: #00eaff;
-      text-shadow:
-        0 0 5px rgba(0, 234, 255, 0.7),
-        0 0 10px rgba(0, 234, 255, 0.5),
-        0 0 20px rgba(0, 234, 255, 0.3);
     }
     .main-grid {
       position: relative;
@@ -210,6 +291,71 @@ import { TruncateTooltipDirective } from '../../shared/directives/truncate-toolt
       text-transform: uppercase;
       letter-spacing: 0.1em;
     }
+    .box-sync-status {
+      display: flex;
+      flex-direction: column;
+      min-height: 120px;
+    }
+    .sync-status-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .sync-status-header h3 {
+      margin: 0;
+    }
+    .btn-copy {
+      padding: 0.35rem 0.6rem;
+      font-size: 0.65rem;
+      font-family: 'Orbitron', sans-serif;
+      background: rgba(0, 212, 255, 0.2);
+      border: 1px solid rgba(0, 212, 255, 0.4);
+      color: #00d4ff;
+      border-radius: 4px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-copy:hover:not(:disabled) {
+      background: rgba(0, 212, 255, 0.3);
+    }
+    .btn-copy:disabled,
+    .btn-clear:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .sync-buttons {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .btn-clear {
+      padding: 0.35rem 0.6rem;
+      font-size: 0.65rem;
+      font-family: 'Orbitron', sans-serif;
+      background: rgba(255, 100, 100, 0.2);
+      border: 1px solid rgba(255, 100, 100, 0.4);
+      color: #ff6b6b;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .btn-clear:hover:not(:disabled) {
+      background: rgba(255, 100, 100, 0.3);
+    }
+    .sync-logs {
+      flex: 1;
+      margin: 0;
+      font-size: 0.65rem;
+      color: rgba(255, 255, 255, 0.8);
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-all;
+      overflow-y: auto;
+      max-height: 140px;
+      padding: 0.5rem;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 4px;
+    }
     .center-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -221,12 +367,165 @@ import { TruncateTooltipDirective } from '../../shared/directives/truncate-toolt
     .map-box {
       min-height: 420px;
     }
+    .box-cmdrs-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .box-cmdrs-header h3 {
+      margin: 0;
+    }
+    .cmdrs-empty {
+      font-size: 0.7rem;
+      color: rgba(255,255,255,0.5);
+      margin-top: 0.5rem;
+    }
+    .cmdr-role {
+      font-size: 0.55rem;
+      color: rgba(0, 212, 255, 0.7);
+    }
+    .box-cmdrs .cmdrs-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+    }
+    .cmdr-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .cmdr-item.is-current .cmdr-avatar {
+      box-shadow: 0 0 10px rgba(0, 234, 255, 0.6);
+      border-color: rgba(0, 234, 255, 0.9);
+    }
+    .cmdr-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(0, 212, 255, 0.2);
+      border: 1px solid rgba(0, 212, 255, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .cmdr-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .cmdr-initial {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #00d4ff;
+    }
+    .cmdr-name {
+      font-size: 0.65rem;
+      color: rgba(255, 255, 255, 0.85);
+      text-align: center;
+      max-width: 60px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   `],
 })
-export class DashboardComponent {
-  protected factionName = 'The 501st Guild';
+export class DashboardComponent implements OnInit {
+  private readonly dashboardApi = inject(DashboardApiService);
+  private readonly commandersApi = inject(CommandersApiService);
+
+  protected readonly strokeCircumference = 2 * Math.PI * 34;
+  protected refreshProgress = signal(0);
+  protected strokeDashOffset = computed(() => this.strokeCircumference * (1 - this.refreshProgress() / 100));
+
+  protected dashboard = signal<DashboardResponseDto | null>(null);
+  protected commanders = signal<CommandersResponseDto | null>(null);
+  protected factionName = computed(() => this.dashboard()?.factionName ?? 'The 501st Guild');
+
+  protected syncLogs = signal<string[]>([]);
+  protected syncLogsText = computed(() => this.syncLogs().join('\n') || '(aucun log)');
+
+  private addLog(msg: string): void {
+    const ts = new Date().toISOString().slice(11, 23);
+    this.syncLogs.update(logs => [...logs, `[${ts}] ${msg}`]);
+  }
+
+  protected clearLogs(): void {
+    this.syncLogs.set([]);
+  }
+
+  protected async copyLogsToClipboard(): Promise<void> {
+    const text = this.syncLogsText();
+    try {
+      await navigator.clipboard.writeText(text);
+      this.addLog('→ Copié dans le presse-papier');
+    } catch (e) {
+      this.addLog('→ Erreur copie: ' + (e instanceof Error ? e.message : String(e)));
+    }
+  }
+
+  ngOnInit(): void {
+    this.addLog('Dashboard initialisé');
+    this.dashboardApi.getDashboard('Bib0xkn0x').subscribe({
+      next: (d) => this.dashboard.set(d),
+      error: (err) => this.addLog('Erreur dashboard: ' + (err?.message || err?.error?.message || JSON.stringify(err))),
+    });
+    this.loadCommanders();
+  }
+
+  private loadCommanders(): void {
+    this.commandersApi.getCommanders().subscribe({
+      next: (d) => this.commanders.set(d),
+      error: (err) => {
+        this.commanders.set({ commanders: [], lastSyncedAt: null, dataSource: 'cached' });
+        this.addLog('Erreur commanders: ' + (err?.message || err?.error?.message || JSON.stringify(err)));
+      },
+    });
+  }
 
   protected onSquadronSync(): void {
-    // TODO: lancer la synchronisation des données du squadron
+    this.addLog('Clic sur bouton squadron');
+    this.refreshDashboard();
+  }
+
+  /** Sync Inara → cache puis recharge les commanders. */
+  private refreshDashboard(): void {
+    if (this.refreshProgress() > 0) {
+      this.addLog('Refresh déjà en cours, ignoré');
+      return;
+    }
+    this.addLog('Démarrage refresh...');
+    this.refreshProgress.set(1);
+    const start = performance.now();
+    const duration = 3000;
+    let frameId: number;
+
+    const animate = () => {
+      const elapsed = performance.now() - start;
+      const p = Math.min(90, (elapsed / duration) * 90);
+      this.refreshProgress.set(p);
+      if (p < 90) frameId = requestAnimationFrame(animate);
+    };
+    frameId = requestAnimationFrame(animate);
+
+    this.commandersApi.syncCommanders().subscribe({
+      next: (res) => {
+        cancelAnimationFrame(frameId);
+        this.refreshProgress.set(100);
+        this.addLog('Sync OK: ' + res.syncedCount + ' CMDRs');
+        this.loadCommanders();
+        setTimeout(() => this.refreshProgress.set(0), 400);
+      },
+      error: (err) => {
+        cancelAnimationFrame(frameId);
+        this.refreshProgress.set(0);
+        const msg = err?.error?.error ?? err?.error?.message ?? err?.message ?? JSON.stringify(err);
+        this.addLog('Erreur sync: ' + msg);
+      },
+    });
   }
 }

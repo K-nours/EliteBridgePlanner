@@ -22,6 +22,8 @@ public class DataSeeder
             SquadronName = "The Heirs of the 501st",
             FactionName = "The 501st Guild",
             InaraFactionId = 78866
+            // InaraSquadronId : configurer dans appsettings Squadron:InaraSquadronId ou via la DB
+            // Ex: 4926 pour 501st Legion German Garrison (roster public)
         };
         _db.Guilds.Add(guild);
         await _db.SaveChangesAsync();
