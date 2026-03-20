@@ -9,4 +9,9 @@ public class Guild
     public string? SquadronName { get; set; }
     public string? FactionName { get; set; }
     public int? InaraFactionId { get; set; }
+    /// <summary>ID du squadron sur Inara (ex: 4926) — utilisé pour fetcher le roster public.</summary>
+    public int? InaraSquadronId { get; set; }
+
+    public ICollection<SquadronMember> SquadronMembers { get; set; } = new List<SquadronMember>();
+    public ICollection<SquadronSnapshot> SquadronSnapshots { get; set; } = new List<SquadronSnapshot>();
 }

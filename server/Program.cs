@@ -10,7 +10,13 @@ var connStr = builder.Configuration.GetConnectionString("DefaultConnection")
 builder.Services.AddDbContext<GuildDashboardDbContext>(o =>
     o.UseSqlServer(connStr));
 
+builder.Services.AddHttpClient<InaraApiService>();
+builder.Services.AddHttpClient<InaraSquadronRosterService>();
+builder.Services.AddScoped<InaraClient>();
 builder.Services.AddScoped<GuildSystemsService>();
+builder.Services.AddScoped<DashboardService>();
+builder.Services.AddScoped<CommandersService>();
+builder.Services.AddScoped<SquadronSyncService>();
 builder.Services.AddScoped<DataSeeder>();
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
@@ -25,11 +31,18 @@ app.UseCors("AllowAll");
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<GuildDashboardDbContext>();
-    await db.Database.EnsureCreatedAsync();
+    await db.Database.MigrateAsync();
     var seeder = scope.ServiceProvider.GetRequiredService<DataSeeder>();
     await seeder.SeedAsync();
 }
 
 app.MapControllers();
+
+// Log config Inara au démarrage (valeur statique temporaire — voir README)
+var inaraSquadronId = app.Configuration.GetValue<int?>("Squadron:InaraSquadronId");
+if (inaraSquadronId.HasValue && inaraSquadronId.Value > 0)
+    app.Logger.LogInformation("Squadron:InaraSquadronId chargé = {Id} (config statique temporaire)", inaraSquadronId.Value);
+else
+    app.Logger.LogWarning("Squadron:InaraSquadronId non configuré — le panneau CMDRs restera vide jusqu'à configuration");
 
 app.Run();
