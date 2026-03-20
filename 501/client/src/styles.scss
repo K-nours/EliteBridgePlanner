@@ -1,0 +1,53 @@
+/* You can add global styles to this file, and also import other style files */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+* {
+  box-sizing: inherit;
+}
+
+/* Squircle (16px) — ref: https://codepen.io/argyleink/pen/zxGyJgm */
+.squircle-16 {
+  --squircle-amount: 16px;
+  clip-path: shape(
+    from 0 var(--squircle-amount),
+    curve to var(--squircle-amount) 0 with 0 0 / 0 0,
+    hline to calc(100% - var(--squircle-amount)),
+    curve to 100% var(--squircle-amount) with 100% 0 / 100% 0,
+    vline to calc(100% - var(--squircle-amount)),
+    curve to calc(100% - var(--squircle-amount)) 100% with 100% 100% / 100% 100%,
+    hline to var(--squircle-amount),
+    curve to 0 calc(100% - var(--squircle-amount)) with 0 100% / 0 100%,
+    close
+  );
+}
+
+/* fallback pour navigateurs sans support de shape() */
+@supports not (clip-path: shape(from 0 0, close)) {
+  .squircle-16 {
+    clip-path: unset;
+    border-radius: 16px;
+  }
+}
+
+/* Tooltip flottant (position: fixed) — même techno que EliteBridgePlanner */
+.eb-tooltip-floating {
+  position: fixed;
+  z-index: 99999;
+  padding: 6px 10px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.75rem;
+  color: #00eaff;
+  background: rgba(6, 20, 35, 0.98);
+  border: 1px solid rgba(0, 212, 255, 0.5);
+  white-space: nowrap;
+  max-width: min(400px, calc(100vw - 48px));
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  &.visible { opacity: 1; }
+}
