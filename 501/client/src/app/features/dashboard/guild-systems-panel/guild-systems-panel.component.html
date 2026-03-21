@@ -1,18 +1,25 @@
 <section class="panel guild-systems">
   <div class="panel-header">
-    <h2 class="panel-title">THE 501ST GUILD SYSTEMS</h2>
-    <app-data-source-badge [source]="dataSource()" [tooltip]="dataSource() === 'live' ? 'Donnée depuis l\'API' : 'Donnée mock (API indisponible)'" />
+    <h3 class="panel-title">THE 501ST GUILD SYSTEMS</h3>
+    @if (!error()) {
+      <app-data-source-badge
+        [source]="dataSource()"
+        [tooltip]="dataSource() === 'seed' ? 'Données de démo' : 'Données issues d\'une sync'"
+      />
+    }
   </div>
   <div class="systems-list">
     @if (loading()) {
       <p class="empty">Chargement...</p>
+    } @else if (error()) {
+      <p class="empty empty--error">Impossible de charger les systèmes.</p>
     } @else {
       @if (systems().origin.length > 0) {
-        <div class="category category--highlight">
+        <div class="category">
           <span class="category-label">Origine</span>
           @for (sys of systems().origin; track sys.id) {
-            <div class="system-row" [class]="getInfluenceClass(sys)">
-              <span class="system-name">{{ sys.name }}</span>
+            <div class="system-row" [class]="getInfluenceClass(sys)" [class.system-row--hq]="sys.isHeadquarter" (click)="onSystemClick(sys)" (keydown.enter)="onSystemClick(sys)" (keydown.space)="onSystemClick(sys); $event.preventDefault()" role="button" tabindex="0" title="Cliquer pour définir ou retirer le HQ">
+              <span class="system-name">{{ sys.name }}@if (sys.isHeadquarter) { <span class="hq-mark">★</span> }</span>
               <span class="system-meta">
                 @if (sys.isThreatened || sys.isExpansionCandidate) {
                   <span class="indicators">
@@ -33,11 +40,11 @@
         </div>
       }
       @if (systems().headquarter.length > 0) {
-        <div class="category category--highlight">
+        <div class="category">
           <span class="category-label">Headquarter</span>
           @for (sys of systems().headquarter; track sys.id) {
-            <div class="system-row" [class]="getInfluenceClass(sys)">
-              <span class="system-name">{{ sys.name }}</span>
+            <div class="system-row" [class]="getInfluenceClass(sys)" [class.system-row--hq]="sys.isHeadquarter" (click)="onSystemClick(sys)" (keydown.enter)="onSystemClick(sys)" (keydown.space)="onSystemClick(sys); $event.preventDefault()" role="button" tabindex="0" title="Cliquer pour définir ou retirer le HQ">
+              <span class="system-name">{{ sys.name }}@if (sys.isHeadquarter) { <span class="hq-mark">★</span> }</span>
               <span class="system-meta">
                 @if (sys.isThreatened || sys.isExpansionCandidate) {
                   <span class="indicators">
@@ -61,8 +68,8 @@
         <div class="category">
           <span class="category-label">Systèmes critiques</span>
           @for (sys of criticalSystems; track sys.id) {
-            <div class="system-row" [class]="getInfluenceClass(sys)">
-              <span class="system-name">{{ sys.name }}</span>
+            <div class="system-row" [class]="getInfluenceClass(sys)" [class.system-row--hq]="sys.isHeadquarter" (click)="onSystemClick(sys)" (keydown.enter)="onSystemClick(sys)" (keydown.space)="onSystemClick(sys); $event.preventDefault()" role="button" tabindex="0" title="Cliquer pour définir ou retirer le HQ">
+              <span class="system-name">{{ sys.name }}@if (sys.isHeadquarter) { <span class="hq-mark">★</span> }</span>
               <span class="system-meta">
                 @if (sys.isThreatened || sys.isExpansionCandidate) {
                   <span class="indicators">
@@ -84,10 +91,10 @@
       }
       @if (otherSystems.length > 0) {
         <div class="category">
-          <span class="category-label">Autres systèmes</span>
+          <span class="category-label">Autres</span>
           @for (sys of otherSystems; track sys.id) {
-            <div class="system-row" [class]="getInfluenceClass(sys)">
-              <span class="system-name">{{ sys.name }}</span>
+            <div class="system-row" [class]="getInfluenceClass(sys)" [class.system-row--hq]="sys.isHeadquarter" (click)="onSystemClick(sys)" (keydown.enter)="onSystemClick(sys)" (keydown.space)="onSystemClick(sys); $event.preventDefault()" role="button" tabindex="0" title="Cliquer pour définir ou retirer le HQ">
+              <span class="system-name">{{ sys.name }}@if (sys.isHeadquarter) { <span class="hq-mark">★</span> }</span>
               <span class="system-meta">
                 @if (sys.isThreatened || sys.isExpansionCandidate) {
                   <span class="indicators">
@@ -107,8 +114,8 @@
           }
         </div>
       }
-      @if (systems().origin.length === 0 && systems().headquarter.length === 0 && systems().others.length === 0) {
-        <p class="empty">Aucun système</p>
+      @if (systems().origin.length === 0 && systems().headquarter.length === 0 && criticalSystems.length === 0 && otherSystems.length === 0) {
+        <p class="empty">Aucun système configuré.</p>
       }
     }
   </div>

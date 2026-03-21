@@ -66,6 +66,9 @@
     @if (importError) {
       <p class="import-error">{{ importError }}</p>
     }
+    @if (spanshColonisationError || spanshColonisationResultError) {
+      <p class="import-error">{{ spanshColonisationError || spanshColonisationResultError }}</p>
+    }
     <div class="cache-controls">
       <span class="cache-indicator-wrapper" aria-label="État du cache EDSM">
         <span class="cache-indicator-icon">ⓘ</span>
@@ -129,6 +132,18 @@
       <aside class="result-left" #leftCol [style.max-height.px]="rightColHeight ?? undefined">
         <div class="spansh-jumps-table">
           <h2>Table des sauts</h2>
+          @if (optimizedRoute) {
+            <div class="table-source-badge" title="Données affichées">Source : route optimisée ({{ optimizedRoute.jumps.length }} sauts)</div>
+            <div class="jumps-legend">
+              <span class="legend-item legend-pile" title="Dépôt géométrique conservé">■ dépôt normal</span>
+              @if (hasReplacedDeposits(optimizedRoute)) {
+                <span class="legend-item legend-pile-replaced" title="Étape promue en dépôt retenu">■ dépôt remplacé</span>
+              }
+              @if ((optimizedRoute.stats?.intermediateJumpsAdded ?? 0) > 0) {
+                <span class="legend-item legend-intermediate" title="Saut intermédiaire ajouté pour respecter 15 LY max">■ saut intermédiaire ajouté</span>
+              }
+            </div>
+          }
           <div class="jumps-table-header">
             <span>#</span>
             <span>type</span>
@@ -136,6 +151,9 @@
             <span>distance</span>
             <span>cumul</span>
             <span class="anchor-col">depuis ancrage</span>
+            <span class="debug-col" title="Debug">interm.</span>
+            <span class="debug-col" title="Debug: type brut">type</span>
+            <span class="debug-col" title="Debug: remplace">remplace</span>
           </div>
           <div class="jumps-table-body">
             @for (j of (optimizedRoute?.jumps ?? spanshRouteAnalysis.jumps); track j.index) {
@@ -143,13 +161,20 @@
                 class="jump-row"
                 [class.type-DEBUT]="j.type === 'START'"
                 [class.type-FIN]="j.type === 'END'"
-                [class.type-PILE]="j.type === 'PILE'"
-                [class.type-TABLIER]="j.type === 'TABLIER'"
+                [class.type-PILE]="j.type === 'PILE' && !j.replacedSystemName"
+                [class.type-PILE-REPLACED]="j.type === 'PILE' && j.replacedSystemName"
+                [class.type-TABLIER]="j.type === 'TABLIER' && !j.isIntermediate"
+                [class.type-INTERMEDIATE]="j.isIntermediate === true"
                 [ngStyle]="getJumpRowStyle(j)"
               >
                 <span>{{ j.index }}</span>
                 <span>{{ getDisplayTypeWithIndex(j) }}</span>
-                <span>{{ j.name }}</span>
+                <span>
+                  {{ j.name }}
+                  @if (j.replacedSystemName && j.replacedSystemName !== j.name) {
+                    <span class="replaced-mention">remplace {{ j.replacedSystemName }}</span>
+                  }
+                </span>
                 <span>{{ j.distance | number:'1.1-1' }} LY</span>
                 <span>{{ j.cumulativeDistance | number:'1.1-1' }} LY</span>
                 <span class="anchor-value" [class.pile-value]="j.type === 'PILE'">
@@ -159,6 +184,9 @@
                     {{ j.distanceFromLastAnchor | number:'1.1-1' }} LY
                   }
                 </span>
+                <span class="debug-col" [class.interm-yes]="j.isIntermediate === true">{{ j.isIntermediate === true ? 'yes' : 'no' }}</span>
+                <span class="debug-col">{{ j.type }}</span>
+                <span class="debug-col">{{ j.replacedSystemName ?? '-' }}</span>
               </div>
             }
           </div>
@@ -303,42 +331,97 @@
                 <span class="fallback-badge">{{ getDepositFallbackMessage(pile.pileIndex) }}</span>
               }
             </div>
-            @let best = getBestCandidateInPile(pile);
-            @if (best) {
-              <div class="pile-best">
-                <span class="best-label">Meilleur candidat</span>
-                <span class="best-name">{{ best.candidate.name }}</span>
-                <span class="best-score">{{ best.score | number:'1.1-1' }}</span>
-                <span class="best-metrics">
-                  {{ best.edsm.metalRichLandableCount }} riches en métaux,
-                  {{ best.edsm.rockyLandableCount }} rocheux,
-                  {{ best.edsm.highMetalContentLandableCount }} haute teneur en métal (atterrissables) · {{ best.edsm.bodyCount }} corps
-                </span>
-              </div>
-            } @else if (isDepositFullyEnriched(pile)) {
-              <div class="pile-no-score">
-                @let fallbackMsg = getDepositFallbackMessage(pile.pileIndex);
-                @if (fallbackMsg) {
-                  <span class="fallback-msg">{{ fallbackMsg }}</span>
+            <div class="deposit-search-zone">
+              <span class="search-zone-label">Zone de recherche :</span>
+              <span class="search-zone-value">{{ getDepositSearchZoneLabel(pile) }}</span>
+            </div>
+            @let bestDist = getDepositBestCandidateDistance(pile);
+            @if (bestDist !== null) {
+              <div class="deposit-candidate-distance">
+                @if (bestDist.isSame) {
+                  candidat identique au dépôt (0.0 LY)
                 } @else {
-                  Aucune donnée EDSM disponible pour ce dépôt.
+                  candidat retenu à {{ bestDist.distance | number:'1.1-1' }} LY du dépôt d'origine
                 }
               </div>
-            } @else {
-              <div class="pile-no-score">
-                <button
-                  type="button"
-                  class="enrich-btn"
-                  (click)="enrichPileWithEdsm(pile.pileIndex)"
-                  [disabled]="enrichingPileIndex !== null"
-                  [class.loading]="enrichingPileIndex === pile.pileIndex"
-                >
-                  @if (enrichingPileIndex === pile.pileIndex) {
-                    <span class="spinner"></span> Enrichissement EDSM…
+            } @else if (coverage.total > 0) {
+              <div class="deposit-candidate-distance deposit-candidate-distance-unknown">
+                distance candidat non calculable (coords manquantes)
+              </div>
+            }
+            @let depositData = getDepositDisplayData(pile);
+            @let best = getBestCandidateInPile(pile);
+            <div class="pile-compare-columns">
+              <div class="pile-col pile-col-origin">
+                <h4 class="pile-col-title">Dépôt d'origine</h4>
+                <div class="pile-col-system">{{ depositData.name }}</div>
+                <div class="pile-col-score">
+                  @if (depositData.score != null) {
+                    {{ depositData.score | number:'1.1-1' }}
                   } @else {
-                    Enrichir avec EDSM pour voir le meilleur candidat
+                    —
                   }
-                </button>
+                </div>
+                <div class="pile-col-bodies">{{ depositData.bodiesText }}</div>
+              </div>
+              <div class="pile-col pile-col-candidate">
+                @if (best) {
+                  <h4 class="pile-col-title">Meilleur candidat</h4>
+                  <div class="pile-col-system">{{ best.candidate.name }}</div>
+                  <div class="pile-col-score">{{ best.score | number:'1.1-1' }}</div>
+                  <div class="pile-col-bodies">{{ formatBodiesDescription(best.edsm) }}</div>
+                } @else if (isDepositFullyEnriched(pile)) {
+                  <h4 class="pile-col-title">Meilleur candidat</h4>
+                  <div class="pile-col-bodies pile-col-unknown">EDSM inconnu</div>
+                } @else {
+                  <div class="pile-col-enrich">
+                    <button
+                      type="button"
+                      class="enrich-btn"
+                      (click)="enrichPileWithEdsm(pile.pileIndex)"
+                      [disabled]="enrichingPileIndex !== null"
+                      [class.loading]="enrichingPileIndex === pile.pileIndex"
+                    >
+                      @if (enrichingPileIndex === pile.pileIndex) {
+                        <span class="spinner"></span> Enrichissement EDSM…
+                      } @else {
+                        Enrichir avec EDSM pour voir le meilleur candidat
+                      }
+                    </button>
+                  </div>
+                }
+              </div>
+            </div>
+            @if (best) {
+              @let diffs = getDepositComparisonDiffs(pile, best);
+              <div class="pile-comparison-summary">
+                @for (part of diffs.parts; track part) {
+                  <span class="diff-part">{{ part }}</span>
+                }
+              </div>
+            }
+            @if (optimizedRoute) {
+              @let mod = getDepositModification(pile);
+              @if (mod) {
+                <div class="pile-optimization">
+                  <span class="opt-item">Coût détour : {{ mod.deviationCost | number:'1.2-2' }} LY</span>
+                  <span class="opt-item">Score ajusté : {{ mod.adjustedScore | number:'1.1-1' }}</span>
+                  <span class="opt-item">Système retenu : <strong>{{ mod.inserted ? mod.replacementSystem : mod.originalSystem }}</strong></span>
+                  @if (mod.inserted && mod.replacementSystem !== mod.originalSystem) {
+                    <span class="opt-item opt-replaced">remplace {{ mod.originalSystem }}</span>
+                  }
+                </div>
+              }
+              <div class="pile-decision" [class]="'pile-decision ' + getDepositDecisionClass(pile)">
+                <span class="pile-decision-label">{{ getDepositCardDecisionLabel(pile) }}</span>
+                @let detailParts = getDepositDecisionDetail(pile);
+                @if (detailParts.length > 0) {
+                  <div class="pile-decision-detail">
+                    @for (part of detailParts; track part) {
+                      <span class="detail-part">{{ part }}</span>
+                    }
+                  </div>
+                }
               </div>
             }
           </div>
@@ -346,49 +429,18 @@
       </div>
     </section>
     @if (optimizedRoute) {
-      <section class="optimization-section">
-        <h2>Route optimisée V1</h2>
+      <section class="optimization-section optimization-summary-only">
+        <h2>Route optimisée V1 — Résumé</h2>
         <div class="optimization-stats">
           <span>Dépôts analysés : {{ optimizedRoute.stats.depositsAnalyzed }}</span>
           <span>Remplacés : {{ optimizedRoute.stats.depositsReplaced }}</span>
+          @if ((optimizedRoute.stats.intermediateJumpsAdded ?? 0) > 0) {
+            <span>Sauts intermédiaires ajoutés : {{ optimizedRoute.stats.intermediateJumpsAdded }}</span>
+          }
           <span>Rejetés (non insérables) : {{ optimizedRoute.stats.depositsRejectedNotInsertable }}</span>
           <span>Rejetés (score insuffisant) : {{ optimizedRoute.stats.depositsRejectedLowerScore }}</span>
           <span>Score total gagné : {{ optimizedRoute.stats.totalScoreGained | number:'1.1-1' }}</span>
         </div>
-        @if (optimizedRoute.modifications.length > 0) {
-        <table class="optimization-table">
-          <thead>
-            <tr>
-              <th>Dépôt</th>
-              <th>Système original</th>
-              <th>Candidat proposé</th>
-              <th>Coût détour</th>
-              <th>Insérable</th>
-              <th>Système retenu</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (mod of optimizedRoute.modifications; track mod.depositIndex) {
-              <tr [class.inserted]="mod.inserted">
-                <td>#{{ mod.depositIndex }}</td>
-                <td>{{ mod.originalSystem }}</td>
-                <td>{{ mod.replacementSystem }}</td>
-                <td>{{ mod.deviationCost | number:'1.2-2' }} LY</td>
-                <td>
-                  @if (mod.hasCoords) {
-                    {{ (mod.distPrevCandidate != null && mod.distPrevCandidate <= 15 && mod.distCandidateNext != null && mod.distCandidateNext <= 15) ? 'Oui' : 'Non' }}
-                  } @else {
-                    — (coords manquantes)
-                  }
-                </td>
-                <td>{{ mod.inserted ? mod.replacementSystem : mod.originalSystem }}</td>
-              </tr>
-            }
-          </tbody>
-        </table>
-        } @else {
-          <p class="optimization-empty">Aucun meilleur candidat distinct du dépôt géométrique.</p>
-        }
       </section>
     }
         }

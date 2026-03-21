@@ -8,12 +8,24 @@ using EliteBridgePlanner.Server.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 
 var contentRoot = Directory.GetCurrentDirectory();
-var spaBrowserPath = Path.Combine(contentRoot, "..", "elitebridgeplanner.client", "dist", "elitebridgeplanner.client", "browser");
-var webRootPath = Directory.Exists(spaBrowserPath) ? spaBrowserPath : null;
+// Résolution du build Angular : depuis project dir, solution root, ou bin/Debug
+var relPaths = new[] { "../elitebridgeplanner.client", "elitebridgeplanner.client", "../../../elitebridgeplanner.client" };
+string? spaBrowserPath = null;
+foreach (var rel in relPaths)
+{
+    var candidate = Path.GetFullPath(Path.Combine(contentRoot, rel, "dist", "elitebridgeplanner.client", "browser"));
+    if (Directory.Exists(candidate)) { spaBrowserPath = candidate; break; }
+}
+var webRootPath = spaBrowserPath;
+if (webRootPath is null)
+    Console.WriteLine("[WARN] Build Angular introuvable. Lancez: cd elitebridgeplanner.client && ng build");
+else
+    Console.WriteLine($"[SPA] Fichiers statiques: {webRootPath}");
 
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
@@ -125,6 +137,10 @@ using (var scope = app.Services.CreateScope())
 // ── Pipeline HTTP ─────────────────────────────────────────────────────────
 app.UseMiddleware<ExceptionMiddleware>();
 
+// Fichiers statiques du build Angular AVANT auth (accès public aux .js, .css)
+if (webRootPath != null)
+    app.UseStaticFiles(new StaticFileOptions { FileProvider = new PhysicalFileProvider(webRootPath) });
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -137,7 +153,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// Proxy SPA Angular (déjà configuré par le template VS)
+// Fallback SPA : index.html pour le routing côté client
 app.MapFallbackToFile("index.html");
 
 app.Run();

@@ -13,20 +13,23 @@ public class SyncController : ControllerBase
     private readonly InaraClient _inara;
     private readonly InaraSquadronRosterService _roster;
     private readonly GuildDashboardDbContext _db;
+    private readonly CurrentGuildService _currentGuild;
 
-    public SyncController(SquadronSyncService sync, InaraClient inara, InaraSquadronRosterService roster, GuildDashboardDbContext db)
+    public SyncController(SquadronSyncService sync, InaraClient inara, InaraSquadronRosterService roster, GuildDashboardDbContext db, CurrentGuildService currentGuild)
     {
         _sync = sync;
         _inara = inara;
         _roster = roster;
         _db = db;
+        _currentGuild = currentGuild;
     }
 
-    /// <summary>POST /api/sync/inara/commanders — sync roster Inara vers cache DB. Utilise Squadron:InaraSquadronId (config statique temporaire).</summary>
+    /// <summary>POST /api/sync/inara/commanders — sync roster Inara. guildId optionnel.</summary>
     [HttpPost("inara/commanders")]
-    public async Task<IActionResult> SyncInaraCommanders([FromQuery] int guildId = 1, CancellationToken ct = default)
+    public async Task<IActionResult> SyncInaraCommanders([FromQuery] int? guildId, CancellationToken ct = default)
     {
-        var result = await _sync.SyncAsync(guildId, ct);
+        var id = guildId is > 0 ? guildId.Value : _currentGuild.CurrentGuildId;
+        var result = await _sync.SyncAsync(id, ct);
 
         if (!result.IsSuccess)
             return BadRequest(new { error = result.Error, syncedCount = 0 });
@@ -34,11 +37,12 @@ public class SyncController : ControllerBase
         return Ok(new { syncedCount = result.SyncedCount });
     }
 
-    /// <summary>GET /api/sync/inara/roster-diagnostic — diagnostic du roster Inara (anonyme vs clé API).</summary>
+    /// <summary>GET /api/sync/inara/roster-diagnostic — diagnostic du roster Inara.</summary>
     [HttpGet("inara/roster-diagnostic")]
-    public async Task<IActionResult> GetRosterDiagnostic([FromQuery] int guildId = 1, CancellationToken ct = default)
+    public async Task<IActionResult> GetRosterDiagnostic([FromQuery] int? guildId, CancellationToken ct = default)
     {
-        var guild = await _db.Guilds.AsNoTracking().FirstOrDefaultAsync(g => g.Id == guildId, ct);
+        var id = guildId is > 0 ? guildId.Value : _currentGuild.CurrentGuildId;
+        var guild = await _db.Guilds.AsNoTracking().FirstOrDefaultAsync(g => g.Id == id, ct);
         var squadronId = await _inara.GetSquadronIdAsync(guild?.InaraSquadronId, guild?.InaraFactionId, ct);
         if (squadronId == null)
             return BadRequest(new { error = "Squadron:InaraSquadronId non configuré (config ou Guild.InaraSquadronId)" });

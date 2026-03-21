@@ -1,70 +1,104 @@
+/* Harmonisé avec le design system du dashboard (.box) */
+
 .panel {
-  background: rgba(18, 24, 32, 0.85);
-  border: 1px solid rgba(0, 212, 255, 0.25);
-  border-radius: 8px;
-  padding: 1rem;
+  background: rgba(6, 20, 35, 0.88);
+  border: 1px solid rgba(0, 212, 255, 0.35);
+  border-radius: 16px;
+  padding: 1rem 1.25rem;
+  min-height: 80px;
 }
 
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 .panel-title {
+  font-family: 'Orbitron', sans-serif;
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 1.5px;
+  letter-spacing: 0.1em;
   margin: 0;
   color: #00d4ff;
 }
 
-.category {
-  margin-bottom: 16px;
+.systems-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
 
-  &:last-child {
+.category {
+  &:not(:last-child) {
     margin-bottom: 0;
   }
-
-  &--highlight {
-    padding: 0.5rem 0.6rem;
-    margin-left: -0.6rem;
-    margin-right: -0.6rem;
-    padding-left: 0.6rem;
-    padding-right: 0.6rem;
-    border-radius: 6px;
-    background: rgba(0, 212, 255, 0.08);
-    border: 1px solid rgba(0, 212, 255, 0.35);
-    box-shadow: 0 0 16px rgba(0, 212, 255, 0.25), inset 0 0 20px rgba(0, 212, 255, 0.04);
-
-    .category-label {
-      color: #00d4ff;
-      text-shadow: 0 0 10px rgba(0, 212, 255, 0.7), 0 0 20px rgba(0, 212, 255, 0.4);
-      font-weight: 700;
-    }
-  }
 }
 
+/* Titres de sections : orange Elite HUD (burnt orange / #ff8c00) */
 .category-label {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  color: #ffc236;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #ff8c00;
   display: block;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
 }
 
+/* Contenu : Exo 2 pour lisibilité (titres restent Orbitron) */
 .system-row {
+  position: relative;
+  z-index: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 0.35rem 0;
-  font-size: 0.9rem;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &::before {
+    content: '';
+    position: absolute;
+    z-index: 0;
+    top: 0;
+    bottom: 0;
+    left: -1rem;
+    right: -1rem;
+    border-radius: 6px;
+    background: transparent;
+    transition: background 0.15s;
+  }
+
+  &:hover::before {
+    background: rgba(0, 212, 255, 0.06);
+  }
+
+  .system-name,
+  .system-meta {
+    position: relative;
+    z-index: 1;
+  }
+
+  &--hq .hq-mark {
+    color: #00eaff;
+  }
+}
+
+.hq-mark {
+  margin-left: 0.25rem;
+  color: #00eaff;
 }
 
 .system-name {
+  font-family: 'Exo 2', sans-serif;
   font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .system-meta {
@@ -74,37 +108,66 @@
 }
 
 .influence {
+  font-family: 'Exo 2', sans-serif;
   font-weight: 600;
   min-width: 2.5em;
+  font-variant-numeric: tabular-nums;
 }
 
 .influence-critical .influence,
-.influence-low .influence { color: #ff4444; }
-.influence-high .influence { color: #00ff88; }
-.influence-normal .influence { color: #e6edf3; }
+.influence-low .influence {
+  color: #ff6b6b;
+}
+.influence-high .influence {
+  color: #00ff88;
+}
+.influence-normal .influence {
+  color: rgba(255, 255, 255, 0.85);
+}
 
 .delta {
-  font-size: 0.75rem;
-  &.delta-up { color: #00ff88; }
-  &.delta-down { color: #ff4444; }
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+
+  &.delta-up {
+    color: #00ff88;
+  }
+  &.delta-down {
+    color: #ff6b6b;
+  }
 }
 
 .state-badge {
+  font-family: 'Exo 2', sans-serif;
   font-size: 0.65rem;
+  font-weight: 500;
   text-transform: uppercase;
-  padding: 0.1rem 0.3rem;
-  background: rgba(0, 212, 255, 0.15);
-  border-radius: 2px;
+  padding: 0.15rem 0.35rem;
+  background: rgba(0, 212, 255, 0.2);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 4px;
+  color: #00d4ff;
 }
 
 .indicators {
   display: flex;
   gap: 0.15rem;
-  .ind-threatened { color: #ff4444; }
+  font-family: 'Exo 2', sans-serif;
+
+  .ind-threatened {
+    color: #ff6b6b;
+  }
 }
 
 .empty {
-  font-size: 0.85rem;
-  opacity: 0.6;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
   margin: 0;
+
+  &--error {
+    color: #ff6b6b;
+    opacity: 0.9;
+  }
 }

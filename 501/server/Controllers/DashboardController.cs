@@ -1,4 +1,3 @@
-using GuildDashboard.Server.DTOs;
 using GuildDashboard.Server.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,14 +8,20 @@ namespace GuildDashboard.Server.Controllers;
 public class DashboardController : ControllerBase
 {
     private readonly CommandersService _commanders;
+    private readonly CurrentGuildService _currentGuild;
 
-    public DashboardController(CommandersService commanders) => _commanders = commanders;
-
-    /// <summary>GET /api/dashboard/commanders?guildId=1</summary>
-    [HttpGet("commanders")]
-    public async Task<IActionResult> GetCommanders([FromQuery] int guildId = 1, CancellationToken ct = default)
+    public DashboardController(CommandersService commanders, CurrentGuildService currentGuild)
     {
-        var result = await _commanders.GetCommandersAsync(guildId, ct);
+        _commanders = commanders;
+        _currentGuild = currentGuild;
+    }
+
+    /// <summary>GET /api/dashboard/commanders — guildId optionnel, utilise Guild:CurrentGuildId si absent.</summary>
+    [HttpGet("commanders")]
+    public async Task<IActionResult> GetCommanders([FromQuery] int? guildId, CancellationToken ct = default)
+    {
+        var id = guildId is > 0 ? guildId.Value : _currentGuild.CurrentGuildId;
+        var result = await _commanders.GetCommandersAsync(id, ct);
         return Ok(result);
     }
 }

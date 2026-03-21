@@ -7,7 +7,7 @@ import { concatMap, delay, catchError, finalize, map, tap, toArray } from 'rxjs/
 import { ApiExplorerService } from './api-explorer.service';
 import { BridgeApiService } from '../core/services/bridge-api.service';
 import { analyzeColonisationRoute, getCandidatesInWindow, PILE_WINDOW_FALLBACK_LY, PILE_WINDOW_LY, type ColonisationRouteAnalysis, type LocalPileCandidate, type SpanshJump } from './colonisation-route.analyzer';
-import { optimizeRoute, type OptimizedRoute, type RouteModification } from './route-optimizer';
+import { optimizeRoute, distance3d, type OptimizedRoute, type RouteModification } from './route-optimizer';
 import {
   buildSpanshLiteSummary,
   computeScoreFromAnalysis,
@@ -427,16 +427,161 @@ export class ApiExplorerDemoComponent implements OnInit, OnDestroy, AfterViewChe
     return map[type] ?? type;
   }
 
+  /** Libellé lisible pour la décision d'insertion (Route optimisée V1). */
+  getInsertionDecisionLabel(decision?: string): string {
+    const map: Record<string, string> = {
+      accepted_negative_deviation: '✓ Déviation favorable',
+      accepted_small_detour: '✓ Détour acceptable',
+      rejected_large_detour: '✗ Détour trop important',
+      rejected_missing_coords: '✗ Coordonnées manquantes',
+      rejected_prev_jump_too_long: '✗ Saut précédent trop long',
+      rejected_next_jump_too_long: '✗ Saut suivant trop long',
+      rejected_score_insufficient: '✗ Gain insuffisant',
+      rejected_insufficient_data: '✗ Données insuffisantes'
+    };
+    return (decision && map[decision]) ?? '✗ Données insuffisantes';
+  }
+
+  /** Données du dépôt d'origine pour affichage (nom, score, bodies). */
+  getDepositDisplayData(pile: { pileIndex: number; pileName: string }): {
+    name: string;
+    score: number | null;
+    bodiesText: string;
+  } {
+    const enrichment = this.getEdsmEnrichment(pile.pileIndex, pile.pileName);
+    const score = this.getCandidateScore(pile.pileIndex, { name: pile.pileName });
+    if (!enrichment || !isEnrichmentKnown(enrichment)) {
+      return { name: pile.pileName, score: null, bodiesText: 'EDSM inconnu' };
+    }
+    return {
+      name: pile.pileName,
+      score,
+      bodiesText: this.formatBodiesDescription(enrichment)
+    };
+  }
+
+  /** Description des corps pour affichage (riches en métaux, rocheux, HMC atterrissables, nb corps). */
+  formatBodiesDescription(edsm: CandidateAnalysisSummary): string {
+    const parts: string[] = [];
+    const mr = edsm.metalRichLandableCount ?? 0;
+    const rocky = edsm.rockyLandableCount ?? 0;
+    const hmc = edsm.highMetalContentLandableCount ?? 0;
+    const total = edsm.bodyCount ?? 0;
+    if (mr > 0) parts.push(`${mr} riches en métaux`);
+    if (rocky > 0) parts.push(`${rocky} rocheux`);
+    if (hmc > 0) parts.push(`${hmc} haute teneur en métal (atterrissables)`);
+    return parts.length > 0 ? `${parts.join(', ')} · ${total} corps` : `${total} corps`;
+  }
+
+  /** Différences entre dépôt et meilleur candidat pour le résumé de comparaison. */
+  getDepositComparisonDiffs(
+    pile: { pileIndex: number; pileName: string },
+    best: { candidate: { name: string }; score: number; edsm: CandidateAnalysisSummary }
+  ): { scoreDiff: number; bodyCountDiff: number; parts: string[] } {
+    const depositEnrichment = this.getEdsmEnrichment(pile.pileIndex, pile.pileName);
+    const depositScore = this.getCandidateScore(pile.pileIndex, { name: pile.pileName }) ?? 0;
+    const depositBodyCount = depositEnrichment && isEnrichmentKnown(depositEnrichment)
+      ? (depositEnrichment.bodyCount ?? 0)
+      : 0;
+
+    const scoreDiff = best.score - depositScore;
+    const bodyCountDiff = (best.edsm.bodyCount ?? 0) - depositBodyCount;
+
+    const parts: string[] = [];
+    if (bodyCountDiff !== 0) {
+      parts.push(`${bodyCountDiff > 0 ? '+' : ''}${bodyCountDiff} corps`);
+    }
+    const depositHmc = depositEnrichment && isEnrichmentKnown(depositEnrichment)
+      ? (depositEnrichment.highMetalContentLandableCount ?? 0)
+      : 0;
+    const hmcDiff = (best.edsm.highMetalContentLandableCount ?? 0) - depositHmc;
+    if (hmcDiff !== 0) parts.push(`${hmcDiff > 0 ? '+' : ''}${hmcDiff} HMC landable`);
+
+    const depositMr = depositEnrichment && isEnrichmentKnown(depositEnrichment)
+      ? (depositEnrichment.metalRichLandableCount ?? 0)
+      : 0;
+    const mrDiff = (best.edsm.metalRichLandableCount ?? 0) - depositMr;
+    if (mrDiff !== 0) parts.push(`${mrDiff > 0 ? '+' : ''}${mrDiff} metal-rich landable`);
+
+    const depositRocky = depositEnrichment && isEnrichmentKnown(depositEnrichment)
+      ? (depositEnrichment.rockyLandableCount ?? 0)
+      : 0;
+    const rockyDiff = (best.edsm.rockyLandableCount ?? 0) - depositRocky;
+    if (rockyDiff !== 0) parts.push(`${rockyDiff > 0 ? '+' : ''}${rockyDiff} rocheux landable`);
+
+    if (scoreDiff !== 0) parts.push(`score ${scoreDiff > 0 ? '+' : ''}${scoreDiff}`);
+
+    return { scoreDiff, bodyCountDiff, parts };
+  }
+
+  /** Modification pour un dépôt (pour affichage décision + détail). */
+  getDepositModification(pile: { pileIndex: number }) {
+    return this.optimizedRoute?.modifications.find((m) => m.depositIndex === pile.pileIndex);
+  }
+
+  /** True si la route optimisée contient au moins un dépôt remplacé (promotion étape → dépôt). */
+  hasReplacedDeposits(route: OptimizedRoute): boolean {
+    return route.jumps.some((j) => !!(j as { replacedSystemName?: string }).replacedSystemName);
+  }
+
+  /** Libellé de décision pour la carte dépôt (raison exacte issue de insertionDecision). */
+  getDepositCardDecisionLabel(pile: { pileIndex: number }): string {
+    const mod = this.getDepositModification(pile);
+    if (!mod) return this.getInsertionDecisionLabel('rejected_insufficient_data');
+    return this.getInsertionDecisionLabel(mod.insertionDecision);
+  }
+
+  /** Classe CSS pour le bloc décision (advised | insufficient | rejected). */
+  getDepositDecisionClass(pile: { pileIndex: number }): string {
+    const mod = this.getDepositModification(pile);
+    if (!mod) return 'decision-rejected';
+    if (mod.inserted) return 'decision-advised';
+    if (mod.insertionDecision === 'rejected_score_insufficient') return 'decision-insufficient';
+    return 'decision-rejected';
+  }
+
+  /** Ligne de détail courte pour la décision (détour, gain score, distances). */
+  getDepositDecisionDetail(pile: { pileIndex: number }): string[] {
+    const mod = this.optimizedRoute?.modifications.find((m) => m.depositIndex === pile.pileIndex);
+    if (!mod) return [];
+    const parts: string[] = [];
+    parts.push(`détour = ${mod.deviationCost.toFixed(1)} LY`);
+    const scoreGain = mod.adjustedScore - mod.originalScore;
+    parts.push(`gain score = ${scoreGain > 0 ? '+' : ''}${scoreGain.toFixed(0)}`);
+    if (mod.distPrevCandidate != null) {
+      parts.push(`prev→candidate = ${mod.distPrevCandidate.toFixed(1)} LY`);
+    }
+    if (mod.distCandidateNext != null) {
+      parts.push(`candidate→next = ${mod.distCandidateNext.toFixed(1)} LY`);
+    }
+    return parts;
+  }
+
   /**
    * Libellé métier pour un jump, avec numéro pour les Dépôts (ex: Dépôt #1).
    */
-  getDisplayTypeWithIndex(jump: { type: 'START' | 'TABLIER' | 'PILE' | 'END'; pileIndex?: number }): string {
+  getDisplayTypeWithIndex(jump: { type: 'START' | 'TABLIER' | 'PILE' | 'END'; pileIndex?: number; isIntermediate?: boolean }): string {
+    if (jump?.isIntermediate) return 'interm.';
     const label = this.getDisplayType(jump.type);
     return jump.type === 'PILE' && jump.pileIndex != null ? `${label} #${jump.pileIndex}` : label;
   }
 
   /** Styles inline pour colorer les lignes selon le type (débordement de priorité sur tout autre style). */
-  getJumpRowStyle(jump: { type: 'START' | 'TABLIER' | 'PILE' | 'END' }): Record<string, string> {
+  getJumpRowStyle(jump: { type: 'START' | 'TABLIER' | 'PILE' | 'END'; isIntermediate?: boolean; replacedSystemName?: string }): Record<string, string> {
+    if (jump?.isIntermediate) {
+      return {
+        'border-left': '4px solid #e6b800',
+        'background': 'rgba(230,184,0,0.08)',
+        'color': '#e6b800'
+      };
+    }
+    if (jump?.type === 'PILE' && jump?.replacedSystemName) {
+      return {
+        'border-left': '4px solid #6a9',
+        'background': 'rgba(102,170,153,0.15)',
+        'color': '#9b6'
+      };
+    }
     const t = jump?.type;
     if (!t) return {};
     const styles: Record<string, string> = {};
@@ -564,6 +709,52 @@ export class ApiExplorerDemoComponent implements OnInit, OnDestroy, AfterViewChe
     return null;
   }
 
+  /** Libellé de la zone de recherche utilisée pour un dépôt */
+  getDepositSearchZoneLabel(pile: { pileIndex: number; candidates: Array<{ name: string }> }): string {
+    const coverage = this.getDepositCoverage(pile);
+    const fallbackUsed = this.pileFallbackUsed.get(pile.pileIndex);
+    if (coverage.fromSphere) {
+      const radius = fallbackUsed ? 60 : 50;
+      return `sphère EDSM rayon ${radius} LY`;
+    }
+    if (fallbackUsed) {
+      return `fenêtre ±${PILE_WINDOW_FALLBACK_LY} LY (fallback)`;
+    }
+    return `fenêtre ±${PILE_WINDOW_LY} LY`;
+  }
+
+  /** Distance du meilleur candidat au dépôt d'origine, ou null si indisponible */
+  getDepositBestCandidateDistance(pile: {
+    pileIndex: number;
+    pileName: string;
+    pileX?: number;
+    pileY?: number;
+    pileZ?: number;
+    candidates: Array<{ name: string; x?: number; y?: number; z?: number }>;
+  }): { distance: number; isSame: boolean } | null {
+    const best = this.getBestCandidateInPile(pile);
+    if (!best) return null;
+    if (best.candidate.name === pile.pileName) {
+      return { distance: 0, isSame: true };
+    }
+    const sphere = this.sphereCandidatesByPile.get(pile.pileIndex);
+    if (sphere && sphere.length > 0) {
+      const entry = sphere.find((s) => s.name === best.candidate.name);
+      if (entry) return { distance: entry.distance, isSame: false };
+    }
+    const hasPileCoords =
+      typeof pile.pileX === 'number' && typeof pile.pileY === 'number' && typeof pile.pileZ === 'number';
+    const cand = pile.candidates.find((c) => c.name === best.candidate.name);
+    if (hasPileCoords && cand && typeof cand.x === 'number' && typeof cand.y === 'number' && typeof cand.z === 'number') {
+      const d = distance3d(
+        { x: pile.pileX!, y: pile.pileY!, z: pile.pileZ! },
+        { x: cand.x, y: cand.y, z: cand.z }
+      );
+      return { distance: d, isSame: false };
+    }
+    return null;
+  }
+
   /** Vrai si tous les candidats du dépôt ont été enrichis (EDSMs ou unknown) */
   isDepositFullyEnriched(pile: {
     pileIndex: number;
@@ -645,6 +836,20 @@ export class ApiExplorerDemoComponent implements OnInit, OnDestroy, AfterViewChe
       rawJumps,
       bestPerPile,
       depositScoreByPile
+    });
+    const jumps = this.optimizedRoute.jumps;
+    const intermCount = jumps.filter((j) => j.isIntermediate === true).length;
+    const replacedCount = jumps.filter((j) => (j as { replacedSystemName?: string }).replacedSystemName).length;
+    jumps.forEach((j, idx) => {
+      const rep = (j as { replacedSystemName?: string }).replacedSystemName;
+      if (j.type === 'PILE' || rep) {
+        console.log(`[table] row ${idx} name=${j.name} type=${j.type} pileIndex=${j.pileIndex ?? '-'} replaced=${rep ?? '-'}`);
+      }
+    });
+    console.log('[ApiExplorerDemo] Table data source: optimizedRoute.jumps', {
+      totalJumps: jumps.length,
+      intermediateCount: intermCount,
+      replacedDepositCount: replacedCount
     });
     this.cdr.detectChanges();
   }
@@ -1237,7 +1442,10 @@ export class ApiExplorerDemoComponent implements OnInit, OnDestroy, AfterViewChe
         }
       },
       error: (err) => {
-        this.spanshColonisationError = err?.message ?? String(err);
+        const status = err?.status;
+        this.spanshColonisationError = status === 401
+          ? 'Session expirée ou non connecté. Veuillez vous reconnecter.'
+          : (err?.message ?? String(err));
         console.error('[ApiExplorerDemo] Spansh Colonisation error:', err);
         this.loadingSpanshColonisation = false;
         this.loadingSpanshColonisationResult = false;
@@ -1284,7 +1492,10 @@ export class ApiExplorerDemoComponent implements OnInit, OnDestroy, AfterViewChe
         }
       },
       error: (err) => {
-        this.spanshColonisationResultError = err?.message ?? String(err);
+        const status = err?.status;
+        this.spanshColonisationResultError = status === 401
+          ? 'Session expirée ou non connecté. Veuillez vous reconnecter.'
+          : (err?.message ?? String(err));
         console.error('[ApiExplorerDemo] Spansh Colonisation result error:', err);
         this.loadingSpanshColonisationResult = false;
         this.spanshStatusText = 'Erreur lors de la récupération du résultat.';
@@ -1325,7 +1536,10 @@ export class ApiExplorerDemoComponent implements OnInit, OnDestroy, AfterViewChe
         this.enrichAllDepositsAutomatically();
       },
       error: (err) => {
-        this.spanshColonisationResultError = err?.message ?? String(err);
+        const status = err?.status;
+        this.spanshColonisationResultError = status === 401
+          ? 'Session expirée ou non connecté. Veuillez vous reconnecter.'
+          : (err?.message ?? String(err));
         console.error('[ApiExplorerDemo] Spansh Colonisation result error:', err);
         this.loadingSpanshColonisationResult = false;
         this.spanshStatusText = 'Erreur lors de la récupération du résultat.';
