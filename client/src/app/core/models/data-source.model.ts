@@ -13,9 +13,9 @@ export interface DataSourceInfo {
 }
 
 export const DATA_SOURCE_LABELS: Record<DataSourceType, string> = {
-  live: 'Live',
+  live: 'En direct',
   cached: 'Cache',
   seed: 'Seed',
-  mock: 'Mock',
+  mock: 'Simulé',
   failed: 'Erreur',
 };

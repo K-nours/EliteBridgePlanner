@@ -1,4 +1,5 @@
 using GuildDashboard.Server.Data;
+using GuildDashboard.Server.DTOs;
 using GuildDashboard.Server.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -16,8 +17,10 @@ public class GuildController : ControllerBase
     private readonly InaraFactionService _inaraFaction;
     private readonly CurrentGuildService _currentGuild;
     private readonly GuildDashboardDbContext _db;
+    private readonly GuildSystemsImportService _importService;
+    private readonly GuildSystemsSeedLoader _seedLoader;
 
-    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db)
+    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader)
     {
         _service = service;
         _dashboard = dashboard;
@@ -26,6 +29,8 @@ public class GuildController : ControllerBase
         _inaraFaction = inaraFaction;
         _currentGuild = currentGuild;
         _db = db;
+        _importService = importService;
+        _seedLoader = seedLoader;
     }
 
     /// <summary>GET /api/integrations/elitebgs/test — diagnostic Elite BGS. HTML si Accept:text/html, sinon JSON.</summary>
@@ -180,7 +185,122 @@ public class GuildController : ControllerBase
         return Ok(guild);
     }
 
+    /// <summary>GET /api/guild/settings — URLs Inara et dates de dernière sync.</summary>
+    [HttpGet("settings")]
+    public async Task<IActionResult> GetSettings([FromQuery] int? guildId, CancellationToken ct = default)
+    {
+        var id = ResolveGuildId(guildId);
+        var guild = await _db.Guilds.AsNoTracking()
+            .Where(g => g.Id == id)
+            .Select(g => new
+            {
+                g.InaraFactionPresenceUrl,
+                g.InaraSquadronUrl,
+                g.InaraCmdrUrl,
+                g.LastSystemsImportAt,
+            })
+            .FirstOrDefaultAsync(ct);
+        if (guild == null)
+            return NotFound(new { error = $"Guild {id} introuvable" });
+
+        var lastCommandersSyncAt = await _db.SquadronSnapshots.AsNoTracking()
+            .Where(s => s.GuildId == id && s.Success)
+            .OrderByDescending(s => s.LastSyncedAt)
+            .Select(s => (DateTime?)s.LastSyncedAt)
+            .FirstOrDefaultAsync(ct);
+
+        return Ok(new
+        {
+            inaraFactionPresenceUrl = guild.InaraFactionPresenceUrl,
+            inaraSquadronUrl = guild.InaraSquadronUrl,
+            inaraCmdrUrl = guild.InaraCmdrUrl,
+            lastSystemsImportAt = guild.LastSystemsImportAt,
+            lastCommandersSyncAt,
+        });
+    }
+
+    /// <summary>PUT /api/guild/settings — met à jour les URLs Inara.</summary>
+    [HttpPut("settings")]
+    public async Task<IActionResult> UpdateSettings([FromBody] GuildSettingsUpdateDto? dto, [FromQuery] int? guildId, CancellationToken ct = default)
+    {
+        var id = ResolveGuildId(guildId);
+        if (dto == null)
+            return BadRequest(new { error = "Payload invalide" });
+
+        var factionUrl = string.IsNullOrWhiteSpace(dto.InaraFactionPresenceUrl) ? null : dto.InaraFactionPresenceUrl!.Trim();
+        var squadronUrl = string.IsNullOrWhiteSpace(dto.InaraSquadronUrl) ? null : dto.InaraSquadronUrl!.Trim();
+        var cmdrUrl = string.IsNullOrWhiteSpace(dto.InaraCmdrUrl) ? null : dto.InaraCmdrUrl!.Trim();
+
+        var (factionOk, factionError) = ValidateInaraFactionPresenceUrl(factionUrl);
+        if (!factionOk)
+            return BadRequest(new { error = factionError });
+
+        var (squadronOk, squadronError) = ValidateInaraSquadronUrl(squadronUrl);
+        if (!squadronOk)
+            return BadRequest(new { error = squadronError });
+
+        var (cmdrOk, cmdrError) = ValidateInaraCmdrUrl(cmdrUrl);
+        if (!cmdrOk)
+            return BadRequest(new { error = cmdrError });
+
+        var guild = await _db.Guilds.FirstOrDefaultAsync(g => g.Id == id, ct);
+        if (guild == null)
+            return NotFound(new { error = $"Guild {id} introuvable" });
+
+        guild.InaraFactionPresenceUrl = factionUrl;
+        guild.InaraSquadronUrl = squadronUrl;
+        guild.InaraCmdrUrl = cmdrUrl;
+
+        await _db.SaveChangesAsync(ct);
+        return Ok(new { inaraFactionPresenceUrl = guild.InaraFactionPresenceUrl, inaraSquadronUrl = guild.InaraSquadronUrl, inaraCmdrUrl = guild.InaraCmdrUrl });
+    }
+
+    private static (bool Ok, string? Error) ValidateInaraCmdrUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return (true, null);
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var u) || !u.Scheme.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            return (false, "URL CMDR invalide");
+        if (!u.Host.Contains("inara.cz", StringComparison.OrdinalIgnoreCase))
+            return (false, "URL doit pointer vers inara.cz");
+        if (!u.AbsolutePath.Contains("cmdr", StringComparison.OrdinalIgnoreCase))
+            return (false, "URL doit être une page CMDR Inara");
+        return (true, null);
+    }
+
+    private static (bool Ok, string? Error) ValidateInaraFactionPresenceUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return (true, null); // autoriser vide pour effacement
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var u) || !u.Scheme.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            return (false, "URL faction systems invalide");
+        if (!u.Host.Contains("inara.cz", StringComparison.OrdinalIgnoreCase))
+            return (false, "URL doit pointer vers inara.cz");
+        if (!u.AbsolutePath.Contains("minorfaction-presence", StringComparison.OrdinalIgnoreCase))
+            return (false, "URL doit être une page présence faction (minorfaction-presence)");
+        return (true, null);
+    }
+
+    private static (bool Ok, string? Error) ValidateInaraSquadronUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return (true, null);
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var u) || !u.Scheme.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            return (false, "URL squadron invalide");
+        if (!u.Host.Contains("inara.cz", StringComparison.OrdinalIgnoreCase))
+            return (false, "URL doit pointer vers inara.cz");
+        if (!u.AbsolutePath.Contains("squadron-roster", StringComparison.OrdinalIgnoreCase))
+            return (false, "URL doit être la page liste pilotes (squadron-roster)");
+        return (true, null);
+    }
+
     private int ResolveGuildId(int? guildId) => guildId is > 0 ? guildId.Value : _currentGuild.CurrentGuildId;
+
+    /// <summary>GET /api/guild/systems/verify — vérifie seed vs base (total attendu, total en base, manquants).</summary>
+    [HttpGet("systems/verify")]
+    public async Task<IActionResult> VerifySystemsSeed([FromQuery] int? guildId, CancellationToken ct = default)
+    {
+        var id = ResolveGuildId(guildId);
+        var result = await _seedLoader.VerifyAsync(id, ct);
+        return Ok(new { result.TotalExpected, result.TotalInDb, result.MissingNames, result.Error });
+    }
 
     /// <summary>GET /api/guild/systems?guildId=...</summary>
     [HttpGet("systems")]
@@ -199,6 +319,26 @@ public class GuildController : ControllerBase
         if (!result.IsSuccess)
             return BadRequest(new { error = result.ErrorMessage });
         return Ok(new { updated = result.UpdatedCount });
+    }
+
+    /// <summary>POST /api/guild/systems/import — importe les systèmes depuis JSON (userscript Inara). Upsert idempotent.</summary>
+    [HttpPost("systems/import")]
+    public async Task<IActionResult> ImportSystems([FromBody] GuildSystemsImportPayload? payload, [FromQuery] int? guildId, CancellationToken ct = default)
+    {
+        var id = ResolveGuildId(guildId);
+        if (payload == null)
+            return BadRequest(new { error = "Payload invalide (JSON requis)" });
+
+        var result = await _importService.ImportAsync(id, payload, ct);
+        return Ok(new
+        {
+            totalReceived = result.TotalReceived,
+            inserted = result.Inserted,
+            updated = result.Updated,
+            skipped = result.Skipped,
+            totalProcessed = result.Inserted + result.Updated + result.Skipped,
+            error = result.Error,
+        });
     }
 
     /// <summary>POST /api/guild/systems/{systemId}/toggle-headquarter — toggle HQ (déclaratif).</summary>

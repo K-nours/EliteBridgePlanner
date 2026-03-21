@@ -150,13 +150,19 @@ public class InaraFactionService
         }
     }
 
-    private static decimal ParseInfluenceFromRow(string rowText)
+    private decimal ParseInfluenceFromRow(string rowText)
     {
         var m = InfluenceRegex.Match(rowText);
-        if (m.Success && decimal.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Any,
+        if (!m.Success) return 0;
+        var s = m.Groups[1].Value;
+        if (!decimal.TryParse(s, System.Globalization.NumberStyles.Any,
                 System.Globalization.CultureInfo.InvariantCulture, out var val))
-            return Math.Clamp(val, 0, 100);
-        return 0;
+            return 0;
+        if (val > 100)
+        {
+            _log.LogWarning("[InaraFaction] Influence > 100% détectée et clamée: raw=\"{Raw}\" parsed={Parsed}", s, val);
+        }
+        return Math.Clamp(val, 0, 100);
     }
 
     private static string? ParseLastUpdateFromRow(string rowText)

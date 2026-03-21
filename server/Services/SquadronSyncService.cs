@@ -102,4 +102,91 @@ public class SquadronSyncService
 
         return new SquadronSyncResult(members.Count);
     }
+
+    /// <summary>Importe les CMDRs depuis le payload (userscript Inara squadron-roster). Upsert par nom.</summary>
+    public async Task<CommandersImportResult> ImportFromPayloadAsync(int guildId, CommandersImportPayload payload, CancellationToken ct = default)
+    {
+        var totalReceived = payload?.Commanders?.Count ?? 0;
+        if (totalReceived == 0)
+            return new CommandersImportResult(0, 0, 0, Array.Empty<string>(), "Aucun CMDR dans le payload");
+
+        _logger.LogInformation("Commanders import START: guildId={GuildId} totalReceived={Total} payloadCommandersNull={IsNull}",
+            guildId, totalReceived, payload?.Commanders == null);
+
+        var existing = await _db.SquadronMembers
+            .Where(m => m.GuildId == guildId)
+            .ToListAsync(ct);
+        var byName = existing.ToDictionary(m => m.CommanderName, StringComparer.OrdinalIgnoreCase);
+        var now = DateTime.UtcNow;
+        var imported = 0;
+        var skipped = 0;
+        var processedNames = new List<string>();
+
+        foreach (var c in payload!.Commanders!)
+        {
+            var name = (c.Name ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                skipped++;
+                continue;
+            }
+
+            processedNames.Add(name);
+            if (byName.TryGetValue(name, out var member))
+            {
+                member.Role = c.Role ?? member.Role;
+                member.LastSyncedAt = now;
+                _db.SquadronMembers.Update(member);
+            }
+            else
+            {
+                _db.SquadronMembers.Add(new SquadronMember
+                {
+                    GuildId = guildId,
+                    CommanderName = name,
+                    Role = c.Role,
+                    LastSyncedAt = now
+                });
+                byName[name] = null!; // évite doublon
+            }
+            imported++;
+        }
+
+        var incomingNames = payload.Commanders
+            .Select(c => (c.Name ?? "").Trim())
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var toRemove = byName.Keys.Where(k => byName[k] != null && !incomingNames.Contains(k)).ToList();
+        if (toRemove.Count > 0)
+        {
+            var toDelete = await _db.SquadronMembers
+                .Where(sm => sm.GuildId == guildId && toRemove.Contains(sm.CommanderName))
+                .ToListAsync(ct);
+            _db.SquadronMembers.RemoveRange(toDelete);
+        }
+
+        _db.SquadronSnapshots.Add(new SquadronSnapshot
+        {
+            GuildId = guildId,
+            LastSyncedAt = now,
+            Success = true,
+            MembersCount = imported
+        });
+
+        await _db.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "Commanders import END: guildId={GuildId} imported={Imported} totalReceived={Total} skipped={Skipped} processedNames={Names}",
+            guildId, imported, totalReceived, skipped, string.Join(", ", processedNames));
+
+        return new CommandersImportResult(imported, totalReceived, skipped, processedNames, null);
+    }
 }
+
+/// <summary>Résultat d'import CMDRs depuis userscript.</summary>
+public record CommandersImportResult(
+    int Imported,
+    int TotalReceived,
+    int Skipped,
+    IReadOnlyList<string> ProcessedNames,
+    string? Error);

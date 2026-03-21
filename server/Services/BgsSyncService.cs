@@ -38,6 +38,9 @@ public class BgsSyncService
         if (guild == null)
             return BgsSyncResult.Failed("Guilde introuvable");
 
+        // Nettoyage des influences corrompues (> 100) avant resync
+        await CleanupCorruptedInfluenceAsync(guildId, ct);
+
         var factionName = guild.FactionName ?? guild.Name;
         if (string.IsNullOrWhiteSpace(factionName))
         {
@@ -127,6 +130,41 @@ public class BgsSyncService
             _log.LogInformation("[BgsSync] RÉSULTAT: updated={Updated} systems=[{Systems}]", updated, string.Join(", ", updatedNames));
 
         return BgsSyncResult.FromSuccess(updated);
+    }
+
+    private async Task CleanupCorruptedInfluenceAsync(int guildId, CancellationToken ct)
+    {
+        var corruptGuild = await _db.GuildSystems
+            .Where(s => s.GuildId == guildId && s.InfluencePercent > 100)
+            .Select(s => new { s.Id, s.Name, s.InfluencePercent })
+            .ToListAsync(ct);
+        var corruptControlled = await _db.ControlledSystems
+            .Where(c => c.GuildId == guildId && c.InfluencePercent > 100)
+            .Select(c => new { c.Id, c.Name, c.InfluencePercent })
+            .ToListAsync(ct);
+
+        var totalFixed = 0;
+        var names = new List<string>();
+
+        foreach (var g in corruptGuild)
+        {
+            await _db.GuildSystems.Where(s => s.Id == g.Id).ExecuteUpdateAsync(
+                s => s.SetProperty(x => x.InfluencePercent, 0m), ct);
+            totalFixed++;
+            names.Add($"{g.Name}({g.InfluencePercent}%)");
+        }
+        foreach (var c in corruptControlled)
+        {
+            await _db.ControlledSystems.Where(x => x.Id == c.Id).ExecuteUpdateAsync(
+                s => s.SetProperty(x => x.InfluencePercent, 0m), ct);
+            totalFixed++;
+            if (!names.Contains($"{c.Name}({c.InfluencePercent}%)"))
+                names.Add($"{c.Name}({c.InfluencePercent}%)");
+        }
+
+        if (totalFixed > 0)
+            _log.LogInformation("[BgsSync] Nettoyage influences corrompues: {Count} ligne(s) corrigée(s), systèmes: {Names}",
+                totalFixed, string.Join(", ", names));
     }
 }
 

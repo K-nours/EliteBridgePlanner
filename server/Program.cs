@@ -29,19 +29,36 @@ builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<CommandersService>();
 builder.Services.AddScoped<SquadronSyncService>();
 builder.Services.AddScoped<DataSeeder>();
+builder.Services.AddScoped<GuildSystemsSeedLoader>();
+builder.Services.AddScoped<GuildSystemsImportService>();
 builder.Services.AddSingleton<EddnStatusService>();
 builder.Services.AddScoped<EddnMessageStore>();
 builder.Services.AddHostedService<EddnListenerService>();
 builder.Services.AddHostedService<EddnPurgeService>();
 builder.Services.AddControllers()
-    .AddJsonOptions(o => o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        o.JsonSerializerOptions.PropertyNameCaseInsensitive = true; // tolère commanders/Commanders côté payload
+    });
 
-builder.Services.AddCors(c => c.AddPolicy("AllowAll", p =>
-    p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+    });
+});
 
 var app = builder.Build();
 
-app.UseCors("AllowAll");
+// CORS doit être après UseRouting mais avant UseAuthorization (si présent).
+// Pour preflight OPTIONS, le middleware CORS doit intercepter avant toute auth.
+app.UseRouting();
+app.UseCors();
 
 using (var scope = app.Services.CreateScope())
 {
@@ -60,6 +77,13 @@ using (var scope = app.Services.CreateScope())
     ");
     var seeder = scope.ServiceProvider.GetRequiredService<DataSeeder>();
     await seeder.SeedAsync();
+
+    var currentGuildId = scope.ServiceProvider.GetRequiredService<CurrentGuildService>().CurrentGuildId;
+    var loader = scope.ServiceProvider.GetRequiredService<GuildSystemsSeedLoader>();
+    var result = await loader.LoadAsync(currentGuildId);
+    app.Logger.LogInformation(
+        "GuildSystems seed: totalSource={TotalSource} inserted={Inserted} ignored={Ignored} totalFinal={TotalFinal} missing={MissingCount}",
+        result.TotalSource, result.Inserted, result.Ignored, result.TotalFinal, result.MissingNames?.Count ?? 0);
 }
 
 app.MapControllers();

@@ -1,0 +1,83 @@
+{
+  "description": "Source manuelle des systèmes de la guild. Référence docs/GUILD-SYSTEMS.md.",
+  "systems": [
+    {
+      "name": "Hip 4332",
+      "government": "Feudal",
+      "allegiance": "Empire",
+      "power": null,
+      "population": 121797,
+      "factionCount": 5,
+      "stationCount": 3,
+      "influencePercent": 55.7,
+      "lastUpdatedText": "il y a 6 jours",
+      "category": "Origine",
+      "isClean": true
+    },
+    {
+      "name": "Mayang",
+      "government": "Feudal",
+      "allegiance": "Empire",
+      "power": null,
+      "population": 2637620755,
+      "factionCount": 6,
+      "stationCount": 4,
+      "influencePercent": 65.9,
+      "lastUpdatedText": "il y a 2 jours",
+      "category": "Guild",
+      "isClean": true
+    },
+    {
+      "name": "Hip 4794",
+      "government": "Feudal",
+      "allegiance": "Empire",
+      "power": null,
+      "population": 5234123,
+      "factionCount": 5,
+      "stationCount": 2,
+      "influencePercent": 55.7,
+      "lastUpdatedText": "il y a 6 jours",
+      "category": "Guild",
+      "isClean": true
+    },
+    {
+      "name": "Sabines",
+      "government": "Feudal",
+      "allegiance": "Empire",
+      "power": null,
+      "population": 11529624,
+      "factionCount": 6,
+      "stationCount": 5,
+      "influencePercent": 55.7,
+      "lastUpdatedText": "il y a 4 jours",
+      "category": "Guild",
+      "isClean": false
+    },
+    {
+      "name": "Achuar",
+      "government": "Corporate",
+      "allegiance": "Independent",
+      "power": null,
+      "population": 2138,
+      "factionCount": 3,
+      "stationCount": 1,
+      "influencePercent": 1.5,
+      "lastUpdatedText": "il y a 6 jours",
+      "category": "Guild",
+      "isClean": false
+    },
+    {
+      "name": "Reticuli",
+      "government": "Corporate",
+      "allegiance": "Independent",
+      "power": null,
+      "population": 45231,
+      "factionCount": 4,
+      "stationCount": 2,
+      "influencePercent": 2.2,
+      "lastUpdatedText": "il y a 6 jours",
+      "category": "Guild",
+      "isClean": false
+    }
+  ]
+}

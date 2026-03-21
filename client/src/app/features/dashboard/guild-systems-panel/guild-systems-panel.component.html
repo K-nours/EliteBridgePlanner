@@ -1,16 +1,14 @@
 <section class="panel guild-systems guild-systems--archived">
   <div class="panel-header">
-    <h3 class="panel-title">THE 501ST GUILD SYSTEMS</h3>
-    <app-data-source-badge
-        [source]="badgeSource()"
-        [customLabel]="badgeLabel()"
-        [tooltip]="badgeTooltip()"
-      />
+    <h3 class="panel-title">SYSTÈMES FACTION</h3>
+    <button type="button"
+      class="btn-sync-action"
+      [title]="inaraFactionUrl() ? (lastSystemsImportAt() ? 'Dernière sync: ' + formatLastSync(lastSystemsImportAt()!) : 'Ouvrir Inara') : 'Configurer l\'URL faction dans Paramètres'"
+      (click)="onSyncSystemsClick()"
+      [disabled]="!inaraFactionUrl()">
+      Synchronisation
+    </button>
   </div>
-  <p class="archived-notice">
-    Feature en pause — aucune source API publique fiable pour Faction → Systems → Influence %.
-    Les endpoints de diagnostic restent disponibles pour R&D.
-  </p>
   @if (panelState() === 'failed' && lastError()) {
     <p class="error-message">{{ lastError() }}</p>
   }
@@ -43,7 +41,7 @@
       }
     </div>
     <div class="category">
-      <span class="category-label">Headquarter</span>
+      <span class="category-label">Quartier général</span>
       @if (displayableHeadquarter.length > 0) {
         @for (sys of displayableHeadquarter; track sys.id) {
           <div class="system-row" [class]="getInfluenceClass(sys)" [class.system-row--hq]="sys.isHeadquarter" (click)="onSystemClick(sys)" (keydown.enter)="onSystemClick(sys)" (keydown.space)="onSystemClick(sys); $event.preventDefault()" role="button" tabindex="0" title="Cliquer pour définir ou retirer le HQ">
@@ -124,5 +122,4 @@
       }
     </div>
   </div>
-  <span class="archived-badge" title="Aucune source API fiable pour l'influence %">Feature en pause</span>
 </section>

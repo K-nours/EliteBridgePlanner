@@ -6,6 +6,9 @@
     <RootNamespace>GuildDashboard.Server</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="Data\guild-systems.seed.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
     <PackageReference Include="NetMQ" Version="4.0.1.11" />

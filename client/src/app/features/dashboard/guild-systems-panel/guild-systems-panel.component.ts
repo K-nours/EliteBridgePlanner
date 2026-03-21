@@ -5,50 +5,31 @@
 import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { GuildSystemsApiService } from '../../../core/services/guild-systems-api.service';
 import { GuildSystemsSyncService } from '../../../core/services/guild-systems-sync.service';
+import { GuildSettingsService } from '../../../core/services/guild-settings.service';
+import { InaraSyncBridgeService } from '../../../core/services/inara-sync-bridge.service';
+import { SyncHelpModalService } from '../../../core/services/sync-help-modal.service';
 import type { GuildSystemBgsDto } from '../../../core/models/guild-systems.model';
-import { DataSourceBadgeComponent } from '../../../shared/components/data-source-badge/data-source-badge.component';
-
 @Component({
   selector: 'app-guild-systems-panel',
   standalone: true,
-  imports: [DataSourceBadgeComponent],
   templateUrl: './guild-systems-panel.component.html',
   styleUrl: './guild-systems-panel.component.scss',
 })
 export class GuildSystemsPanelComponent implements OnInit {
   private readonly api = inject(GuildSystemsApiService);
   protected readonly guildSync = inject(GuildSystemsSyncService);
+  protected readonly guildSettings = inject(GuildSettingsService);
+  private readonly inaraBridge = inject(InaraSyncBridgeService);
+  private readonly syncHelpModal = inject(SyncHelpModalService);
+
+  protected readonly inaraFactionUrl = this.guildSettings.inaraFactionPresenceUrl;
+  protected readonly lastSystemsImportAt = this.guildSettings.lastSystemsImportAt;
 
   toggling = signal(false);
 
   panelState = this.guildSync.panelState;
   systems = this.guildSync.systems;
   lastError = this.guildSync.lastError;
-
-  badgeSource = computed(() => {
-    const s = this.panelState();
-    if (s === 'cached') return 'cached';
-    if (s === 'failed') return 'failed';
-    if (s === 'loading') return 'seed';
-    return 'seed';
-  });
-
-  badgeLabel = computed(() => {
-    const s = this.panelState();
-    if (s === 'loading') return 'Synchronisation...';
-    if (s === 'failed') return null;
-    if (s === 'cached') return null;
-    return 'Non synchronisé';
-  });
-
-  badgeTooltip = computed(() => {
-    const s = this.panelState();
-    const err = this.lastError();
-    if (s === 'loading') return 'Synchronisation en cours...';
-    if (s === 'failed') return err ?? 'Une erreur est survenue';
-    if (s === 'cached') return 'Données issues d\'une sync BGS';
-    return 'Aucune synchronisation effectuée';
-  });
 
   emptyMessage = computed(() => {
     const s = this.panelState();
@@ -58,6 +39,21 @@ export class GuildSystemsPanelComponent implements OnInit {
 
   ngOnInit(): void {
     this.guildSync.loadSystems();
+  }
+
+  protected formatLastSync(iso: string): string {
+    const d = new Date(iso);
+    return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
+  }
+
+  protected onSyncSystemsClick(): void {
+    const url = this.guildSettings.inaraFactionPresenceUrl();
+    if (!url) return;
+    if (!this.inaraBridge.checkNow()) {
+      this.syncHelpModal.show();
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   onSystemClick(sys: GuildSystemBgsDto): void {
@@ -90,19 +86,20 @@ export class GuildSystemsPanelComponent implements OnInit {
     return this.systems().others.filter(s => !s.isThreatened && !s.isExpansionCandidate);
   }
 
+  /** Base interne = source primaire. Tous les systèmes seedés sont affichés. */
   get displayableOrigin() {
-    return this.systems().origin.filter(s => !s.isFromSeed);
+    return this.systems().origin;
   }
 
   get displayableHeadquarter() {
-    return this.systems().headquarter.filter(s => !s.isFromSeed);
+    return this.systems().headquarter;
   }
 
   get displayableCriticalSystems() {
-    return this.criticalSystems.filter(s => !s.isFromSeed);
+    return this.criticalSystems;
   }
 
   get displayableOtherSystems() {
-    return this.otherSystems.filter(s => !s.isFromSeed);
+    return this.otherSystems;
   }
 }
