@@ -71,6 +71,7 @@ export class FrontierAuthService {
             guildId: res.guildId ?? null,
             guildName: res.guildName ?? null,
             lastFetchedAt: new Date().toISOString(),
+            avatarUrl: res.avatarUrl ?? null,
           });
           this._state.set('connected');
         } else {

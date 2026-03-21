@@ -1,3 +1,6 @@
+// Feature archived – no reliable external data source for Faction → Systems → Influence %.
+// Conserver pour R&D futur. Voir docs/GUILD-SYSTEMS.md § Raison de clôture.
+
 using GuildDashboard.Server.Data;
 using GuildDashboard.Server.DTOs;
 using GuildDashboard.Server.Models;

@@ -1,6 +1,7 @@
 /* Harmonisé avec le design system du dashboard (.box) */
 
 .panel {
+  position: relative;
   background: rgba(6, 20, 35, 0.88);
   border: 1px solid rgba(0, 212, 255, 0.14);
   border-radius: 16px;
@@ -36,6 +37,30 @@
   letter-spacing: 0.1em;
   margin: 0;
   color: #00d4ff;
+}
+
+.archived-badge {
+  position: absolute;
+  bottom: 0.75rem;
+  right: 1rem;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  background: rgba(255, 140, 0, 0.15);
+  border: 1px solid rgba(255, 140, 0, 0.35);
+  border-radius: 4px;
+  color: #ff8c00;
+  opacity: 0.9;
+}
+
+.archived-notice {
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0 0 1rem;
+  padding: 0.5rem 0;
+  line-height: 1.35;
 }
 
 .systems-list {

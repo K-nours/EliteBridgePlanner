@@ -1,3 +1,7 @@
+/**
+ * Feature archived – no reliable external data source for Faction → Systems → Influence %.
+ * Conserver pour R&D futur. Voir docs/GUILD-SYSTEMS.md § Raison de clôture.
+ */
 import { Injectable, inject, signal } from '@angular/core';
 import { GuildSystemsApiService } from './guild-systems-api.service';
 import { SyncLogService } from './sync-log.service';

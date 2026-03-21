@@ -1,3 +1,7 @@
+/**
+ * Feature archived – no reliable external data source for Faction → Systems → Influence %.
+ * Conserver pour R&D futur. Voir docs/GUILD-SYSTEMS.md.
+ */
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';

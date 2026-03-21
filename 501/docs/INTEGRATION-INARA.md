@@ -2,6 +2,13 @@
 
 Documentation de l'intégration avec Inara.cz pour le Guild Dashboard 501.
 
+## Statut technique
+
+| Composant | Statut |
+|-----------|--------|
+| **Frontier profile** (OAuth, CAPI) | OK |
+| **Inara avatar API** (getCommanderProfile) | Bloqué — accès application refusé par Inara |
+
 ---
 
 ## Faction presence (BGS) — source Guild Systems
@@ -77,3 +84,35 @@ We just need to make sure you're a real visitor and not a bot.
 - Roster local géré en base
 - Enrichissement via API Inara (`getCommanderProfile`)
 - Intégration Frontier (source officielle)
+
+---
+
+## Avatar CMDR connecté (getCommanderProfile) — gelé
+
+### Contexte
+
+Le CMDR connecté via Frontier OAuth pouvait être enrichi avec son avatar Inara via `getCommanderProfile(searchName)`.
+
+### Blocage actuel
+
+**getCommanderProfile est bloqué par Inara pour cette application.**
+
+- Réponse Inara systématique : `eventStatus: 400`, `eventStatusText: "This application has no access allowed"`.
+- Testé avec plusieurs clés API ; le blocage est côté autorisation Inara (application non validée), pas côté code.
+- Code backend prêt (flux, matching 0/O, logs, endpoint debug). Aucune modification de la logique de matching prévue tant que l'accès API n'est pas débloqué.
+
+### Fallback actuel
+
+- Initiale du CMDR affichée dans un cercle quand aucun avatar disponible.
+
+### Reprise
+
+Reprise possible **uniquement après validation/autorisation côté Inara** (inara.cz/inara-api — statut de l'application, droits getCommanderProfile).
+
+### Test manuel (pour validation future)
+
+```http
+GET /api/user/debug/inara-profile?searchName=Bib0xkn0x
+```
+
+Voir `docs/DEBUG-DEV.md` et `docs/DIAGNOSTIC-INARA-AVATAR-BIB0XKN0X.md` pour les détails.

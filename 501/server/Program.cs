@@ -14,6 +14,7 @@ builder.Services.AddDbContext<GuildDashboardDbContext>(o =>
 builder.Services.AddHttpClient<InaraApiService>();
 builder.Services.AddHttpClient<InaraSquadronRosterService>();
 builder.Services.AddHttpClient<EliteBgsApiService>();
+builder.Services.AddHttpClient<EdsmApiService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<InaraFactionService>();
 builder.Services.AddScoped<InaraClient>();

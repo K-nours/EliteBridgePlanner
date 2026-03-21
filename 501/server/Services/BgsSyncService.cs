@@ -1,3 +1,6 @@
+// Feature archived – no reliable external data source for Faction → Systems → Influence %.
+// Conserver pour R&D futur. Voir docs/GUILD-SYSTEMS.md § Raison de clôture.
+
 using GuildDashboard.Server.Data;
 using GuildDashboard.Server.Models;
 using Microsoft.EntityFrameworkCore;
@@ -5,29 +8,28 @@ using Microsoft.EntityFrameworkCore;
 namespace GuildDashboard.Server.Services;
 
 /// <summary>
-/// Synchronise les données BGS réelles (Inara scraping) vers le cache local (ControlledSystem).
-/// Flux : Inara presence page → mapping → DB → GET /api/guild/systems → UI.
+/// Synchronise les données BGS via EDSM (enrichissement) vers le cache local (ControlledSystem).
+/// Flux : GuildSystem (base) → EDSM /api-v1/systems (batch) → ControlledSystem → GET /api/guild/systems → UI.
 /// </summary>
 /// <remarks>
-/// Source : Inara (page minorfaction-presence). EliteBGS abandonné (timeouts systématiques).
-/// Nécessite Guild.InaraFactionId configuré en base. InfluenceDelta24h, IsControlled, IsThreatened non disponibles Inara → null/false.
+/// Source : EDSM API. Données obtenues : faction contrôlante, factionState, IsControlled.
+/// NON fourni par EDSM : InfluencePercent, InfluenceDelta24h, IsThreatened, IsExpansionCandidate, stations.
+/// Nécessite Guild.FactionName. Voir docs/INTEGRATION-EDSM.md et docs/GUILD-SYSTEMS.md.
 /// </remarks>
 public class BgsSyncService
 {
     private readonly GuildDashboardDbContext _db;
-    private readonly InaraFactionService _inaraFaction;
+    private readonly EdsmApiService _edsm;
     private readonly ILogger<BgsSyncService> _log;
 
-    private static readonly string[] ExpansionCompatibleStates = ["None", "Expansion", "Boom"];
-
-    public BgsSyncService(GuildDashboardDbContext db, InaraFactionService inaraFaction, ILogger<BgsSyncService> log)
+    public BgsSyncService(GuildDashboardDbContext db, EdsmApiService edsm, ILogger<BgsSyncService> log)
     {
         _db = db;
-        _inaraFaction = inaraFaction;
+        _edsm = edsm;
         _log = log;
     }
 
-    /// <summary>Lance une synchronisation BGS pour la guilde. Met à jour ControlledSystem avec les données réelles (Inara).</summary>
+    /// <summary>Lance une synchronisation BGS pour la guilde. Met à jour ControlledSystem avec State, IsControlled, LastUpdated depuis EDSM.</summary>
     public async Task<BgsSyncResult> SyncAsync(int guildId = 1, CancellationToken ct = default)
     {
         var guild = await _db.Guilds
@@ -36,46 +38,42 @@ public class BgsSyncService
         if (guild == null)
             return BgsSyncResult.Failed("Guilde introuvable");
 
-        if (!guild.InaraFactionId.HasValue || guild.InaraFactionId.Value <= 0)
-        {
-            _log.LogWarning("[BgsSync] InaraFactionId non configuré pour guildId={GuildId}", guildId);
-            return BgsSyncResult.Failed("InaraFactionId non configuré pour cette guilde");
-        }
-
         var factionName = guild.FactionName ?? guild.Name;
-        _log.LogInformation("[BgsSync] Démarrage sync guildId={GuildId} faction={FactionName} inaraFactionId={InaraFactionId}",
-            guildId, factionName, guild.InaraFactionId);
-
-        var presence = await _inaraFaction.GetFactionPresenceAsync(guild.InaraFactionId.Value, ct);
-        if (presence == null || presence.Count == 0)
+        if (string.IsNullOrWhiteSpace(factionName))
         {
-            _log.LogWarning("[BgsSync] RAISON: Aucune donnée Inara pour faction={FactionName} id={Id}. Page inaccessible ou structure DOM modifiée.",
-                factionName, guild.InaraFactionId);
-            return BgsSyncResult.Failed("Aucune donnée BGS disponible (Inara : page inaccessible ou structure modifiée)");
+            _log.LogWarning("[BgsSync] FactionName non configuré pour guildId={GuildId}", guildId);
+            return BgsSyncResult.Failed("FactionName non configuré pour cette guilde");
         }
 
         var guildSystems = await _db.GuildSystems
             .Where(s => s.GuildId == guildId)
             .ToListAsync(ct);
-        var guildSystemNames = new HashSet<string>(guildSystems.Select(s => s.Name), StringComparer.OrdinalIgnoreCase);
+        if (guildSystems.Count == 0)
+        {
+            _log.LogWarning("[BgsSync] Aucun système en base pour guildId={GuildId}", guildId);
+            return BgsSyncResult.Failed("Aucun système à synchroniser (ajouter des GuildSystem)");
+        }
 
-        _log.LogInformation("[BgsSync] Systèmes en base ({Count}): [{Names}]",
-            guildSystems.Count, string.Join(", ", guildSystems.Select(s => s.Name)));
-        _log.LogInformation("[BgsSync] Systèmes Inara ({Count}): [{Names}]",
-            presence.Count, string.Join(", ", presence.Take(20).Select(p => p.SystemName)) + (presence.Count > 20 ? "..." : ""));
+        var systemNames = guildSystems.Select(s => s.Name).Distinct().ToList();
+        _log.LogInformation("[BgsSync] Démarrage sync guildId={GuildId} faction={FactionName} systems={Count}",
+            guildId, factionName, systemNames.Count);
 
-        var presenceBySystem = presence
-            .Where(p => guildSystemNames.Contains(p.SystemName))
-            .ToDictionary(p => p.SystemName, p => p, StringComparer.OrdinalIgnoreCase);
+        IReadOnlyDictionary<string, EdsmApiService.EdsmSystemInfo> edsmData;
+        try
+        {
+            edsmData = await _edsm.GetSystemsBatchAsync(systemNames, ct);
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "[BgsSync] Erreur EDSM pour guildId={GuildId}", guildId);
+            return BgsSyncResult.Failed("Erreur lors de l'appel EDSM : " + ex.Message);
+        }
 
-        var matched = presenceBySystem.Keys.ToList();
-        var notFound = guildSystems.Where(gs => !presenceBySystem.ContainsKey(gs.Name)).Select(gs => gs.Name).ToList();
-
-        if (matched.Count > 0)
-            _log.LogInformation("[BgsSync] MATCH ({Count}): [{Systems}]", matched.Count, string.Join(", ", matched));
-        if (notFound.Count > 0)
-            _log.LogWarning("[BgsSync] NON-MATCH / ignorés ({Count}): [{Systems}] — noms non correspondants ou absents dans Inara",
-                notFound.Count, string.Join(", ", notFound));
+        if (edsmData.Count == 0)
+        {
+            _log.LogWarning("[BgsSync] Aucune donnée EDSM reçue pour les systèmes demandés");
+            return BgsSyncResult.Failed("Aucune donnée EDSM reçue (systèmes inconnus ou API indisponible)");
+        }
 
         var updated = 0;
         var updatedNames = new List<string>();
@@ -83,7 +81,7 @@ public class BgsSyncService
 
         foreach (var gs in guildSystems)
         {
-            if (!presenceBySystem.TryGetValue(gs.Name, out var pres))
+            if (!edsmData.TryGetValue(gs.Name, out var info))
                 continue;
 
             var cs = await _db.ControlledSystems
@@ -96,6 +94,7 @@ public class BgsSyncService
                     GuildId = guildId,
                     Name = gs.Name,
                     Category = gs.Category,
+                    InfluencePercent = gs.InfluencePercent,
                     IsHeadquarter = false,
                     IsClean = gs.IsClean,
                     CreatedAt = now,
@@ -104,21 +103,14 @@ public class BgsSyncService
                 _db.ControlledSystems.Add(cs);
             }
 
-            // Valeurs réelles depuis Inara
-            cs.InfluencePercent = pres.InfluencePercent;
-            cs.State = pres.State;
+            cs.State = string.IsNullOrWhiteSpace(info.FactionState) ? null : info.FactionState.Trim();
+            cs.IsControlled = string.Equals(info.Faction?.Trim(), factionName.Trim(), StringComparison.OrdinalIgnoreCase);
             cs.LastUpdated = now;
             cs.UpdatedAt = now;
 
             cs.InfluenceDelta24h = null;
-
-            // IsExpansionCandidate : influence >= 60% et état compatible si disponible
-            cs.IsExpansionCandidate = pres.InfluencePercent >= 60
-                && (string.IsNullOrEmpty(pres.State) || ExpansionCompatibleStates.Contains(pres.State, StringComparer.OrdinalIgnoreCase));
-
-            // Inara ne fournit pas le breakdown par faction → IsControlled/IsThreatened non déterminables
-            cs.IsControlled = false;
             cs.IsThreatened = false;
+            cs.IsExpansionCandidate = false;
 
             cs.IsFromSeed = false;
             updated++;
@@ -127,20 +119,12 @@ public class BgsSyncService
 
         await _db.SaveChangesAsync(ct);
 
-        var ignored = guildSystems.Count - updated;
+        var notFound = systemNames.Count - updated;
+        if (notFound > 0)
+            _log.LogWarning("[BgsSync] Systèmes non trouvés dans EDSM ({Count})", notFound);
+
         if (updated > 0)
-        {
-            _log.LogInformation("[BgsSync] RÉSULTAT: updated={Updated} ignorés={Ignored} systems=[{Systems}]",
-                updated, ignored, string.Join(", ", updatedNames));
-        }
-        else
-        {
-            _log.LogWarning("[BgsSync] RÉSULTAT: 0 système mis à jour. Ignorés={Ignored}. RAISON: {Reason}",
-                ignored,
-                notFound.Count == guildSystems.Count
-                    ? "Aucun nom de système en base ne correspond à Inara (noms différents ou faction sans présence dans ces systèmes)"
-                    : "Vérifier les logs Inara ci-dessus (parse, structure HTML)");
-        }
+            _log.LogInformation("[BgsSync] RÉSULTAT: updated={Updated} systems=[{Systems}]", updated, string.Join(", ", updatedNames));
 
         return BgsSyncResult.FromSuccess(updated);
     }

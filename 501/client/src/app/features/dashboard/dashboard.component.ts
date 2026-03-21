@@ -48,9 +48,19 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
               @if (frontierMenuOpen()) {
                 <div class="frontier-menu-backdrop" (click)="frontierMenuOpen.set(false)"></div>
               }
-              <button type="button" class="frontier-cmdr-btn" (click)="frontierMenuOpen.set(!frontierMenuOpen())">
-                {{ frontierAuth.commanderName() ?? 'CMDR' }}
-              </button>
+              <div class="frontier-cmdr-trigger" role="button" tabindex="0"
+                (click)="frontierMenuOpen.set(!frontierMenuOpen())"
+                (keydown.enter)="frontierMenuOpen.set(!frontierMenuOpen())"
+                (keydown.space.prevent)="frontierMenuOpen.set(!frontierMenuOpen())">
+                <span class="frontier-cmdr-name">{{ frontierAuth.commanderName() ?? 'CMDR' }}</span>
+                <div class="frontier-cmdr-avatar">
+                  @if (frontierAuth.profile()?.avatarUrl; as url) {
+                    <img [src]="url" [alt]="frontierAuth.commanderName() ?? 'CMDR'" referrerpolicy="no-referrer" />
+                  } @else {
+                    <span class="frontier-cmdr-initial">{{ (frontierAuth.commanderName() ?? 'C').charAt(0).toUpperCase() }}</span>
+                  }
+                </div>
+              </div>
               @if (frontierMenuOpen()) {
                 <div class="frontier-menu">
                   <button type="button" class="frontier-menu-item" (click)="frontierAuth.logout(); frontierMenuOpen.set(false)">
@@ -213,7 +223,7 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     }
     .header-zone {
       position: relative;
-      z-index: 1;
+      z-index: 2;
       min-height: 104px;
       width: 100%;
       background: rgba(6, 20, 35, 0.88);
@@ -226,7 +236,8 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     .header-frontier {
       position: absolute;
       right: 1rem;
-      top: 24px;
+      top: 50%;
+      transform: translateY(-50%);
       display: flex;
       align-items: center;
       gap: 0.5rem;
@@ -243,19 +254,50 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       z-index: 100;
       cursor: default;
     }
-    .frontier-cmdr-btn,
-    .frontier-cmdr {
-      color: rgba(110, 231, 183, 0.95);
-      font-weight: 500;
+    .frontier-cmdr-trigger {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
       background: none;
       border: none;
       padding: 0;
-      font: inherit;
       cursor: pointer;
+      font: inherit;
     }
-    .frontier-cmdr-btn:hover {
-      color: #6ee7b7;
+    .frontier-cmdr-trigger .frontier-cmdr-name {
+      color: #00d4ff;
+      font-weight: 500;
+    }
+    .frontier-cmdr-trigger:hover .frontier-cmdr-name {
+      color: #00eaff;
       text-decoration: underline;
+    }
+    .frontier-cmdr-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(0, 212, 255, 0.2);
+      border: 1px solid rgba(0, 212, 255, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .frontier-cmdr-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .frontier-cmdr-initial {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #00d4ff;
+    }
+    .frontier-cmdr {
+      color: rgba(110, 231, 183, 0.95);
+      font-weight: 500;
     }
     .frontier-menu {
       position: absolute;

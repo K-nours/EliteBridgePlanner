@@ -43,6 +43,7 @@ html, body {
   color: #00eaff;
   background: rgba(6, 20, 35, 0.98);
   border: 1px solid rgba(0, 212, 255, 0.5);
+  border-radius: 8px;
   white-space: nowrap;
   max-width: min(400px, calc(100vw - 48px));
   pointer-events: none;

@@ -1,3 +1,7 @@
+/**
+ * Feature archived – no reliable external data source for Faction → Systems → Influence %.
+ * Panneau conservé avec marquage "Feature en pause". Voir docs/GUILD-SYSTEMS.md.
+ */
 import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { GuildSystemsApiService } from '../../../core/services/guild-systems-api.service';
 import { GuildSystemsSyncService } from '../../../core/services/guild-systems-sync.service';

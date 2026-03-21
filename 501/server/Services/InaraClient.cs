@@ -57,8 +57,8 @@ public class InaraClient
                 string? avatarUrl = null;
                 try
                 {
-                    var profile = await _inara.GetCommanderProfileAsync(name, ct);
-                    avatarUrl = profile?.AvatarImageUrl;
+                    var profileResult = await _inara.GetCommanderProfileAsync(name, ct);
+                    avatarUrl = profileResult?.AvatarImageUrl;
                 }
                 catch (Exception ex)
                 {
