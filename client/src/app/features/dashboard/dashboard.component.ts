@@ -104,6 +104,10 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     </div>
   `,
   styles: [`
+    :host {
+      display: block;
+      width: 100%;
+    }
     .page {
       position: relative;
       display: flex;
@@ -111,6 +115,7 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       min-height: 100vh;
       width: 100%;
       max-width: 100vw;
+      overflow-x: clip;
     }
     .page-bg {
       position: fixed;
@@ -145,7 +150,7 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       min-height: 104px;
       width: 100%;
       background: rgba(6, 20, 35, 0.88);
-      border-bottom: 1px solid rgba(0, 212, 255, 0.35);
+      border-bottom: 1px solid rgba(0, 212, 255, 0.22);
       padding: 24px 1rem 2.5rem;
       display: flex;
       align-items: flex-start;
@@ -171,13 +176,13 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     }
     .title {
       margin: 0;
-      font-size: 26px;
+      font-size: 30px;
       font-family: 'Orbitron', sans-serif;
       color: #00eaff;
       text-shadow:
-        0 0 5px rgba(0, 234, 255, 0.7),
-        0 0 10px rgba(0, 234, 255, 0.5),
-        0 0 20px rgba(0, 234, 255, 0.3);
+        0 0 5px rgba(0, 234, 255, 0.45),
+        0 0 10px rgba(0, 234, 255, 0.3),
+        0 0 20px rgba(0, 234, 255, 0.18);
     }
     .emblem-box-wrapper {
       position: relative;
@@ -204,7 +209,7 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       height: 72px;
       border-radius: 16px;
       border: 1px solid rgba(0, 212, 255, 0.5);
-      box-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
+      box-shadow: 0 0 6px rgba(0, 212, 255, 0.25);
       background: rgba(6, 20, 35, 0.95);
       display: flex;
       align-items: center;
@@ -223,7 +228,7 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     .emblem-box:hover:not(:disabled) {
       transform: scale(1.06);
       border-color: rgba(0, 234, 255, 0.9);
-      box-shadow: 0 0 14px rgba(0, 234, 255, 0.6), 0 0 24px rgba(0, 234, 255, 0.3);
+      box-shadow: 0 0 10px rgba(0, 234, 255, 0.4), 0 0 18px rgba(0, 234, 255, 0.2);
     }
     .emblem-box:focus-visible {
       outline: 2px solid rgba(0, 234, 255, 0.8);
@@ -240,21 +245,31 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       flex: 1;
       min-height: 0;
       display: grid;
-      grid-template-columns: minmax(160px, 1fr) minmax(280px, 2.2fr) minmax(160px, 1fr);
+      /* minmax(0, 1fr) pour que le centre prenne l'espace restant */
+      grid-template-columns: minmax(160px, 1fr) minmax(0, 2fr) minmax(160px, 1fr);
       align-items: stretch;
       gap: 1rem;
       width: 100%;
       max-width: 100%;
       margin: 0;
       padding: 64px 1rem 1rem;
+      box-sizing: border-box;
     }
-    @media (min-width: 900px) {
+    @media (min-width: 1200px) {
+      .header-zone { padding: 1.5rem 1.5rem 2.5rem; }
+      .main-grid {
+        width: 100%;
+        grid-template-columns: minmax(200px, 400px) minmax(0, 1fr) minmax(200px, 400px);
+        gap: 1.5rem;
+        padding: 64px 1.5rem 1.5rem;
+        box-sizing: border-box;
+      }
+    }
+    @media (min-width: 900px) and (max-width: 1199px) {
       .header-zone { padding: 1.5rem 1.5rem 2.5rem; }
       .main-grid {
         gap: 1.5rem;
         padding: 64px 1.5rem 1.5rem;
-        max-width: 1600px;
-        margin: 0 auto;
       }
     }
     @media (max-width: 768px) {
@@ -270,16 +285,30 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       display: flex;
       flex-direction: column;
       gap: 1rem;
+      min-width: 0;
+    }
+    .col-center {
+      width: 100%;
+    }
+    .col-center .map-section,
+    .col-center .box-sync-status,
+    .col-center .center-row,
+    .col-center .box {
+      width: 100%;
     }
     .col-left .box,
     .col-right .box {
-      flex: 1;
+      flex: 1 1 auto;
       min-height: 0;
     }
     .box {
       background: rgba(6, 20, 35, 0.88);
-      border: 1px solid rgba(0, 212, 255, 0.35);
+      border: 1px solid rgba(0, 212, 255, 0.14);
       border-radius: 16px;
+      box-shadow:
+        0 0 5px rgba(0, 234, 255, 0.03),
+        0 0 10px rgba(0, 234, 255, 0.02),
+        0 0 20px rgba(0, 234, 255, 0.01);
       padding: 1rem 1.25rem;
       min-height: 80px;
     }

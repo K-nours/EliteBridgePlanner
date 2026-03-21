@@ -13,15 +13,15 @@ import { DataSourceType, DATA_SOURCE_LABELS } from '../../../core/models/data-so
   `,
   styles: [`
     .data-source-badge {
+      font-family: 'Orbitron', sans-serif;
       font-size: 0.6rem;
-      text-transform: uppercase;
       padding: 0.1rem 0.35rem;
       border-radius: 2px;
       opacity: 0.85;
     }
     .data-source-badge--live { background: rgba(0, 255, 136, 0.2); color: #00ff88; }
     .data-source-badge--cached { background: rgba(0, 212, 255, 0.2); color: #00d4ff; }
-    .data-source-badge--seed { background: rgba(255, 194, 54, 0.2); color: #ffc236; }
+    .data-source-badge--seed { background: rgba(255, 194, 54, 0.15); color: #ffc236; }
     .data-source-badge--mock { background: rgba(128, 128, 128, 0.2); color: #aaa; }
   `],
 })

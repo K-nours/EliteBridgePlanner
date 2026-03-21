@@ -11,7 +11,8 @@ public record GuildSystemBgsDto(
     bool IsHeadquarter,
     bool IsClean,
     string Category,
-    DateTime? LastUpdated
+    DateTime? LastUpdated,
+    bool IsFromSeed
 );
 
 public record GuildSystemsResponseDto(

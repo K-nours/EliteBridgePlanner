@@ -86,4 +86,21 @@ export class GuildSystemsPanelComponent implements OnInit {
   get otherSystems() {
     return this.systems().others.filter(s => !s.isThreatened && !s.isExpansionCandidate);
   }
+
+  /** Systèmes affichables : uniquement ceux issus d'une sync (jamais seed). */
+  get displayableOrigin() {
+    return this.systems().origin.filter(s => !s.isFromSeed);
+  }
+
+  get displayableHeadquarter() {
+    return this.systems().headquarter.filter(s => !s.isFromSeed);
+  }
+
+  get displayableCriticalSystems() {
+    return this.criticalSystems.filter(s => !s.isFromSeed);
+  }
+
+  get displayableOtherSystems() {
+    return this.otherSystems.filter(s => !s.isFromSeed);
+  }
 }

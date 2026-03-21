@@ -10,6 +10,8 @@ export interface GuildSystemBgsDto {
   isClean: boolean;
   category: string;
   lastUpdated?: string;
+  /** false = données issues d'une sync réelle, affichées. true = seed, jamais affiché. */
+  isFromSeed: boolean;
 }
 
 export type GuildSystemsDataSource = 'seed' | 'cached';
