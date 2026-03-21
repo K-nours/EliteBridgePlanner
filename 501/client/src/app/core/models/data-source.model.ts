@@ -2,7 +2,7 @@
  * Indicateur technique de source de données pour chaque panneau.
  * Permet de savoir si la donnée affichée est live, cached, seed ou mock.
  */
-export type DataSourceType = 'live' | 'cached' | 'seed' | 'mock';
+export type DataSourceType = 'live' | 'cached' | 'seed' | 'mock' | 'failed';
 
 export interface DataSourceInfo {
   type: DataSourceType;
@@ -17,4 +17,5 @@ export const DATA_SOURCE_LABELS: Record<DataSourceType, string> = {
   cached: 'Cache',
   seed: 'Seed',
   mock: 'Mock',
+  failed: 'Erreur',
 };

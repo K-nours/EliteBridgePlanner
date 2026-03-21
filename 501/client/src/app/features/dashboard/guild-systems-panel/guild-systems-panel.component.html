@@ -1,14 +1,15 @@
 <section class="panel guild-systems">
   <div class="panel-header">
     <h3 class="panel-title">THE 501ST GUILD SYSTEMS</h3>
-    @if (!error()) {
-      <app-data-source-badge
-        [source]="dataSource() === 'cached' ? 'cached' : 'seed'"
-        [customLabel]="dataSource() === 'seed' ? 'Non synchronisé' : null"
-        [tooltip]="dataSource() === 'seed' ? 'Aucune synchronisation effectuée' : 'Données issues d\'une sync'"
+    <app-data-source-badge
+        [source]="badgeSource()"
+        [customLabel]="badgeLabel()"
+        [tooltip]="badgeTooltip()"
       />
-    }
   </div>
+  @if (panelState() === 'failed' && lastError()) {
+    <p class="error-message">{{ lastError() }}</p>
+  }
   <div class="systems-list">
     <div class="category">
       <span class="category-label">Origine</span>
@@ -34,7 +35,7 @@
           </div>
         }
       } @else {
-        <p class="empty" [class.empty--error]="error()">{{ loading() ? "Chargement..." : "Aucun système" }}</p>
+        <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
       }
     </div>
     <div class="category">
@@ -61,7 +62,7 @@
           </div>
         }
       } @else {
-        <p class="empty" [class.empty--error]="error()">{{ loading() ? "Chargement..." : "Aucun système" }}</p>
+        <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
       }
     </div>
     <div class="category">
@@ -88,7 +89,7 @@
           </div>
         }
       } @else {
-        <p class="empty" [class.empty--error]="error()">{{ loading() ? "Chargement..." : "Aucun système" }}</p>
+        <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
       }
     </div>
     <div class="category">
@@ -115,7 +116,7 @@
           </div>
         }
       } @else {
-        <p class="empty" [class.empty--error]="error()">{{ loading() ? "Chargement..." : "Aucun système" }}</p>
+        <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
       }
     </div>
   </div>

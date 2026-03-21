@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 
 namespace GuildDashboard.Server.Services;
@@ -34,23 +36,38 @@ public class EliteBgsApiService
             return null;
 
         var url = $"{BaseUrl}/factions?name={Uri.EscapeDataString(factionName)}";
-        _log.LogInformation("[EliteBgs] Appel URL={Url} faction={FactionName}", url, factionName);
+        var userAgent = _http.DefaultRequestHeaders.UserAgent.ToString();
+        _log.LogInformation("[EliteBgs] Requête: method=GET url={Url} timeout={Timeout}s userAgent={UserAgent} faction={FactionName}",
+            url, _http.Timeout.TotalSeconds, userAgent, factionName);
 
         try
         {
             var response = await _http.GetAsync(url, ct);
-            response.EnsureSuccessStatusCode();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _log.LogWarning("[EliteBgs] Échec http_non_200: status={Status} reason={Reason} url={Url}",
+                    (int)response.StatusCode, response.ReasonPhrase, url);
+                return null;
+            }
+
             var json = await response.Content.ReadAsStringAsync(ct);
-            _log.LogInformation("[EliteBgs] Réponse brute longueur={Length} preview={Preview}",
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                _log.LogWarning("[EliteBgs] Échec empty_response: réponse vide url={Url}", url);
+                return null;
+            }
+
+            _log.LogInformation("[EliteBgs] Réponse: longueur={Length} preview={Preview}",
                 json.Length, json.Length > 500 ? json[..500] + "..." : json);
 
             var parsed = ParseFactionPresence(json, factionName);
             if (parsed != null)
             {
                 foreach (var p in parsed)
-                    _log.LogInformation("[EliteBgs] Système EliteBGS: name={Name} influence={Influence} state={State}",
+                    _log.LogInformation("[EliteBgs] Système: name={Name} influence={Influence} state={State}",
                         p.SystemName, p.InfluencePercent, p.State ?? "(null)");
-                _log.LogInformation("[EliteBgs] Total systèmes retournés par Elite BGS: {Count}", parsed.Count);
+                _log.LogInformation("[EliteBgs] Total systèmes: {Count}", parsed.Count);
             }
             else
             {
@@ -58,16 +75,42 @@ public class EliteBgsApiService
                 {
                     using var d = JsonDocument.Parse(json);
                     var keys = string.Join(", ", d.RootElement.EnumerateObject().Select(p => p.Name));
-                    _log.LogWarning("[EliteBgs] Parse échoué ou docs vides. Clés racine: [{Keys}]. Structure attendue: docs[].faction_presence[].system_name", keys);
+                    _log.LogWarning("[EliteBgs] Échec empty_docs ou mapping: clés racine=[{Keys}]. Structure attendue: docs[].faction_presence[].system_name", keys);
                 }
-                catch { _log.LogWarning("[EliteBgs] Parse échoué. JSON invalide ou structure inattendue."); }
+                catch (JsonException je)
+                {
+                    _log.LogWarning(je, "[EliteBgs] Échec json_invalid: {Message}", je.Message);
+                }
             }
 
             return parsed;
         }
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            _log.LogWarning("[EliteBgs] Échec cancelled: requête annulée url={Url}", url);
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _log.LogWarning(ex, "[EliteBgs] Échec timeout: délai dépassé ({Timeout}s) url={Url}", _http.Timeout.TotalSeconds, url);
+            return null;
+        }
+        catch (HttpRequestException ex)
+        {
+            var inner = ex.InnerException as SocketException;
+            var errorType = inner?.SocketErrorCode switch
+            {
+                SocketError.HostNotFound => "dns_not_found",
+                SocketError.ConnectionRefused => "connection_refused",
+                SocketError.TimedOut => "connection_timeout",
+                _ => "network_error",
+            };
+            _log.LogWarning(ex, "[EliteBgs] Échec {ErrorType}: {Message} url={Url}", errorType, ex.Message, url);
+            return null;
+        }
         catch (Exception ex)
         {
-            _log.LogError(ex, "[EliteBgs] Erreur URL={Url}: {Message}", url, ex.Message);
+            _log.LogError(ex, "[EliteBgs] Échec unknown: {Type} {Message} url={Url}", ex.GetType().Name, ex.Message, url);
             return null;
         }
     }
@@ -80,16 +123,56 @@ public class EliteBgsApiService
             return null;
 
         var url = $"{BaseUrl}/systems?name={Uri.EscapeDataString(systemName)}";
+        _log.LogInformation("[EliteBgs] Requête systems: method=GET url={Url} system={SystemName}", url, systemName);
+
         try
         {
             var response = await _http.GetAsync(url, ct);
-            response.EnsureSuccessStatusCode();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _log.LogWarning("[EliteBgs] Échec http_non_200 systems: status={Status} url={Url}", (int)response.StatusCode, url);
+                return null;
+            }
+
             var json = await response.Content.ReadAsStringAsync(ct);
-            return ParseSystemFactions(json, systemName);
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                _log.LogWarning("[EliteBgs] Échec empty_response systems: url={Url}", url);
+                return null;
+            }
+
+            var result = ParseSystemFactions(json, systemName);
+            if (result == null)
+                _log.LogWarning("[EliteBgs] Échec parse systems: structure inattendue ou docs vides url={Url}", url);
+            return result;
+        }
+        catch (TaskCanceledException) when (ct.IsCancellationRequested)
+        {
+            _log.LogWarning("[EliteBgs] Échec cancelled systems: url={Url}", url);
+            return null;
+        }
+        catch (TaskCanceledException ex)
+        {
+            _log.LogWarning(ex, "[EliteBgs] Échec timeout systems: url={Url}", url);
+            return null;
+        }
+        catch (HttpRequestException ex)
+        {
+            var inner = ex.InnerException as SocketException;
+            var errorType = inner?.SocketErrorCode switch
+            {
+                SocketError.HostNotFound => "dns_not_found",
+                SocketError.ConnectionRefused => "connection_refused",
+                SocketError.TimedOut => "connection_timeout",
+                _ => "network_error",
+            };
+            _log.LogWarning(ex, "[EliteBgs] Échec {ErrorType} systems: url={Url}", errorType, url);
+            return null;
         }
         catch (Exception ex)
         {
-            _log.LogError(ex, "[EliteBgs] Erreur systems name={SystemName}: {Message}", systemName, ex.Message);
+            _log.LogError(ex, "[EliteBgs] Échec unknown systems: url={Url}", url);
             return null;
         }
     }
@@ -171,7 +254,6 @@ public class EliteBgsApiService
                             influence = inf.GetDecimal();
                     }
 
-                    // Certaines APIs renvoient déjà un pourcentage
                     if (influence > 0 && influence <= 1)
                         influence *= 100;
 
@@ -179,7 +261,7 @@ public class EliteBgsApiService
 
                     list.Add(new EliteBgsFactionPresence(systemName, influence, state));
                 }
-                break; // Une seule faction correspondante
+                break;
             }
 
             return list.Count > 0 ? list : null;

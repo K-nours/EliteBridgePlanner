@@ -3,7 +3,7 @@
     "GuildDashboard.Server": {
       "commandName": "Project",
       "launchBrowser": true,
-      "applicationUrl": "http://localhost:5294",
+      "applicationUrl": "http://localhost:5294;https://localhost:7294",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }

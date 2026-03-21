@@ -23,6 +23,7 @@ import { DataSourceType, DATA_SOURCE_LABELS } from '../../../core/models/data-so
     .data-source-badge--cached { background: rgba(0, 212, 255, 0.2); color: #00d4ff; }
     .data-source-badge--seed { background: rgba(255, 194, 54, 0.15); color: #ffc236; }
     .data-source-badge--mock { background: rgba(128, 128, 128, 0.2); color: #aaa; }
+    .data-source-badge--failed { background: rgba(255, 100, 100, 0.2); color: #ff6b6b; }
   `],
 })
 export class DataSourceBadgeComponent {

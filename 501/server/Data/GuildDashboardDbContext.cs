@@ -20,6 +20,8 @@ public class GuildDashboardDbContext : DbContext
     public DbSet<SquadronMember> SquadronMembers => Set<SquadronMember>();
     public DbSet<SquadronSnapshot> SquadronSnapshots => Set<SquadronSnapshot>();
     public DbSet<EddnRawMessage> EddnRawMessages => Set<EddnRawMessage>();
+    public DbSet<FrontierProfile> FrontierProfiles => Set<FrontierProfile>();
+    public DbSet<FrontierUser> FrontierUsers => Set<FrontierUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +68,24 @@ public class GuildDashboardDbContext : DbContext
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.ReceivedAt);
             e.HasIndex(x => x.SchemaRef);
+        });
+
+        modelBuilder.Entity<FrontierProfile>(e =>
+        {
+            e.ToTable("FrontierProfiles");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.FrontierCustomerId).IsUnique();
+            e.HasIndex(x => x.GuildId);
+            e.HasOne(x => x.Guild).WithMany().HasForeignKey(x => x.GuildId).IsRequired(false);
+        });
+
+        modelBuilder.Entity<FrontierUser>(e =>
+        {
+            e.ToTable("FrontierUsers");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.CustomerId).IsUnique();
+            e.HasIndex(x => x.GuildId);
+            e.HasOne(x => x.Guild).WithMany().HasForeignKey(x => x.GuildId).IsRequired(false);
         });
     }
 }
