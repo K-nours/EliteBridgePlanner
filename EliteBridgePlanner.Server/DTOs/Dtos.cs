@@ -19,6 +19,8 @@ public record AuthResponse(
     string Token,
     string CommanderName,
     string Email,
+    string PreferredLanguage,
+    string PreferredTimeZone,
     DateTime ExpiresAt
 );
 
@@ -72,4 +74,19 @@ public record UpdateSystemRequest(
 
 public record MoveSystemRequest(
     [Range(1, int.MaxValue)] int InsertAtIndex  // même logique que CreateSystemRequest
+);
+
+// ── User ──────────────────────────────────────────────────────────────────
+
+public record UserProfileDto(
+    string Email,
+    string CommanderName,
+    string PreferredLanguage,
+    string PreferredTimeZone,
+    DateTime CreatedAt
+);
+
+public record UpdateUserPreferencesRequest(
+    [MaxLength(10)] string? PreferredLanguage = null,
+    [MaxLength(100)] string? PreferredTimeZone = null
 );

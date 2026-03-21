@@ -1,0 +1,87 @@
+{
+  "AUTH": {
+    "LOGIN": {
+      "CONNECTING": "CONNECTING...",
+      "CONNECTION": "LOGIN IN",
+      "EMAIL": "Email",
+      "INVALID_CREDENTIALS": "Invalid Email or password",
+      "INVALID_EMAIL": "Invalid Email",
+      "NO_REGISTER": "No account yet ?",
+      "PASSWORD": "Password",
+      "REGISTER": "Register"
+    },
+    "REGISTER": {
+      "ALREDY_REGISTER": "Elready register ?",
+      "COMMANDER_NAME": "Commander name",
+      "LOGIN": "Login in",
+      "MIN_CHAR_3": "Minimum 3 characters",
+      "MIN_CHAR_8": "Minimum 8 characters",
+      "REGISTERING": "REGISTERING...",
+      "REGISTRATION_FAILED": "Unable to create an account.  If you already have an account, please try logging in.",
+      "TITLE": "NEW CMDR"
+    }
+  },
+  "BRIDGE": {
+    "MAP": {
+      "EMPTY": "No system — Add a system to start your journey",
+      "TITLE": "Stellar bridge map"
+    },
+    "STATION_PANEL": {
+      "EMPTY_STATE": "Select a system to display any stations under construction",
+      "EMPTY_STATION": "No stations under construction listed for this system.",
+      "EMPTY_STATION_SUB": "The data are retrieve from EDSM and other source.",
+      "SELECTED_SYSTEM": "Selected system",
+      "TITLE": "Station under construction"
+    },
+    "SYSTEM-DETAIL": {
+      "ARCHITECT": "Architect (CMDR name)",
+      "CONSTRUCTION_STATE": "Construction state",
+      "EMPTY": "Select a system from the bridge system list",
+      "EMPTY_SUB": "or add a new one",
+      "SYSTEM_NAME": "System name",
+      "TITLE": "System details"
+    },
+    "SYSTEM-DETAILDELETE_CONFIRM": "Delete \"{{ name }}\" ?",
+    "SYSTEM-LIST": {
+      "EMPTY": "No systems",
+      "EMPTY_FILTER": "All systems are operational",
+      "EMPTY_FILTER_TIP": "(hide by filter)",
+      "EMPTY_TIP": "Add a system to begin",
+      "INSERT_AT_INDEX": "Insert at index",
+      "INSERT_AT_INDEX_HINT": "1 = head · {{ bridgeLength }} = end",
+      "TITLE": "Active bridge"
+    }
+  },
+  "COMMON": {
+    "ADD": "Add",
+    "ALL": "All",
+    "CANCEL": "Cancel",
+    "COMPLETION": "Completion",
+    "DELETE": "Delete",
+    "DOWN": "Down",
+    "IN_PROGRESS": "In progress",
+    "SAVE": "Save",
+    "STATE": "State",
+    "SYSTEM": "System",
+    "SYSTEMS": "Systems",
+    "TYPE": "Type",
+    "UP": "Up"
+  },
+  "SYSTEM": {
+    "STATUS": {
+      "BUILDING": "Under construction",
+      "COMPLETE": "Operational",
+      "COMPLETES": "Operationals",
+      "PLANNED": "Planned",
+      "PLANNED_PLR": "Planned"
+    },
+    "TYPE": {
+      "DECK": "Deck",
+      "DECKS": "Decks",
+      "END": "Arrival",
+      "PIER": "Pier",
+      "PIERS": "Piers",
+      "START": "Departure"
+    }
+  }
+}

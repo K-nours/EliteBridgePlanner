@@ -17,6 +17,8 @@ public class AuthControllerTests
         "fake.jwt.token",
         "CMDR_TEST",
         "cmdr@test.local",
+        "en-GB",
+        "UTC",
         DateTime.UtcNow.AddDays(7)
     );
 
