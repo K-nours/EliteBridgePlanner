@@ -1,19 +1,23 @@
-import { Component, OnInit, inject, signal, computed } from '@angular/core';
+import { Component, OnInit, inject, signal, computed, ViewChild } from '@angular/core';
 import { TruncateTooltipDirective } from '../../shared/directives/truncate-tooltip.directive';
-import { DataSourceBadgeComponent } from '../../shared/components/data-source-badge/data-source-badge.component';
+import { SettingsModalComponent } from '../../shared/components/settings-modal/settings-modal.component';
+import { SyncHelpModalComponent } from '../../shared/components/sync-help-modal/sync-help-modal.component';
 import { GuildSystemsPanelComponent } from './guild-systems-panel/guild-systems-panel.component';
 import { DashboardApiService } from '../../core/services/dashboard-api.service';
 import { CommandersApiService } from '../../core/services/commanders-api.service';
 import { SyncLogService } from '../../core/services/sync-log.service';
 import { GuildSystemsSyncService } from '../../core/services/guild-systems-sync.service';
 import { FrontierAuthService } from '../../core/services/frontier-auth.service';
+import { GuildSettingsService } from '../../core/services/guild-settings.service';
+import { InaraSyncBridgeService } from '../../core/services/inara-sync-bridge.service';
+import { SyncHelpModalService } from '../../core/services/sync-help-modal.service';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [TruncateTooltipDirective, DataSourceBadgeComponent, GuildSystemsPanelComponent],
+  imports: [TruncateTooltipDirective, SettingsModalComponent, SyncHelpModalComponent, GuildSystemsPanelComponent],
   template: `
     <div class="page">
       <div class="page-bg">
@@ -21,22 +25,24 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
         <div class="page-bg-overlay"></div>
       </div>
       <header class="header-zone">
-        <h1 class="title">{{ factionName() }}</h1>
+        <h1 class="header-faction">{{ factionName() }}</h1>
         <div class="header-emblem-wrapper">
           <span class="header-emblem-flank header-emblem-flank--left">GALACTIC</span>
-          <div class="emblem-box-wrapper">
-            @if (refreshProgress() > 0) {
-            <svg class="emblem-progress" viewBox="0 0 72 72">
-              <circle class="emblem-progress-bg" cx="36" cy="36" r="34" fill="none" stroke-width="2" />
-              <circle class="emblem-progress-fill" cx="36" cy="36" r="34" fill="none" stroke-width="2"
-                [attr.stroke-dasharray]="strokeCircumference"
-                [attr.stroke-dashoffset]="strokeDashOffset()" />
-            </svg>
-          }
-            <button type="button" class="emblem-box" (click)="onSquadronSync()" [disabled]="refreshProgress() > 0"
-              truncateTooltip="Synchroniser les données" [truncateTooltipForce]="true" [truncateTooltipAbove]="true">
-              <img class="emblem-img" src="assets/squadron-emblem.png" alt="Squadron emblem" />
-            </button>
+          <div class="emblem-spacer">
+            <div class="emblem-box-wrapper">
+              @if (refreshProgress() > 0) {
+              <svg class="emblem-progress" viewBox="0 0 72 72">
+                <circle class="emblem-progress-bg" cx="36" cy="36" r="34" fill="none" stroke-width="2" />
+                <circle class="emblem-progress-fill" cx="36" cy="36" r="34" fill="none" stroke-width="2"
+                  [attr.stroke-dasharray]="strokeCircumference"
+                  [attr.stroke-dashoffset]="strokeDashOffset()" />
+              </svg>
+            }
+              <button type="button" class="emblem-box" (click)="onSquadronSync()" [disabled]="refreshProgress() > 0"
+                truncateTooltip="Synchroniser les données" [truncateTooltipForce]="true" [truncateTooltipAbove]="true">
+                <img class="emblem-img" src="assets/squadron-emblem.png" alt="Squadron emblem" />
+              </button>
+            </div>
           </div>
           <span class="header-emblem-flank header-emblem-flank--right">CONTROL</span>
         </div>
@@ -63,6 +69,18 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
               </div>
               @if (frontierMenuOpen()) {
                 <div class="frontier-menu">
+                  <button type="button" class="frontier-menu-item frontier-menu-item--neutral" (click)="openSettings(); frontierMenuOpen.set(false)">
+                    Paramètres
+                  </button>
+                  <button type="button"
+                    class="frontier-menu-item frontier-menu-item--neutral"
+                    [disabled]="!guildSettings.inaraCmdrUrl()"
+                    (click)="onSyncCmdrAvatarClick(); frontierMenuOpen.set(false)">
+                    Sync avatar CMDR
+                  </button>
+                  <button type="button" class="frontier-menu-item frontier-menu-item--neutral" (click)="onUpdateScriptClick(); frontierMenuOpen.set(false)">
+                    Mettre à jour le script Inara Sync
+                  </button>
                   <button type="button" class="frontier-menu-item" (click)="frontierAuth.logout(); frontierMenuOpen.set(false)">
                     Déconnexion
                   </button>
@@ -78,25 +96,25 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
             }
             <button type="button" class="btn-frontier-reconnect" (click)="frontierAuth.login()">Reconnecter</button>
           } @else {
-            <button type="button" class="btn-frontier-login" (click)="frontierAuth.login()">Login Frontier</button>
+            <button type="button" class="btn-frontier-login" (click)="frontierAuth.login()">Connexion Frontier</button>
           }
         </div>
       </header>
       <main class="main-grid">
         <aside class="col col-left">
           <app-guild-systems-panel />
-          <div class="box"><h3>Next Galactic Meeting</h3></div>
+          <div class="box"><h3>Prochaine réunion galactique</h3></div>
         </aside>
         <section class="col col-center">
           <div class="map-section">
-            <div class="box map-box"><h3>The 501st Guild Map</h3></div>
+            <div class="box map-box"><h3>Carte The 501st Guild</h3></div>
           </div>
           <div class="box box-sync-status">
             <div class="sync-status-header">
-              <h3>Sync Status</h3>
+              <h3>État de la synchronisation</h3>
               <div class="sync-buttons">
-                <button type="button" class="btn-copy" (click)="copyLogsToClipboard()" [disabled]="syncLog.logs().length === 0">Copy to clipboard</button>
-                <button type="button" class="btn-clear" (click)="clearLogs()" [disabled]="syncLog.logs().length === 0">Clear log</button>
+                <button type="button" class="btn-copy" (click)="copyLogsToClipboard()" [disabled]="syncLog.logs().length === 0">Copier</button>
+                <button type="button" class="btn-clear" (click)="clearLogs()" [disabled]="syncLog.logs().length === 0">Effacer</button>
               </div>
             </div>
             <div class="sync-status-bgs">
@@ -125,36 +143,59 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
           </div>
           <div class="center-row">
             <div class="box box-no-title"></div>
-            <div class="box"><h3>Thargoid War</h3></div>
+            <div class="box"><h3>Guerre Thargoid</h3></div>
           </div>
         </section>
         <aside class="col col-right">
-          @if (dashboard()?.frontierProfile; as fp) {
+          @if (showCmdrConnected() && dashboard()?.frontierProfile; as fp) {
           <div class="box box-frontier-cmdr">
-            <h3>CMDR connecté</h3>
-            <div class="frontier-cmdr-info">
-              <span class="frontier-cmdr-name">{{ fp.commanderName }}</span>
-              @if (fp.squadronName) { <span class="frontier-cmdr-detail">Squadron: {{ fp.squadronName }}</span> }
-              @if (fp.lastSystemName) { <span class="frontier-cmdr-detail">Système: {{ fp.lastSystemName }}</span> }
-              @if (fp.shipName) { <span class="frontier-cmdr-detail">Vaisseau: {{ fp.shipName }}</span> }
+            <div class="frontier-cmdr-header">
+              <h3 class="frontier-cmdr-title">CMDR CONNECTÉ</h3>
+            </div>
+            <div class="frontier-cmdr-data">
+              <div class="frontier-cmdr-row">
+                <span class="frontier-cmdr-label">CMDR</span>
+                <span class="frontier-cmdr-value">{{ fp.commanderName }}</span>
+              </div>
+              @if (fp.squadronName) {
+              <div class="frontier-cmdr-row">
+                <span class="frontier-cmdr-label">Squadron</span>
+                <span class="frontier-cmdr-value">{{ fp.squadronName }}</span>
+              </div>
+              }
+              @if (fp.lastSystemName) {
+              <div class="frontier-cmdr-row">
+                <span class="frontier-cmdr-label">Système</span>
+                <span class="frontier-cmdr-value">{{ fp.lastSystemName }}</span>
+              </div>
+              }
+              @if (fp.shipName) {
+              <div class="frontier-cmdr-row">
+                <span class="frontier-cmdr-label">Vaisseau</span>
+                <span class="frontier-cmdr-value">{{ fp.shipName }}</span>
+              </div>
+              }
             </div>
           </div>
           }
-          <div class="box"><h3>In Progress Missions</h3></div>
-          <div class="box"><h3>Diplomatic Pipeline</h3></div>
+<div class="box"><h3>Missions en cours</h3></div>
+            <div class="box"><h3>Pipeline diplomatique</h3></div>
           <div class="box box-cmdrs">
             <div class="box-cmdrs-header">
-              <h3>CMDRs</h3>
-              @if (commanders(); as data) {
-                <app-data-source-badge [source]="data.dataSource"
-                  [tooltip]="data.lastSyncedAt ? 'Dernière sync: ' + data.lastSyncedAt : ''" />
-              }
+              <h3 class="box-cmdrs-title">CMDRs</h3>
+              <button type="button"
+                class="btn-copy"
+                [disabled]="!guildSettings.inaraSquadronUrl()"
+                [title]="syncCmdrsTooltip()"
+                (click)="onSyncCmdrsClick()">
+                Synchronisation
+              </button>
             </div>
-            @if (commanders(); as data) {
+            @if (commandersForList(); as data) {
             @if (data.commanders.length > 0) {
             <div class="cmdrs-list">
               @for (cmdr of data.commanders; track cmdr.name) {
-                <div class="cmdr-item">
+                <div class="cmdr-item" [class.is-current]="(frontierAuth.commanderName() ?? '').trim().toLowerCase() === cmdr.name.trim().toLowerCase()">
                   <div class="cmdr-avatar">
                     @if (cmdr.avatarUrl) {
                       <img [src]="cmdr.avatarUrl" [alt]="cmdr.name" referrerpolicy="no-referrer" />
@@ -163,9 +204,6 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
                     }
                   </div>
                   <span class="cmdr-name">{{ cmdr.name }}</span>
-                  @if (cmdr.role) {
-                    <span class="cmdr-role">{{ cmdr.role }}</span>
-                  }
                 </div>
               }
             </div>
@@ -178,6 +216,10 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
           </div>
         </aside>
       </main>
+      <app-settings-modal #settingsModal />
+      <app-sync-help-modal
+        [visible]="syncHelpModal.visible()"
+        (closed)="syncHelpModal.hide()" />
     </div>
   `,
   styles: [`
@@ -224,20 +266,30 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     .header-zone {
       position: relative;
       z-index: 2;
-      min-height: 104px;
+      min-height: 56px;
+      overflow: visible;
       width: 100%;
       background: rgba(6, 20, 35, 0.88);
       border-bottom: 1px solid rgba(0, 212, 255, 0.22);
-      padding: 24px 1rem 2.5rem;
+      padding: 8px 8px 8px 1rem;
       display: flex;
-      align-items: flex-start;
-      justify-content: center;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .header-faction {
+      margin: 0;
+      font-size: 1.1rem;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 600;
+      color: #00eaff;
+      text-shadow:
+        0 0 4px rgba(0, 234, 255, 0.4),
+        0 0 8px rgba(0, 234, 255, 0.25);
+      flex-shrink: 0;
     }
     .header-frontier {
-      position: absolute;
-      right: 1rem;
-      top: 50%;
-      transform: translateY(-50%);
+      flex-shrink: 0;
       display: flex;
       align-items: center;
       gap: 0.5rem;
@@ -273,9 +325,9 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       text-decoration: underline;
     }
     .frontier-cmdr-avatar {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
       background: rgba(0, 212, 255, 0.2);
       border: 1px solid rgba(0, 212, 255, 0.4);
       display: flex;
@@ -325,7 +377,15 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       text-align: left;
       transition: background 0.15s;
     }
-    .frontier-menu-item:hover {
+    .frontier-menu-item--neutral:hover {
+      background: rgba(0, 212, 255, 0.15);
+      color: #00d4ff;
+    }
+    .frontier-menu-item--neutral:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .frontier-menu-item:not(.frontier-menu-item--neutral):hover {
       background: rgba(255, 100, 100, 0.2);
       color: #ff6b6b;
     }
@@ -370,36 +430,39 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       border-color: rgba(255, 180, 100, 0.7);
     }
     .header-emblem-wrapper {
-      position: absolute;
-      bottom: 0;
-      left: 50%;
-      transform: translate(-50%, 50%);
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 1rem;
+      gap: 0.5rem;
+      flex-shrink: 0;
+      transform: translateY(23px);
     }
     .header-emblem-flank {
       font-family: 'Orbitron', sans-serif;
-      font-size: 0.55rem;
+      font-size: 0.5rem;
       font-weight: 600;
-      color: rgba(255, 255, 255, 0.9);
+      color: rgba(255, 255, 255, 0.85);
       text-transform: uppercase;
-      letter-spacing: 0.15em;
+      letter-spacing: 0.12em;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      transform: translateY(4px);
     }
-    .title {
-      margin: 0;
-      font-size: 30px;
-      font-family: 'Orbitron', sans-serif;
-      color: #00eaff;
-      text-shadow:
-        0 0 5px rgba(0, 234, 255, 0.45),
-        0 0 10px rgba(0, 234, 255, 0.3),
-        0 0 20px rgba(0, 234, 255, 0.18);
+    .emblem-spacer {
+      position: relative;
+      width: 72px;
+      height: 0;
+      min-height: 0;
+      overflow: visible;
+      flex-shrink: 0;
     }
     .emblem-box-wrapper {
-      position: relative;
-      display: inline-block;
+      position: absolute;
+      left: 50%;
+      bottom: -36px;
+      transform: translateX(-50%);
+      z-index: 3;
     }
     .emblem-progress {
       position: absolute;
@@ -465,24 +528,24 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       width: 100%;
       max-width: 100%;
       margin: 0;
-      padding: 64px 1rem 1rem;
+      padding: 63px 1rem 1rem;
       box-sizing: border-box;
     }
     @media (min-width: 1200px) {
-      .header-zone { padding: 1.5rem 1.5rem 2.5rem; }
+      .header-zone { padding: 8px 8px 8px 1.5rem; }
       .main-grid {
         width: 100%;
         grid-template-columns: minmax(200px, 400px) minmax(0, 1fr) minmax(200px, 400px);
         gap: 1.5rem;
-        padding: 64px 1.5rem 1.5rem;
+        padding: 63px 1.5rem 1.5rem;
         box-sizing: border-box;
       }
     }
     @media (min-width: 900px) and (max-width: 1199px) {
-      .header-zone { padding: 1.5rem 1.5rem 2.5rem; }
+      .header-zone { padding: 8px 8px 8px 1.5rem; }
       .main-grid {
         gap: 1.5rem;
-        padding: 64px 1.5rem 1.5rem;
+        padding: 63px 1.5rem 1.5rem;
       }
     }
     @media (max-width: 768px) {
@@ -492,6 +555,9 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       .box-row,
       .center-row {
         grid-template-columns: 1fr;
+      }
+      .box-cmdrs .cmdrs-list {
+        grid-template-columns: repeat(2, 1fr);
       }
     }
     .col {
@@ -638,50 +704,79 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     .map-box {
       min-height: 420px;
     }
-    .frontier-cmdr-info {
+    .frontier-cmdr-header {
       display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-      margin-top: 0.75rem;
-      font-family: 'Exo 2', sans-serif;
-      font-size: 0.7rem;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
     }
-    .frontier-cmdr-name {
+    .frontier-cmdr-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.75rem;
       font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin: 0;
       color: #00d4ff;
     }
-    .frontier-cmdr-detail {
-      color: rgba(255, 255, 255, 0.85);
+    .frontier-cmdr-data {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .frontier-cmdr-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .frontier-cmdr-label {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: #ff8c00;
+      margin: 0;
+    }
+    .frontier-cmdr-value {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.9);
     }
     .box-cmdrs-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 0.5rem;
+      margin-bottom: 1rem;
     }
-    .box-cmdrs-header h3 {
+    .box-cmdrs-title {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
       margin: 0;
+      color: #00d4ff;
     }
     .cmdrs-empty {
-      font-size: 0.7rem;
-      color: rgba(255,255,255,0.5);
-      margin-top: 0.5rem;
-    }
-    .cmdr-role {
-      font-size: 0.55rem;
-      color: rgba(0, 212, 255, 0.7);
+      font-family: 'Exo 2', sans-serif;
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.5);
+      margin: 0;
+      padding: 0.5rem 0;
     }
     .box-cmdrs .cmdrs-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      margin-top: 0.75rem;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1.5rem;
+      padding-top: 0.5rem;
     }
     .cmdr-item {
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 0.35rem;
+      gap: 0.5rem;
+      min-width: 72px;
     }
     .cmdr-item.is-current .cmdr-avatar {
       box-shadow: 0 0 10px rgba(0, 234, 255, 0.6);
@@ -697,6 +792,7 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       align-items: center;
       justify-content: center;
       overflow: hidden;
+      flex-shrink: 0;
     }
     .cmdr-avatar img {
       width: 100%;
@@ -710,19 +806,27 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       color: #00d4ff;
     }
     .cmdr-name {
-      font-size: 0.65rem;
-      color: rgba(255, 255, 255, 0.85);
+      font-family: 'Exo 2', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.9);
       text-align: center;
-      max-width: 60px;
+      max-width: 80px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      line-height: 1.2;
     }
   `],
 })
 export class DashboardComponent implements OnInit {
+  @ViewChild('settingsModal') settingsModal!: SettingsModalComponent;
+
   private readonly dashboardApi = inject(DashboardApiService);
   private readonly commandersApi = inject(CommandersApiService);
+  protected readonly guildSettings = inject(GuildSettingsService);
+  protected readonly inaraBridge = inject(InaraSyncBridgeService);
+  protected readonly syncHelpModal = inject(SyncHelpModalService);
   protected readonly frontierAuth = inject(FrontierAuthService);
   protected readonly frontierMenuOpen = signal(false);
   protected readonly syncLog = inject(SyncLogService);
@@ -734,7 +838,22 @@ export class DashboardComponent implements OnInit {
 
   protected dashboard = signal<DashboardResponseDto | null>(null);
   protected commanders = signal<CommandersResponseDto | null>(null);
+  protected commandersForList = computed(() => {
+    const data = this.commanders();
+    if (!data?.commanders?.length) return data;
+    const current = this.frontierAuth.commanderName()?.trim().toLowerCase();
+    if (!current) return data;
+    const sorted = [...data.commanders].sort((a, b) => {
+      const aMatch = a.name.trim().toLowerCase() === current;
+      const bMatch = b.name.trim().toLowerCase() === current;
+      if (aMatch && !bMatch) return -1;
+      if (!aMatch && bMatch) return 1;
+      return 0;
+    });
+    return { ...data, commanders: sorted };
+  });
   protected factionName = computed(() => this.dashboard()?.factionName ?? 'The 501st Guild');
+  protected showCmdrConnected = signal(true);
 
   private addLog(msg: string): void {
     this.syncLog.addLog(msg);
@@ -760,8 +879,51 @@ export class DashboardComponent implements OnInit {
     }
   }
 
+  protected openSettings(): void {
+    this.settingsModal?.open();
+  }
+
+  protected syncCmdrsTooltip = computed(() => {
+    const url = this.guildSettings.inaraSquadronUrl();
+    const last = this.guildSettings.lastCommandersSyncAt();
+    if (!url) return "Configurer l'URL squadron dans Paramètres";
+    return last ? `Dernière sync CMDRs: ${this.formatLastSync(last)}` : 'Jamais synchronisé — Cliquer pour ouvrir Inara';
+  });
+
+  protected formatLastSync(iso: string): string {
+    const d = new Date(iso);
+    return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
+  }
+
+  protected onSyncCmdrsClick(): void {
+    const url = this.guildSettings.inaraSquadronUrl();
+    if (!url) return;
+    if (!this.inaraBridge.checkNow()) {
+      this.syncHelpModal.show();
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  protected onSyncCmdrAvatarClick(): void {
+    const url = this.guildSettings.inaraCmdrUrl();
+    if (!url) return;
+    if (!this.inaraBridge.checkNow()) {
+      this.syncHelpModal.show();
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  protected onUpdateScriptClick(): void {
+    window.open('/assets/scripts/inara-sync.user.js', '_blank', 'noopener,noreferrer');
+  }
+
   ngOnInit(): void {
     this.addLog('Dashboard initialisé');
+    this.guildSettings.load();
+    this.inaraBridge.check();
+    setTimeout(() => this.inaraBridge.checkNow(), 800);
     let skipFrontierCheck = false;
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -831,6 +993,7 @@ export class DashboardComponent implements OnInit {
         cancelAnimationFrame(frameId);
         this.refreshProgress.set(100);
         this.addLog('Sync OK: ' + res.syncedCount + ' CMDRs');
+        this.guildSettings.load();
         this.loadCommanders();
         setTimeout(() => this.refreshProgress.set(0), 400);
       },

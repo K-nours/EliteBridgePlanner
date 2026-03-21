@@ -36,6 +36,7 @@ public class GuildDashboardDbContext : DbContext
             e.ToTable("GuildSystems");
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.GuildId);
+            e.HasIndex(x => new { x.GuildId, x.Name }).IsUnique();
         });
 
         modelBuilder.Entity<ControlledSystem>(e =>

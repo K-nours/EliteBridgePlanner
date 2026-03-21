@@ -4,6 +4,7 @@ using GuildDashboard.Server.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace GuildDashboard.Server.Migrations
 {
     [DbContext(typeof(GuildDashboardDbContext))]
-    partial class GuildDashboardDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260321152746_AddGuildInaraUrlsAndLastSystemsImport")]
+    partial class AddGuildInaraUrlsAndLastSystemsImport
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -214,9 +217,6 @@ namespace GuildDashboard.Server.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("FactionName")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("InaraCmdrUrl")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("InaraFactionId")

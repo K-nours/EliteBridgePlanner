@@ -48,7 +48,7 @@ cd 501/server
 dotnet run
 ```
 
-→ API sur http://localhost:5294
+→ API sur https://localhost:7294 (et http://localhost:5294)
 
 ### Frontend
 
@@ -58,7 +58,7 @@ npm install
 npm start
 ```
 
-→ App sur http://localhost:4200 (proxy /api → backend)
+→ App sur http://localhost:4200. Le proxy redirige `/api` vers `https://localhost:7294` (secure: false pour certificat auto-signé).
 
 ### Base de données
 
