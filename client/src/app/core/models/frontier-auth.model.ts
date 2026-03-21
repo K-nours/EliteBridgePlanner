@@ -13,6 +13,7 @@ export interface FrontierMeResponse {
   customerId?: string;
   guildId?: number | null;
   guildName?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface FrontierProfileDto {
@@ -24,4 +25,5 @@ export interface FrontierProfileDto {
   guildId: number | null;
   guildName: string | null;
   lastFetchedAt: string;
+  avatarUrl?: string | null;
 }

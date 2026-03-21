@@ -1,4 +1,4 @@
-<section class="panel guild-systems">
+<section class="panel guild-systems guild-systems--archived">
   <div class="panel-header">
     <h3 class="panel-title">THE 501ST GUILD SYSTEMS</h3>
     <app-data-source-badge
@@ -7,6 +7,10 @@
         [tooltip]="badgeTooltip()"
       />
   </div>
+  <p class="archived-notice">
+    Feature en pause — aucune source API publique fiable pour Faction → Systems → Influence %.
+    Les endpoints de diagnostic restent disponibles pour R&D.
+  </p>
   @if (panelState() === 'failed' && lastError()) {
     <p class="error-message">{{ lastError() }}</p>
   }
@@ -120,4 +124,5 @@
       }
     </div>
   </div>
+  <span class="archived-badge" title="Aucune source API fiable pour l'influence %">Feature en pause</span>
 </section>
