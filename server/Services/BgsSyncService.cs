@@ -5,32 +5,29 @@ using Microsoft.EntityFrameworkCore;
 namespace GuildDashboard.Server.Services;
 
 /// <summary>
-/// Synchronise les données BGS réelles (Elite BGS API) vers le cache local (ControlledSystem).
-/// Flux : Elite BGS → mapping → DB → GET /api/guild/systems → UI.
+/// Synchronise les données BGS réelles (Inara scraping) vers le cache local (ControlledSystem).
+/// Flux : Inara presence page → mapping → DB → GET /api/guild/systems → UI.
 /// </summary>
 /// <remarks>
-/// Utilise UNIQUEMENT les propriétés de la Guild en base : FactionName (Elite BGS), InaraFactionId (non utilisé ici).
-/// Le frontend ne fournit que guildId ; le backend décide de la source (Guild.FactionName).
-/// InfluenceDelta24h n'est pas fourni par Elite BGS → toujours null après sync.
-/// IsControlled/IsThreatened = false si l'API systems ne renvoie pas les factions.
+/// Source : Inara (page minorfaction-presence). EliteBGS abandonné (timeouts systématiques).
+/// Nécessite Guild.InaraFactionId configuré en base. InfluenceDelta24h, IsControlled, IsThreatened non disponibles Inara → null/false.
 /// </remarks>
 public class BgsSyncService
 {
     private readonly GuildDashboardDbContext _db;
-    private readonly EliteBgsApiService _eliteBgs;
+    private readonly InaraFactionService _inaraFaction;
     private readonly ILogger<BgsSyncService> _log;
 
     private static readonly string[] ExpansionCompatibleStates = ["None", "Expansion", "Boom"];
 
-    public BgsSyncService(GuildDashboardDbContext db, EliteBgsApiService eliteBgs, ILogger<BgsSyncService> log)
+    public BgsSyncService(GuildDashboardDbContext db, InaraFactionService inaraFaction, ILogger<BgsSyncService> log)
     {
         _db = db;
-        _eliteBgs = eliteBgs;
+        _inaraFaction = inaraFaction;
         _log = log;
     }
 
-    /// <summary>Lance une synchronisation BGS pour la guilde. Met à jour ControlledSystem avec les données réelles.</summary>
-    /// <returns>Nombre de systèmes mis à jour, ou -1 en cas d'erreur.</returns>
+    /// <summary>Lance une synchronisation BGS pour la guilde. Met à jour ControlledSystem avec les données réelles (Inara).</summary>
     public async Task<BgsSyncResult> SyncAsync(int guildId = 1, CancellationToken ct = default)
     {
         var guild = await _db.Guilds
@@ -39,18 +36,22 @@ public class BgsSyncService
         if (guild == null)
             return BgsSyncResult.Failed("Guilde introuvable");
 
-        // Source unique : propriétés Guild en base. Jamais d'identifiant de faction envoyé par le frontend.
+        if (!guild.InaraFactionId.HasValue || guild.InaraFactionId.Value <= 0)
+        {
+            _log.LogWarning("[BgsSync] InaraFactionId non configuré pour guildId={GuildId}", guildId);
+            return BgsSyncResult.Failed("InaraFactionId non configuré pour cette guilde");
+        }
+
         var factionName = guild.FactionName ?? guild.Name;
-        if (string.IsNullOrWhiteSpace(factionName))
-            return BgsSyncResult.Failed("Nom de faction non configuré");
+        _log.LogInformation("[BgsSync] Démarrage sync guildId={GuildId} faction={FactionName} inaraFactionId={InaraFactionId}",
+            guildId, factionName, guild.InaraFactionId);
 
-        _log.LogInformation("[BgsSync] Démarrage sync guildId={GuildId} faction={FactionName}", guildId, factionName);
-
-        var presence = await _eliteBgs.GetFactionPresenceAsync(factionName, ct);
+        var presence = await _inaraFaction.GetFactionPresenceAsync(guild.InaraFactionId.Value, ct);
         if (presence == null || presence.Count == 0)
         {
-            _log.LogWarning("[BgsSync] RAISON: Aucune donnée Elite BGS pour faction={FactionName}. Faction introuvable ou API vide.", factionName);
-            return BgsSyncResult.Failed("Aucune donnée BGS disponible pour cette faction (faction introuvable ou API vide)");
+            _log.LogWarning("[BgsSync] RAISON: Aucune donnée Inara pour faction={FactionName} id={Id}. Page inaccessible ou structure DOM modifiée.",
+                factionName, guild.InaraFactionId);
+            return BgsSyncResult.Failed("Aucune donnée BGS disponible (Inara : page inaccessible ou structure modifiée)");
         }
 
         var guildSystems = await _db.GuildSystems
@@ -60,8 +61,8 @@ public class BgsSyncService
 
         _log.LogInformation("[BgsSync] Systèmes en base ({Count}): [{Names}]",
             guildSystems.Count, string.Join(", ", guildSystems.Select(s => s.Name)));
-        _log.LogInformation("[BgsSync] Systèmes Elite BGS ({Count}): [{Names}]",
-            presence.Count, string.Join(", ", presence.Select(p => p.SystemName)));
+        _log.LogInformation("[BgsSync] Systèmes Inara ({Count}): [{Names}]",
+            presence.Count, string.Join(", ", presence.Take(20).Select(p => p.SystemName)) + (presence.Count > 20 ? "..." : ""));
 
         var presenceBySystem = presence
             .Where(p => guildSystemNames.Contains(p.SystemName))
@@ -73,7 +74,7 @@ public class BgsSyncService
         if (matched.Count > 0)
             _log.LogInformation("[BgsSync] MATCH ({Count}): [{Systems}]", matched.Count, string.Join(", ", matched));
         if (notFound.Count > 0)
-            _log.LogWarning("[BgsSync] NON-MATCH / ignorés ({Count}): [{Systems}] — noms non correspondants ou absents dans Elite BGS",
+            _log.LogWarning("[BgsSync] NON-MATCH / ignorés ({Count}): [{Systems}] — noms non correspondants ou absents dans Inara",
                 notFound.Count, string.Join(", ", notFound));
 
         var updated = 0;
@@ -103,40 +104,25 @@ public class BgsSyncService
                 _db.ControlledSystems.Add(cs);
             }
 
-            // Valeurs réelles depuis Elite BGS
+            // Valeurs réelles depuis Inara
             cs.InfluencePercent = pres.InfluencePercent;
             cs.State = pres.State;
             cs.LastUpdated = now;
             cs.UpdatedAt = now;
 
-            // InfluenceDelta24h : Elite BGS ne fournit pas d'historique → null (pas de valeur seed trompeuse)
             cs.InfluenceDelta24h = null;
 
-            // IsExpansionCandidate : calculé (influence > 60% et état compatible)
+            // IsExpansionCandidate : influence >= 60% et état compatible si disponible
             cs.IsExpansionCandidate = pres.InfluencePercent >= 60
                 && (string.IsNullOrEmpty(pres.State) || ExpansionCompatibleStates.Contains(pres.State, StringComparer.OrdinalIgnoreCase));
 
-            // IsControlled, IsThreatened : nécessitent les factions du système
-            var systemFactions = await _eliteBgs.GetSystemFactionsAsync(gs.Name, ct);
-            if (systemFactions != null && systemFactions.Count > 0)
-            {
-                var sorted = systemFactions.OrderByDescending(x => x.InfluencePercent).ToList();
-                cs.IsControlled = string.Equals(sorted[0].FactionName, factionName, StringComparison.OrdinalIgnoreCase);
-                cs.IsThreatened = sorted.Count > 1 && (sorted[0].InfluencePercent - sorted[1].InfluencePercent) < 10;
-            }
-            else
-            {
-                cs.IsControlled = false;
-                cs.IsThreatened = false;
-            }
+            // Inara ne fournit pas le breakdown par faction → IsControlled/IsThreatened non déterminables
+            cs.IsControlled = false;
+            cs.IsThreatened = false;
 
             cs.IsFromSeed = false;
             updated++;
             updatedNames.Add(gs.Name);
-
-            // Rate limit pour éviter de surcharger l'API
-            if (updated < presenceBySystem.Count)
-                await Task.Delay(500, ct);
         }
 
         await _db.SaveChangesAsync(ct);
@@ -152,8 +138,8 @@ public class BgsSyncService
             _log.LogWarning("[BgsSync] RÉSULTAT: 0 système mis à jour. Ignorés={Ignored}. RAISON: {Reason}",
                 ignored,
                 notFound.Count == guildSystems.Count
-                    ? "Aucun nom de système en base ne correspond à Elite BGS (noms différents ou faction sans présence dans ces systèmes)"
-                    : "Vérifier les logs Elite BGS ci-dessus (parse, structure JSON)");
+                    ? "Aucun nom de système en base ne correspond à Inara (noms différents ou faction sans présence dans ces systèmes)"
+                    : "Vérifier les logs Inara ci-dessus (parse, structure HTML)");
         }
 
         return BgsSyncResult.FromSuccess(updated);

@@ -4,6 +4,9 @@ import { DataSourceBadgeComponent } from '../../shared/components/data-source-ba
 import { GuildSystemsPanelComponent } from './guild-systems-panel/guild-systems-panel.component';
 import { DashboardApiService } from '../../core/services/dashboard-api.service';
 import { CommandersApiService } from '../../core/services/commanders-api.service';
+import { SyncLogService } from '../../core/services/sync-log.service';
+import { GuildSystemsSyncService } from '../../core/services/guild-systems-sync.service';
+import { FrontierAuthService } from '../../core/services/frontier-auth.service';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
 
@@ -37,6 +40,37 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
           </div>
           <span class="header-emblem-flank header-emblem-flank--right">CONTROL</span>
         </div>
+        <div class="header-frontier">
+          @if (frontierAuth.loading()) {
+            <span class="frontier-status frontier-loading">...</span>
+          } @else if (frontierAuth.isConnected()) {
+            <div class="frontier-dropdown">
+              @if (frontierMenuOpen()) {
+                <div class="frontier-menu-backdrop" (click)="frontierMenuOpen.set(false)"></div>
+              }
+              <button type="button" class="frontier-cmdr-btn" (click)="frontierMenuOpen.set(!frontierMenuOpen())">
+                {{ frontierAuth.commanderName() ?? 'CMDR' }}
+              </button>
+              @if (frontierMenuOpen()) {
+                <div class="frontier-menu">
+                  <button type="button" class="frontier-menu-item" (click)="frontierAuth.logout(); frontierMenuOpen.set(false)">
+                    Déconnexion
+                  </button>
+                </div>
+              }
+            </div>
+          } @else if (frontierAuth.needsReconnect()) {
+            @if (frontierAuth.commanderName(); as name) {
+              <span class="frontier-cmdr frontier-expired">{{ name }}</span>
+            }
+            @if (frontierAuth.errorMessage(); as errMsg) {
+              <span class="frontier-error-msg" [title]="errMsg">{{ errMsg }}</span>
+            }
+            <button type="button" class="btn-frontier-reconnect" (click)="frontierAuth.login()">Reconnecter</button>
+          } @else {
+            <button type="button" class="btn-frontier-login" (click)="frontierAuth.login()">Login Frontier</button>
+          }
+        </div>
       </header>
       <main class="main-grid">
         <aside class="col col-left">
@@ -51,11 +85,33 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
             <div class="sync-status-header">
               <h3>Sync Status</h3>
               <div class="sync-buttons">
-                <button type="button" class="btn-copy" (click)="copyLogsToClipboard()" [disabled]="syncLogs().length === 0">Copy to clipboard</button>
-                <button type="button" class="btn-clear" (click)="clearLogs()" [disabled]="syncLogs().length === 0">Clear log</button>
+                <button type="button" class="btn-copy" (click)="copyLogsToClipboard()" [disabled]="syncLog.logs().length === 0">Copy to clipboard</button>
+                <button type="button" class="btn-clear" (click)="clearLogs()" [disabled]="syncLog.logs().length === 0">Clear log</button>
               </div>
             </div>
-            <pre class="sync-logs">{{ syncLogsText() }}</pre>
+            <div class="sync-status-bgs">
+              <div class="sync-status-row">
+                <span class="sync-status-label">Dernière tentative</span>
+                <span class="sync-status-value">{{ formatSyncDate(guildSystemsSync.lastAttemptAt()) }}</span>
+              </div>
+              <div class="sync-status-row">
+                <span class="sync-status-label">Dernier succès</span>
+                <span class="sync-status-value">{{ formatSyncDate(guildSystemsSync.lastSuccessfulSyncAt()) }}</span>
+              </div>
+              @if (guildSystemsSync.lastSuccessfulSyncAt()) {
+                <div class="sync-status-row">
+                  <span class="sync-status-label">Systèmes mis à jour</span>
+                  <span class="sync-status-value">{{ guildSystemsSync.lastSystemsUpdated() }}</span>
+                </div>
+              }
+              @if (guildSystemsSync.lastErrorMessage()) {
+                <div class="sync-status-row sync-status-row--error">
+                  <span class="sync-status-label">Erreur</span>
+                  <span class="sync-status-value">{{ guildSystemsSync.lastErrorMessage() }}</span>
+                </div>
+              }
+            </div>
+            <pre class="sync-logs">{{ syncLog.logsText() }}</pre>
           </div>
           <div class="center-row">
             <div class="box box-no-title"></div>
@@ -63,6 +119,17 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
           </div>
         </section>
         <aside class="col col-right">
+          @if (dashboard()?.frontierProfile; as fp) {
+          <div class="box box-frontier-cmdr">
+            <h3>CMDR connecté</h3>
+            <div class="frontier-cmdr-info">
+              <span class="frontier-cmdr-name">{{ fp.commanderName }}</span>
+              @if (fp.squadronName) { <span class="frontier-cmdr-detail">Squadron: {{ fp.squadronName }}</span> }
+              @if (fp.lastSystemName) { <span class="frontier-cmdr-detail">Système: {{ fp.lastSystemName }}</span> }
+              @if (fp.shipName) { <span class="frontier-cmdr-detail">Vaisseau: {{ fp.shipName }}</span> }
+            </div>
+          </div>
+          }
           <div class="box"><h3>In Progress Missions</h3></div>
           <div class="box"><h3>Diplomatic Pipeline</h3></div>
           <div class="box box-cmdrs">
@@ -155,6 +222,110 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       display: flex;
       align-items: flex-start;
       justify-content: center;
+    }
+    .header-frontier {
+      position: absolute;
+      right: 1rem;
+      top: 24px;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      font-family: 'Exo 2', sans-serif;
+    }
+    .frontier-dropdown {
+      position: relative;
+      z-index: 102;
+    }
+    .frontier-menu-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      cursor: default;
+    }
+    .frontier-cmdr-btn,
+    .frontier-cmdr {
+      color: rgba(110, 231, 183, 0.95);
+      font-weight: 500;
+      background: none;
+      border: none;
+      padding: 0;
+      font: inherit;
+      cursor: pointer;
+    }
+    .frontier-cmdr-btn:hover {
+      color: #6ee7b7;
+      text-decoration: underline;
+    }
+    .frontier-menu {
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 0.25rem;
+      min-width: 140px;
+      background: rgba(6, 20, 35, 0.98);
+      border: 1px solid rgba(0, 212, 255, 0.25);
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      z-index: 101;
+      overflow: hidden;
+    }
+    .frontier-menu-item {
+      display: block;
+      width: 100%;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.7rem;
+      font-family: 'Exo 2', sans-serif;
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.9);
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s;
+    }
+    .frontier-menu-item:hover {
+      background: rgba(255, 100, 100, 0.2);
+      color: #ff6b6b;
+    }
+    .frontier-cmdr.frontier-expired {
+      color: rgba(255, 180, 100, 0.9);
+    }
+    .frontier-error-msg {
+      font-size: 0.6rem;
+      color: rgba(255, 150, 100, 0.9);
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .frontier-loading {
+      color: rgba(255, 255, 255, 0.5);
+    }
+    .btn-frontier-login,
+    .btn-frontier-reconnect {
+      padding: 0.35rem 0.65rem;
+      font-size: 0.65rem;
+      font-family: 'Orbitron', sans-serif;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid rgba(0, 212, 255, 0.4);
+      background: rgba(0, 212, 255, 0.12);
+      color: #00d4ff;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .btn-frontier-login:hover,
+    .btn-frontier-reconnect:hover {
+      background: rgba(0, 212, 255, 0.2);
+      border-color: rgba(0, 212, 255, 0.6);
+    }
+    .btn-frontier-reconnect {
+      border-color: rgba(255, 180, 100, 0.5);
+      background: rgba(255, 180, 100, 0.12);
+      color: #ffb464;
+    }
+    .btn-frontier-reconnect:hover {
+      background: rgba(255, 180, 100, 0.2);
+      border-color: rgba(255, 180, 100, 0.7);
     }
     .header-emblem-wrapper {
       position: absolute;
@@ -372,6 +543,34 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     .btn-clear:hover:not(:disabled) {
       background: rgba(255, 100, 100, 0.3);
     }
+    .sync-status-bgs {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 0.7rem;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+    }
+    .sync-status-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 0.25rem;
+    }
+    .sync-status-row:last-child {
+      margin-bottom: 0;
+    }
+    .sync-status-label {
+      color: rgba(255, 255, 255, 0.6);
+      flex-shrink: 0;
+    }
+    .sync-status-value {
+      color: rgba(255, 255, 255, 0.9);
+      text-align: right;
+      word-break: break-word;
+    }
+    .sync-status-row--error .sync-status-value {
+      color: #ff6b6b;
+    }
     .sync-logs {
       flex: 1;
       margin: 0;
@@ -396,6 +595,21 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     }
     .map-box {
       min-height: 420px;
+    }
+    .frontier-cmdr-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      margin-top: 0.75rem;
+      font-family: 'Exo 2', sans-serif;
+      font-size: 0.7rem;
+    }
+    .frontier-cmdr-name {
+      font-weight: 600;
+      color: #00d4ff;
+    }
+    .frontier-cmdr-detail {
+      color: rgba(255, 255, 255, 0.85);
     }
     .box-cmdrs-header {
       display: flex;
@@ -467,6 +681,10 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
 export class DashboardComponent implements OnInit {
   private readonly dashboardApi = inject(DashboardApiService);
   private readonly commandersApi = inject(CommandersApiService);
+  protected readonly frontierAuth = inject(FrontierAuthService);
+  protected readonly frontierMenuOpen = signal(false);
+  protected readonly syncLog = inject(SyncLogService);
+  protected readonly guildSystemsSync = inject(GuildSystemsSyncService);
 
   protected readonly strokeCircumference = 2 * Math.PI * 34;
   protected refreshProgress = signal(0);
@@ -476,20 +694,22 @@ export class DashboardComponent implements OnInit {
   protected commanders = signal<CommandersResponseDto | null>(null);
   protected factionName = computed(() => this.dashboard()?.factionName ?? 'The 501st Guild');
 
-  protected syncLogs = signal<string[]>([]);
-  protected syncLogsText = computed(() => this.syncLogs().join('\n') || '(aucun log)');
-
   private addLog(msg: string): void {
-    const ts = new Date().toISOString().slice(11, 23);
-    this.syncLogs.update(logs => [...logs, `[${ts}] ${msg}`]);
+    this.syncLog.addLog(msg);
   }
 
   protected clearLogs(): void {
-    this.syncLogs.set([]);
+    this.syncLog.clearLogs();
+  }
+
+  protected formatSyncDate(d: Date | null): string {
+    if (!d) return '—';
+    const dt = d instanceof Date ? d : new Date(d);
+    return dt.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
   }
 
   protected async copyLogsToClipboard(): Promise<void> {
-    const text = this.syncLogsText();
+    const text = this.syncLog.logsText();
     try {
       await navigator.clipboard.writeText(text);
       this.addLog('→ Copié dans le presse-papier');
@@ -500,7 +720,28 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit(): void {
     this.addLog('Dashboard initialisé');
-    this.dashboardApi.getDashboard('Bib0xkn0x').subscribe({
+    let skipFrontierCheck = false;
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const frontier = params.get('frontier');
+      if (window.opener && (frontier === 'success' || frontier === 'error')) {
+        const msg = frontier === 'error' ? (params.get('message') ?? 'Tentative OAuth expirée ou remplacée. Relancez la connexion Frontier.') : null;
+        window.opener.postMessage({ type: 'frontier-oauth-done', success: frontier === 'success', message: msg }, window.location.origin);
+        window.close();
+        return;
+      }
+      if (frontier === 'success') {
+        window.history.replaceState({}, '', window.location.pathname);
+      } else if (frontier === 'error') {
+        const msg = params.get('message') ?? 'Tentative OAuth expirée ou remplacée. Relancez la connexion Frontier.';
+        this.frontierAuth.setError(msg);
+        this.addLog('Frontier: ' + msg);
+        window.history.replaceState({}, '', window.location.pathname);
+        skipFrontierCheck = true;
+      }
+    }
+    if (!skipFrontierCheck) this.frontierAuth.checkAndLoadProfile();
+    this.dashboardApi.getDashboard(null).subscribe({
       next: (d) => this.dashboard.set(d),
       error: (err) => this.addLog('Erreur dashboard: ' + (err?.message || err?.error?.message || JSON.stringify(err))),
     });
@@ -519,6 +760,7 @@ export class DashboardComponent implements OnInit {
 
   protected onSquadronSync(): void {
     this.addLog('Clic sur bouton squadron');
+    this.guildSystemsSync.sync();
     this.refreshDashboard();
   }
 

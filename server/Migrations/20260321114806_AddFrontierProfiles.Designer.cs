@@ -4,6 +4,7 @@ using GuildDashboard.Server.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace GuildDashboard.Server.Migrations
 {
     [DbContext(typeof(GuildDashboardDbContext))]
-    partial class GuildDashboardDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260321114806_AddFrontierProfiles")]
+    partial class AddFrontierProfiles
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -167,41 +170,6 @@ namespace GuildDashboard.Server.Migrations
                     b.ToTable("FrontierProfiles", (string)null);
                 });
 
-            modelBuilder.Entity("GuildDashboard.Server.Models.FrontierUser", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("CommanderName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("CustomerId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<int?>("GuildId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("SquadronName")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CustomerId")
-                        .IsUnique();
-
-                    b.HasIndex("GuildId");
-
-                    b.ToTable("FrontierUsers", (string)null);
-                });
-
             modelBuilder.Entity("GuildDashboard.Server.Models.Guild", b =>
                 {
                     b.Property<int>("Id")
@@ -328,15 +296,6 @@ namespace GuildDashboard.Server.Migrations
                 });
 
             modelBuilder.Entity("GuildDashboard.Server.Models.FrontierProfile", b =>
-                {
-                    b.HasOne("GuildDashboard.Server.Models.Guild", "Guild")
-                        .WithMany()
-                        .HasForeignKey("GuildId");
-
-                    b.Navigation("Guild");
-                });
-
-            modelBuilder.Entity("GuildDashboard.Server.Models.FrontierUser", b =>
                 {
                     b.HasOne("GuildDashboard.Server.Models.Guild", "Guild")
                         .WithMany()

@@ -14,10 +14,16 @@ builder.Services.AddDbContext<GuildDashboardDbContext>(o =>
 builder.Services.AddHttpClient<InaraApiService>();
 builder.Services.AddHttpClient<InaraSquadronRosterService>();
 builder.Services.AddHttpClient<EliteBgsApiService>();
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<InaraFactionService>();
 builder.Services.AddScoped<InaraClient>();
+builder.Services.AddScoped<FrontierAuthService>();
+builder.Services.AddScoped<FrontierUserService>();
+builder.Services.AddSingleton<FrontierTokenStore>();
 builder.Services.AddSingleton<CurrentGuildService>();
 builder.Services.AddScoped<GuildSystemsService>();
 builder.Services.AddScoped<BgsSyncService>();
+builder.Services.AddScoped<EliteBgsDiagnosticService>();
 builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<CommandersService>();
 builder.Services.AddScoped<SquadronSyncService>();
@@ -63,5 +69,10 @@ if (inaraSquadronId.HasValue && inaraSquadronId.Value > 0)
     app.Logger.LogInformation("Squadron:InaraSquadronId chargé = {Id} (config statique temporaire)", inaraSquadronId.Value);
 else
     app.Logger.LogWarning("Squadron:InaraSquadronId non configuré — le panneau CMDRs restera vide jusqu'à configuration");
+
+// Log Frontier OAuth — callback HTTPS requis par Frontier
+var frontierRedirect = app.Configuration["Frontier:RedirectUri"];
+if (!string.IsNullOrEmpty(frontierRedirect))
+    app.Logger.LogInformation("Frontier OAuth callback: {RedirectUri} (HTTPS requis)", frontierRedirect);
 
 app.Run();
