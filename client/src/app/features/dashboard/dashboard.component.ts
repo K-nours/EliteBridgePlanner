@@ -1,6 +1,7 @@
 import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { TruncateTooltipDirective } from '../../shared/directives/truncate-tooltip.directive';
 import { DataSourceBadgeComponent } from '../../shared/components/data-source-badge/data-source-badge.component';
+import { GuildSystemsPanelComponent } from './guild-systems-panel/guild-systems-panel.component';
 import { DashboardApiService } from '../../core/services/dashboard-api.service';
 import { CommandersApiService } from '../../core/services/commanders-api.service';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
@@ -9,7 +10,7 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [TruncateTooltipDirective, DataSourceBadgeComponent],
+  imports: [TruncateTooltipDirective, DataSourceBadgeComponent, GuildSystemsPanelComponent],
   template: `
     <div class="page">
       <div class="page-bg">
@@ -39,7 +40,7 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       </header>
       <main class="main-grid">
         <aside class="col col-left">
-          <div class="box"><h3>Guild Systems</h3></div>
+          <app-guild-systems-panel />
           <div class="box"><h3>Next Galactic Meeting</h3></div>
         </aside>
         <section class="col col-center">
@@ -162,7 +163,7 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     }
     .header-emblem-flank {
       font-family: 'Orbitron', sans-serif;
-      font-size: 0.75rem;
+      font-size: 0.55rem;
       font-weight: 600;
       color: rgba(255, 255, 255, 0.9);
       text-transform: uppercase;

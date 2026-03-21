@@ -6,13 +6,17 @@ export interface GuildSystemBgsDto {
   state?: string;
   isThreatened: boolean;
   isExpansionCandidate: boolean;
+  isHeadquarter: boolean;
   isClean: boolean;
   category: string;
   lastUpdated?: string;
 }
 
+export type GuildSystemsDataSource = 'seed' | 'cached';
+
 export interface GuildSystemsResponseDto {
   origin: GuildSystemBgsDto[];
   headquarter: GuildSystemBgsDto[];
   others: GuildSystemBgsDto[];
+  dataSource: GuildSystemsDataSource;
 }

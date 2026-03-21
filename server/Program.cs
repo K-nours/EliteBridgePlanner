@@ -12,8 +12,11 @@ builder.Services.AddDbContext<GuildDashboardDbContext>(o =>
 
 builder.Services.AddHttpClient<InaraApiService>();
 builder.Services.AddHttpClient<InaraSquadronRosterService>();
+builder.Services.AddHttpClient<EliteBgsApiService>();
 builder.Services.AddScoped<InaraClient>();
+builder.Services.AddSingleton<CurrentGuildService>();
 builder.Services.AddScoped<GuildSystemsService>();
+builder.Services.AddScoped<BgsSyncService>();
 builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<CommandersService>();
 builder.Services.AddScoped<SquadronSyncService>();
@@ -32,6 +35,17 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<GuildDashboardDbContext>();
     await db.Database.MigrateAsync();
+    // IsFromSeed, IsControlled : colonnes explicites. Idempotent pour DB existantes.
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ControlledSystems')
+        AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('ControlledSystems') AND name = 'IsFromSeed')
+        ALTER TABLE [ControlledSystems] ADD [IsFromSeed] bit NOT NULL DEFAULT 1;
+    ");
+    await db.Database.ExecuteSqlRawAsync(@"
+        IF EXISTS (SELECT 1 FROM sys.tables WHERE name = 'ControlledSystems')
+        AND NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('ControlledSystems') AND name = 'IsControlled')
+        ALTER TABLE [ControlledSystems] ADD [IsControlled] bit NOT NULL DEFAULT 1;
+    ");
     var seeder = scope.ServiceProvider.GetRequiredService<DataSeeder>();
     await seeder.SeedAsync();
 }

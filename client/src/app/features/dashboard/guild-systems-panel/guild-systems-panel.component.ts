@@ -13,22 +13,57 @@ import { DataSourceBadgeComponent } from '../../../shared/components/data-source
 export class GuildSystemsPanelComponent implements OnInit {
   private readonly api = inject(GuildSystemsApiService);
 
-  dataSource = signal<'live' | 'seed' | 'mock'>('mock');
-  systems = signal<GuildSystemsResponseDto>({ origin: [], headquarter: [], others: [] });
+  dataSource = signal<'seed' | 'cached'>('seed');
+  systems = signal<GuildSystemsResponseDto>({
+    origin: [],
+    headquarter: [],
+    others: [],
+    dataSource: 'seed',
+  });
   loading = signal(true);
+  error = signal(false);
+  toggling = signal(false);
 
   ngOnInit(): void {
+    this.loadSystems();
+  }
+
+  loadSystems(): void {
+    this.loading.set(true);
     this.api.getSystems().subscribe({
       next: (data: GuildSystemsResponseDto) => {
-        const hasData = data.origin.length > 0 || data.headquarter.length > 0 || data.others.length > 0;
-        this.dataSource.set(hasData ? 'live' : 'seed');
-        this.systems.set(data);
+        this.error.set(false);
+        // Jamais "live" : uniquement seed ou cached
+        const ds = data?.dataSource === 'cached' ? 'cached' : 'seed';
+        this.dataSource.set(ds);
+        this.systems.set({
+          origin: data?.origin ?? [],
+          headquarter: data?.headquarter ?? [],
+          others: data?.others ?? [],
+          dataSource: ds,
+        });
       },
-      error: () => {
-        this.dataSource.set('mock');
-        this.systems.set({ origin: [], headquarter: [], others: [] });
+      error: (err) => {
+        console.error('[GuildSystemsPanel] error', err);
+        this.error.set(true);
+        this.systems.set({
+          origin: [],
+          headquarter: [],
+          others: [],
+          dataSource: 'seed',
+        });
       },
       complete: () => this.loading.set(false),
+    });
+  }
+
+  onSystemClick(sys: GuildSystemBgsDto): void {
+    if (this.toggling() || this.loading()) return;
+    this.toggling.set(true);
+    this.api.toggleHeadquarter(sys.id).subscribe({
+      next: () => this.loadSystems(),
+      error: () => this.toggling.set(false),
+      complete: () => this.toggling.set(false),
     });
   }
 
