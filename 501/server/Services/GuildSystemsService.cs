@@ -119,6 +119,7 @@ public class GuildSystemsService
         // InfluenceDelta24h : n'afficher que si source réelle (sync). Jamais de valeur seed trompeuse.
         decimal? delta = (cs != null && !cs.IsFromSeed && cs.InfluenceDelta24h != null) ? cs.InfluenceDelta24h : null;
 
+        var isFromSeed = cs?.IsFromSeed ?? true;
         return new GuildSystemBgsDto(
             gs.Id,
             gs.Name,
@@ -130,7 +131,8 @@ public class GuildSystemsService
             cs?.IsHeadquarter ?? false,
             cs?.IsClean ?? gs.IsClean,
             gs.Category,
-            cs?.LastUpdated
+            cs?.LastUpdated,
+            isFromSeed
         );
     }
 }

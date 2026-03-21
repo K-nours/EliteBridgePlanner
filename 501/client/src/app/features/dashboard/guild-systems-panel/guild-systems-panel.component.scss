@@ -2,10 +2,14 @@
 
 .panel {
   background: rgba(6, 20, 35, 0.88);
-  border: 1px solid rgba(0, 212, 255, 0.35);
+  border: 1px solid rgba(0, 212, 255, 0.14);
   border-radius: 16px;
   padding: 1rem 1.25rem;
   min-height: 80px;
+  box-shadow:
+    0 0 5px rgba(0, 234, 255, 0.03),
+    0 0 10px rgba(0, 234, 255, 0.02),
+    0 0 20px rgba(0, 234, 255, 0.01);
 }
 
 .panel-header {
@@ -145,7 +149,7 @@
   text-transform: uppercase;
   padding: 0.15rem 0.35rem;
   background: rgba(0, 212, 255, 0.2);
-  border: 1px solid rgba(0, 212, 255, 0.3);
+  border: 1px solid rgba(0, 212, 255, 0.14);
   border-radius: 4px;
   color: #00d4ff;
 }
