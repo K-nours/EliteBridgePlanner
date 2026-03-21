@@ -19,6 +19,7 @@ public class GuildDashboardDbContext : DbContext
     public DbSet<ControlledSystem> ControlledSystems => Set<ControlledSystem>();
     public DbSet<SquadronMember> SquadronMembers => Set<SquadronMember>();
     public DbSet<SquadronSnapshot> SquadronSnapshots => Set<SquadronSnapshot>();
+    public DbSet<EddnRawMessage> EddnRawMessages => Set<EddnRawMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -57,6 +58,14 @@ public class GuildDashboardDbContext : DbContext
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.GuildId);
             e.HasOne(x => x.Guild).WithMany(g => g.SquadronSnapshots).HasForeignKey(x => x.GuildId);
+        });
+
+        modelBuilder.Entity<EddnRawMessage>(e =>
+        {
+            e.ToTable("EddnRawMessages");
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.ReceivedAt);
+            e.HasIndex(x => x.SchemaRef);
         });
     }
 }

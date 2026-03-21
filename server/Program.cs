@@ -1,4 +1,5 @@
 using GuildDashboard.Server.Data;
+using GuildDashboard.Server.Integrations.Eddn;
 using GuildDashboard.Server.Services;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,6 +22,10 @@ builder.Services.AddScoped<DashboardService>();
 builder.Services.AddScoped<CommandersService>();
 builder.Services.AddScoped<SquadronSyncService>();
 builder.Services.AddScoped<DataSeeder>();
+builder.Services.AddSingleton<EddnStatusService>();
+builder.Services.AddScoped<EddnMessageStore>();
+builder.Services.AddHostedService<EddnListenerService>();
+builder.Services.AddHostedService<EddnPurgeService>();
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase);
 
