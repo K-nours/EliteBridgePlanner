@@ -18,7 +18,7 @@
       </button>
       @if (systemsMenuOpen()) {
         <div class="systems-menu">
-          <button type="button" class="systems-menu-item" [disabled]="!inaraFactionUrl()" [title]="inaraFactionUrl() ? (lastSystemsImportAt() ? 'Dernière sync: ' + formatLastSync(lastSystemsImportAt()!) : 'Ouvrir Inara') : 'Configurer l\'URL faction'" (click)="onSyncSystemsClick(); systemsMenuOpen.set(false)">Synchronisation</button>
+          <button type="button" class="systems-menu-item" [disabled]="!inaraFactionUrl()" [title]="inaraFactionUrl() ? (lastSystemsImportAt() ? 'Dernière sync: ' + formatLastSync(lastSystemsImportAt()!) : 'Ouvrir Inara') : 'Configurer l\'URL faction'" (click)="onSyncSystemsClick(); systemsMenuOpen.set(false)">Import Inara</button>
           <button type="button" class="systems-menu-item systems-menu-item--danger" [disabled]="resetting()" title="Purge tous les systèmes. État propre avant import Inara complet." (click)="onResetClick(); systemsMenuOpen.set(false)">{{ resetting() ? '…' : 'Reset' }}</button>
         </div>
       }
@@ -28,15 +28,37 @@
     <p class="error-message">{{ lastError() }}</p>
   }
   <div class="systems-list">
-    @for (cat of categoryConfig; track cat.key) {
-      <div class="category">
-        <span class="category-label">{{ cat.label }}</span>
-        @if (cat.systems.length > 0) {
-          @for (sys of cat.systems; track sys.id) {
-            <ng-container
-              *ngTemplateOutlet="systemRowTpl; context: { $implicit: sys }" />
-          }
+    @for (cat of categoryConfig(); track cat.key) {
+      <div class="category" [class.category--collapsible]="isCollapsible(cat.key)">
+        @if (isCollapsible(cat.key)) {
+          <button
+            type="button"
+            class="category-header category-header--clickable"
+            [class.category-header--expanded]="isSectionExpanded(cat.key)"
+            (click)="cat.key === 'low' ? toggleLow() : toggleOthers()"
+            [attr.aria-expanded]="isSectionExpanded(cat.key)"
+            [attr.aria-label]="(isSectionExpanded(cat.key) ? 'Replier' : 'Déplier') + ' ' + cat.label">
+            <svg class="category-chevron" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+            <span class="category-label">{{ cat.label }}</span>
+            @if (cat.systems.length > 0) {
+              <span class="category-count">({{ cat.systems.length }})</span>
+            }
+          </button>
         } @else {
+          <span class="category-header">
+            <span class="category-label">{{ cat.label }}</span>
+          </span>
+        }
+        @if (cat.systems.length > 0 && (!isCollapsible(cat.key) || isSectionExpanded(cat.key))) {
+          <div class="category-content">
+            @for (sys of cat.systems; track sys.id) {
+              <ng-container
+                *ngTemplateOutlet="systemRowTpl; context: { $implicit: sys }" />
+            }
+          </div>
+        } @else if (cat.systems.length === 0) {
           <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
         }
       </div>
@@ -62,29 +84,21 @@
         [title]="copyTooltip(sys.id)"
         [attr.aria-label]="copyTooltip(sys.id)"
         (click)="copySystemName($event, sys.name, sys.id)">
-        <svg class="icon-copy" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-        </svg>
+        @if (copiedSystemId() === sys.id) {
+          <svg class="icon-check" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        } @else {
+          <svg class="icon-copy" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        }
       </button>
     </span>
     <span class="system-row-right">
-      @if (sys.influenceDelta24h != null) {
-        <span class="delta-badge"
-          [class.delta-up]="sys.influenceDelta24h > 0"
-          [class.delta-down]="sys.influenceDelta24h < 0"
-          [class.delta-neutral]="sys.influenceDelta24h === 0">
-          {{ sys.influenceDelta24h > 0 ? '↑' : (sys.influenceDelta24h < 0 ? '↓' : '−') }} {{ getDeltaDisplay(sys.influenceDelta24h) }}
-        </span>
-      }
-      @if (sys.isThreatened || sys.isExpansionCandidate) {
-        <span class="indicators">
-          @if (sys.isThreatened) { <span class="ind-threatened" title="Système menacé">⚠</span> }
-          @if (sys.isExpansionCandidate) { <span class="ind-expansion" title="Candidat expansion">🚀</span> }
-        </span>
-      }
-      @if (sys.state) {
-        <span class="state-badge">{{ sys.state }}</span>
+      @for (badge of getStateBadges(sys); track badge) {
+        <span class="state-badge">{{ badge }}</span>
       }
       <span class="influence" [class]="getInfluenceClass(sys)">{{ sys.influencePercent }}%</span>
     </span>

@@ -10,7 +10,9 @@ import { GuildSettingsService } from '../../../core/services/guild-settings.serv
 import { InaraSyncBridgeService } from '../../../core/services/inara-sync-bridge.service';
 import { SyncHelpModalService } from '../../../core/services/sync-help-modal.service';
 import { SyncLogService } from '../../../core/services/sync-log.service';
-import type { GuildSystemBgsDto } from '../../../core/models/guild-systems.model';
+import type { GuildSystemBgsDto, SystemsFilterValue } from '../../../core/models/guild-systems.model';
+import { getInfluenceClass } from '../../../core/utils/influence-thresholds.util';
+import { hasConflictState } from '../../../core/utils/guild-systems.util';
 
 @Component({
   selector: 'app-guild-systems-panel',
@@ -36,6 +38,10 @@ export class GuildSystemsPanelComponent implements OnInit {
   /** ID du système dont le nom vient d'être copié (feedback tooltip "Copié") */
   copiedSystemId = signal<number | null>(null);
 
+  /** Sections collapseables : low et others. true = section visible (expanded). */
+  lowExpanded = signal(true);
+  othersExpanded = signal(true);
+
   panelState = this.guildSync.panelState;
   systems = this.guildSync.systems;
   lastError = this.guildSync.lastError;
@@ -45,6 +51,8 @@ export class GuildSystemsPanelComponent implements OnInit {
     if (s === 'loading') return 'Chargement...';
     return 'Aucun système';
   });
+
+  constructor() {}
 
   ngOnInit(): void {
     this.guildSync.loadSystems();
@@ -97,17 +105,33 @@ export class GuildSystemsPanelComponent implements OnInit {
     });
   }
 
+  /** Classe couleur d'influence — seuils métier (5%, 15%, 60%). */
   getInfluenceClass(sys: GuildSystemBgsDto): string {
-    const t = this.systems().influenceThresholds ?? { critical: 10, low: 30, high: 60 };
-    if (sys.influencePercent < t.critical) return 'influence-critical';
-    if (sys.influencePercent < t.low) return 'influence-low';
-    if (sys.influencePercent >= t.high) return 'influence-high';
-    return 'influence-normal';
+    return getInfluenceClass(sys.influencePercent);
   }
 
-  getDeltaDisplay(delta: number): string {
+  /** Vrai si delta exploitable (non null, différent de 0). */
+  hasDelta(delta: number | null | undefined): boolean {
+    return delta != null && delta !== 0;
+  }
+
+  /** Format delta influence : +1,2% / -0,8% / — si inconnu ou nul. */
+  getDeltaDisplay(delta: number | null | undefined): string {
+    if (delta == null || delta === 0) return '—';
     const sign = delta >= 0 ? '+' : '';
-    return `${sign}${delta}%`;
+    return `${sign}${Math.abs(delta).toFixed(1)}%`;
+  }
+
+  /** Badges d'état affichables sur une ligne système. */
+  getStateBadges(sys: GuildSystemBgsDto): string[] {
+    const badges: string[] = [];
+    const fromStates = sys.states?.length ? sys.states : (sys.state?.trim() ? [sys.state.trim()] : []);
+    for (const s of fromStates) {
+      if (s && !badges.includes(s)) badges.push(s);
+    }
+    if (sys.isExpansionCandidate && !badges.includes('Expansion')) badges.push('Expansion');
+    if (sys.isThreatened && !badges.includes('Menacé')) badges.push('Menacé');
+    return badges;
   }
 
   /** Copie le nom du système dans le presse-papiers. Retourne true si succès. */
@@ -140,14 +164,45 @@ export class GuildSystemsPanelComponent implements OnInit {
     return this.copiedSystemId() === sysId ? 'Copié' : 'Copier';
   }
 
-  /** Configuration des catégories pour le template unique. Une seule catégorie par système. */
-  get categoryConfig(): { key: string; label: string; systems: GuildSystemBgsDto[] }[] {
-    const s = this.systems();
-    return [
-      { key: 'origin', label: 'Origine', systems: s.origin },
-      { key: 'hq', label: 'Quartier général', systems: s.headquarter },
-      { key: 'critical', label: 'Systèmes critiques', systems: s.critical },
-      { key: 'others', label: 'Autres', systems: s.others },
-    ];
+  protected toggleLow = (): void => this.lowExpanded.update((v) => !v);
+  protected toggleOthers = (): void => this.othersExpanded.update((v) => !v);
+
+  protected isCollapsible(catKey: SystemsFilterValue): boolean {
+    return catKey === 'low' || catKey === 'others';
   }
+
+  protected isSectionExpanded(catKey: SystemsFilterValue): boolean {
+    if (catKey === 'low') return this.lowExpanded();
+    if (catKey === 'others') return this.othersExpanded();
+    return true;
+  }
+
+  /** Configuration des catégories pour le template unique. Filtre appliqué via systemsFilter. */
+  protected categoryConfig = computed(() => {
+    const s = this.systems();
+    const filter = this.guildSync.systemsFilter();
+    const allList = [
+      ...(s.origin ?? []),
+      ...(s.headquarter ?? []),
+      ...(s.conflicts ?? []),
+      ...(s.critical ?? []),
+      ...(s.low ?? []),
+      ...(s.healthy ?? []),
+      ...(s.others ?? []),
+    ];
+    const systemsWithConflict = allList.filter((sys) => hasConflictState(sys));
+    const raw: { key: SystemsFilterValue; label: string; systems: GuildSystemBgsDto[] }[] = [
+      { key: 'origin', label: 'Origine', systems: s.origin ?? [] },
+      { key: 'hq', label: 'Quartier général', systems: s.headquarter ?? [] },
+      { key: 'conflicts', label: 'Systèmes en conflits', systems: systemsWithConflict },
+      { key: 'critical', label: 'Systèmes critiques', systems: s.critical ?? [] },
+      { key: 'low', label: 'Systèmes bas', systems: s.low ?? [] },
+      { key: 'healthy', label: 'Systèmes sains', systems: s.healthy ?? [] },
+      { key: 'others', label: 'Autres', systems: s.others ?? [] },
+    ];
+    if (filter === 'all') return raw;
+    if (filter === 'conflicts') return [{ key: 'conflicts', label: 'Systèmes en conflits', systems: systemsWithConflict }];
+    const match = raw.find((c) => c.key === filter);
+    return match ? [match] : raw;
+  });
 }

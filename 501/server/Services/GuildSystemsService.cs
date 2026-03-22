@@ -17,19 +17,20 @@ public class GuildSystemsService
 {
     private readonly GuildDashboardDbContext _db;
     private readonly InaraFactionService _inaraFaction;
+    private readonly ILogger<GuildSystemsService> _log;
 
-    public GuildSystemsService(GuildDashboardDbContext db, InaraFactionService inaraFaction)
+    public GuildSystemsService(GuildDashboardDbContext db, InaraFactionService inaraFaction, ILogger<GuildSystemsService> log)
     {
         _db = db;
         _inaraFaction = inaraFaction;
+        _log = log;
     }
 
     public async Task<GuildSystemsResponseDto> GetSystemsAsync(int guildId = 1)
     {
         var guildExists = await _db.Guilds.AnyAsync(g => g.Id == guildId);
         if (!guildExists)
-            return new GuildSystemsResponseDto([], [], [], [], "seed", new InfluenceThresholdsDto(
-                InfluenceThresholds.Critical, InfluenceThresholds.Low, InfluenceThresholds.High));
+            return NewEmptyResponse();
 
         var guildSystems = await _db.GuildSystems
             .Where(s => s.GuildId == guildId)
@@ -41,9 +42,16 @@ public class GuildSystemsService
 
         var origin = new List<GuildSystemBgsDto>();
         var headquarter = new List<GuildSystemBgsDto>();
+        var conflicts = new List<GuildSystemBgsDto>();
         var critical = new List<GuildSystemBgsDto>();
+        var low = new List<GuildSystemBgsDto>();
+        var healthy = new List<GuildSystemBgsDto>();
         var others = new List<GuildSystemBgsDto>();
         var anyFromSync = false;
+
+        const decimal TacticalCritical = 5m;
+        const decimal TacticalLow = 15m;
+        const decimal TacticalHigh = 60m;
 
         foreach (var gs in guildSystems)
         {
@@ -51,29 +59,69 @@ public class GuildSystemsService
             var dto = ToDto(gs, cs);
             var isOrigin = string.Equals(gs.Category, "Origine", StringComparison.OrdinalIgnoreCase);
             var isHq = cs?.IsHeadquarter == true;
-            var isCritical = cs?.IsThreatened == true || cs?.IsExpansionCandidate == true;
+            var isConflict = IsConflictState(dto.State);
+            var influence = dto.InfluencePercent;
+            var isCritical = influence < TacticalCritical;
+            var isLow = influence < TacticalLow && !isCritical;
+            var isHealthy = influence >= TacticalHigh;
 
             if (cs != null && !cs.IsFromSeed)
                 anyFromSync = true;
 
-            // Une seule catégorie par système : Origine > HQ > Critiques > Autres
+            // Priorité unique : Origine > HQ > Conflits > Critiques > Bas > Sains > Autres
             if (isOrigin)
                 origin.Add(dto);
             else if (isHq)
                 headquarter.Add(dto);
+            else if (isConflict)
+                conflicts.Add(dto);
             else if (isCritical)
                 critical.Add(dto);
+            else if (isLow)
+                low.Add(dto);
+            else if (isHealthy)
+                healthy.Add(dto);
             else
                 others.Add(dto);
         }
 
+        conflicts = conflicts.OrderByDescending(s => s.InfluencePercent).ThenBy(s => s.Name).ToList();
         critical = critical.OrderByDescending(s => s.InfluencePercent).ThenBy(s => s.Name).ToList();
+        low = low.OrderByDescending(s => s.InfluencePercent).ThenBy(s => s.Name).ToList();
+        healthy = healthy.OrderByDescending(s => s.InfluencePercent).ThenBy(s => s.Name).ToList();
         others = others.OrderByDescending(s => s.InfluencePercent).ThenBy(s => s.Name).ToList();
 
         var dataSource = anyFromSync ? "cached" : "seed";
         var thresholds = new InfluenceThresholdsDto(
             InfluenceThresholds.Critical, InfluenceThresholds.Low, InfluenceThresholds.High);
-        return new GuildSystemsResponseDto(origin, headquarter, critical, others, dataSource, thresholds);
+        var tactical = new TacticalThresholdsDto(TacticalCritical, TacticalLow, TacticalHigh);
+        var result = new GuildSystemsResponseDto(origin, headquarter, conflicts, critical, low, healthy, others, dataSource, thresholds, tactical);
+        return result;
+    }
+
+    private static bool IsConflictState(string? state)
+    {
+        if (string.IsNullOrWhiteSpace(state)) return false;
+        var parts = state.Split(',', StringSplitOptions.TrimEntries);
+        foreach (var s in parts)
+        {
+            if (string.IsNullOrWhiteSpace(s)) continue;
+            if (s.Equals("Conflit", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("War", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("Civil War", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("Civil Unrest", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("Election", StringComparison.OrdinalIgnoreCase)
+                || s.Equals("Retribution", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private static GuildSystemsResponseDto NewEmptyResponse()
+    {
+        var th = new InfluenceThresholdsDto(InfluenceThresholds.Critical, InfluenceThresholds.Low, InfluenceThresholds.High);
+        var tactical = new TacticalThresholdsDto(5, 15, 60);
+        return new GuildSystemsResponseDto([], [], [], [], [], [], [], "seed", th, tactical);
     }
 
     /// <summary>Audit ciblé : pour chaque système demandé, retourne valeurs brutes, parsées, stockées, DTO, catégorie et statut.</summary>
@@ -231,16 +279,17 @@ public class GuildSystemsService
 
     private static GuildSystemBgsDto ToDto(GuildSystem gs, ControlledSystem? cs)
     {
-        // InfluenceDelta24h : n'afficher que si source réelle (sync). Jamais de valeur seed trompeuse.
+        // InfluenceDelta24h : source Inara (import) ou sync BGS. Jamais seed.
         decimal? delta = (cs != null && !cs.IsFromSeed && cs.InfluenceDelta24h != null) ? cs.InfluenceDelta24h : null;
 
-        // Ne pas afficher State = "None" (BGS "aucun état") pour éviter confusion avec "non"
         var state = cs?.State;
         if (string.Equals(state, "None", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(state))
             state = null;
 
-        // Source de vérité pour l'influence : GuildSystem (alimenté par Inara import).
-        // ControlledSystem.InfluencePercent peut être périmé (BgsSync ne le met pas à jour).
+        var states = state != null
+            ? state.Split(',', StringSplitOptions.TrimEntries).Where(s => !string.IsNullOrWhiteSpace(s) && !string.Equals(s, "None", StringComparison.OrdinalIgnoreCase)).ToList()
+            : (IReadOnlyList<string>?)null;
+
         var isFromSeed = cs?.IsFromSeed ?? true;
         return new GuildSystemBgsDto(
             gs.Id,
@@ -248,6 +297,7 @@ public class GuildSystemsService
             gs.InfluencePercent,
             delta,
             state,
+            states?.Count > 0 ? states : null,
             cs?.IsThreatened ?? false,
             cs?.IsExpansionCandidate ?? false,
             cs?.IsHeadquarter ?? false,

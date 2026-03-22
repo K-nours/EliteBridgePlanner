@@ -6,6 +6,7 @@ public record GuildSystemBgsDto(
     decimal InfluencePercent,
     decimal? InfluenceDelta24h,
     string? State,
+    IReadOnlyList<string>? States,
     bool IsThreatened,
     bool IsExpansionCandidate,
     bool IsHeadquarter,
@@ -18,13 +19,20 @@ public record GuildSystemBgsDto(
 /// <summary>Seuils d'influence (source unique backend).</summary>
 public record InfluenceThresholdsDto(decimal Critical, decimal Low, decimal High);
 
+/// <summary>Seuils tactiques pour catégorisation (Critical &lt; 5%, Low &lt; 15%, Healthy ≥ 60%).</summary>
+public record TacticalThresholdsDto(decimal Critical, decimal Low, decimal High);
+
 public record GuildSystemsResponseDto(
     IReadOnlyList<GuildSystemBgsDto> Origin,
     IReadOnlyList<GuildSystemBgsDto> Headquarter,
+    IReadOnlyList<GuildSystemBgsDto> Conflicts,
     IReadOnlyList<GuildSystemBgsDto> Critical,
+    IReadOnlyList<GuildSystemBgsDto> Low,
+    IReadOnlyList<GuildSystemBgsDto> Healthy,
     IReadOnlyList<GuildSystemBgsDto> Others,
     string DataSource, // "seed" | "cached" — jamais "live" sans sync réelle
-    InfluenceThresholdsDto InfluenceThresholds
+    InfluenceThresholdsDto InfluenceThresholds,
+    TacticalThresholdsDto TacticalThresholds
 );
 
 /// <summary>Entrée d'audit pour un système : Inara, GuildSystem, ControlledSystem, DTO final. Diagnostic catégorisation et influence.</summary>
