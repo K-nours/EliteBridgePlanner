@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Inara Sync — Guild Dashboard
 // @namespace    https://github.com/elitebridgeplanner
-// @version      2.13.0
+// @version      2.15.0
 // @description  Script unique : bridge sur dashboard, extraction systèmes (faction), extraction CMDRs (squadron)
 // @author       EliteBridgePlanner
 // @match        https://inara.cz/elite/*
@@ -78,7 +78,7 @@
     return;
   }
 
-  // ——— Styles dashboard (cohérence graphique) ———
+  // ——— Styles identiques au bouton Import Inara (systems-menu-item) ———
   function injectDashboardStyles() {
     if (document.getElementById('inara-sync-styles')) return;
     const link = document.createElement('link');
@@ -90,24 +90,28 @@
     const style = document.createElement('style');
     style.id = 'inara-sync-styles';
     style.textContent = `
-      .inara-sync-box{position:fixed;bottom:24px;right:24px;z-index:999998;
-        background:rgba(6,20,35,0.95);border:1px solid rgba(0,212,255,0.2);
-        border-radius:16px;box-shadow:0 0 10px rgba(0,234,255,0.05),0 4px 20px rgba(0,0,0,0.4);
-        padding:1rem 1.25rem;font-family:'Exo 2',sans-serif;
-        display:flex;flex-direction:column;gap:0.5rem;min-width:200px;}
-      .inara-sync-box h3{margin:0 0 0.5rem;font-family:'Orbitron',sans-serif;font-size:0.7rem;
-        font-weight:600;color:#00d4ff;text-transform:uppercase;letter-spacing:0.08em;}
-      .inara-sync-btn{padding:0.5rem 0.85rem;font-size:0.75rem;font-family:'Orbitron',sans-serif;
-        background:rgba(0,212,255,0.2);border:1px solid rgba(0,212,255,0.4);color:#00d4ff;
-        border-radius:8px;cursor:pointer;transition:background 0.15s,border-color 0.15s;}
-      .inara-sync-btn:hover{background:rgba(0,212,255,0.3);border-color:rgba(0,212,255,0.5);}
-      .inara-sync-menu{display:none;flex-direction:column;gap:0.35rem;margin-top:0.5rem;
-        padding-top:0.5rem;border-top:1px solid rgba(0,212,255,0.14);}
-      .inara-sync-menu-item{padding:0.4rem 0.6rem;font-size:0.7rem;font-family:'Exo 2',sans-serif;
-        background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);
-        color:rgba(255,255,255,0.9);border-radius:6px;cursor:pointer;text-align:left;
-        transition:background 0.15s;}
-      .inara-sync-menu-item:hover{background:rgba(0,212,255,0.18);}
+      .inara-sync-box{position:fixed !important;bottom:24px !important;right:24px !important;z-index:999998 !important;
+        background:rgba(6,20,35,0.98) !important;border:1px solid rgba(0,212,255,0.4) !important;
+        border-radius:4px !important;box-shadow:0 4px 12px rgba(0,0,0,0.4) !important;
+        padding:0.5rem !important;font-family:'Exo 2',sans-serif !important;
+        display:flex !important;flex-direction:column !important;gap:0.2rem !important;min-width:180px !important;}
+      .inara-sync-box h3{margin:0 0 0.35rem !important;font-family:'Orbitron',sans-serif !important;font-size:0.65rem !important;
+        font-weight:600 !important;color:#00d4ff !important;text-transform:uppercase !important;letter-spacing:0.1em !important;}
+      button.inara-sync-btn{padding:0.35rem 0.6rem !important;font-size:0.65rem !important;font-family:'Orbitron',sans-serif !important;
+        background:rgba(0,212,255,0.1) !important;border:1px solid rgba(0,212,255,0.25) !important;color:#00d4ff !important;
+        border-radius:4px !important;cursor:pointer !important;text-align:left !important;transition:background 0.15s !important;
+        display:flex !important;align-items:center !important;justify-content:flex-start !important;width:100% !important;margin:0 !important;box-sizing:border-box !important;line-height:1 !important;}
+      button.inara-sync-btn:hover:not(:disabled){background:rgba(0,212,255,0.25) !important;}
+      button.inara-sync-btn:disabled{opacity:0.5 !important;cursor:not-allowed !important;}
+      .inara-sync-menu{display:none !important;flex-direction:column !important;gap:0.2rem !important;margin-top:0.25rem !important;
+        padding-top:0.25rem !important;border-top:1px solid rgba(0,212,255,0.2) !important;}
+      .inara-sync-menu.inara-sync-menu--open{display:flex !important;}
+      button.inara-sync-menu-item{padding:0.35rem 0.6rem !important;font-size:0.65rem !important;font-family:'Orbitron',sans-serif !important;
+        background:rgba(0,212,255,0.1) !important;border:1px solid rgba(0,212,255,0.25) !important;color:#00d4ff !important;
+        border-radius:4px !important;cursor:pointer !important;text-align:left !important;transition:background 0.15s !important;
+        display:flex !important;align-items:center !important;justify-content:flex-start !important;width:100% !important;margin:0 !important;box-sizing:border-box !important;line-height:1 !important;}
+      button.inara-sync-menu-item:hover:not(:disabled){background:rgba(0,212,255,0.25) !important;}
+      button.inara-sync-menu-item:disabled{opacity:0.5 !important;cursor:not-allowed !important;}
       .inara-sync-toast{position:fixed;bottom:100px;right:24px;z-index:999999;padding:1rem 1.25rem;
         font-family:'Exo 2',sans-serif;font-size:0.85rem;max-width:360px;
         background:rgba(6,20,35,0.98);border:1px solid rgba(0,212,255,0.3);
@@ -166,7 +170,6 @@
     const PERCENT_REGEX = /(\d+(?:[.,]\d+)?)\s*%?/;
     const UPDATED_REGEX = /(\d+\s*(?:day|hour|minute|week)s?\s*(?:ago)?|il y a \d+\s*(?:jour|heure|minute)s?)/i;
     const NUMBER_CLEAN = /[^\d]/g;
-
     function cleanName(str) {
       if (!str || typeof str !== 'string') return '';
       return str.replace(SPECIAL_CHARS, '').replace(/\s+/g, ' ').trim();
@@ -198,6 +201,64 @@
         if (i >= 0) return i;
       }
       return -1;
+    }
+
+    /** Extrait les tags depuis les classes du <tr> : ctrl, noctrl, colony, nocolony. */
+    function extractTagsFromRow(row) {
+      const tags = [];
+      const cls = (row.className || '').toLowerCase();
+      if (cls.includes('ctrl')) tags.push('ctrl');
+      if (cls.includes('noctrl')) tags.push('noctrl');
+      if (cls.includes('colony')) tags.push('colony');
+      if (cls.includes('nocolony')) tags.push('nocolony');
+      return tags;
+    }
+
+    /** Mapping strict tooltip FR -> état BGS. Évite les faux positifs (proximité, etc.). */
+    const TOOLTIP_TO_STATE = [
+      { pattern: /le\s+conflit\s+est\s+en\s+cours/i, state: 'Conflit' },
+      { pattern: /conflit\s+est\s+en\s+cours/i, state: 'Conflit' },
+      { pattern: /la\s+guerre\s+civile\s+est\s+en\s+cours/i, state: 'Civil War' },
+      { pattern: /guerre\s+civile\s+est\s+en\s+cours/i, state: 'Civil War' },
+      { pattern: /l['']?élection\s+est\s+en\s+cours/i, state: 'Election' },
+      { pattern: /élection\s+est\s+en\s+cours/i, state: 'Election' },
+      { pattern: /la\s+retraite\s+est\s+en\s+cours/i, state: 'Retreat' },
+      { pattern: /retraite\s+est\s+en\s+cours/i, state: 'Retreat' },
+      { pattern: /l['']?expansion\s+est\s+en\s+cours/i, state: 'Expansion' },
+      { pattern: /expansion\s+est\s+en\s+cours/i, state: 'Expansion' },
+    ];
+    const EXCLUDE_PATTERNS = [
+      /influence\s+est\s+proche/i,
+      /proche\s+de\s+celle\s+d['']?une\s+autre\s+faction/i,
+      /5%\s*(de\s*)?différence/i,
+      /différence\s+ou\s+moins/i,
+    ];
+
+    /** Extrait les états BGS depuis data-tooltiptext de la cellule Influence. Mapping strict. */
+    function extractStatesFromInfluenceCellTooltips(infCellEl) {
+      const tooltips = [];
+      if (!infCellEl) return { tooltips, states: [] };
+      const els = infCellEl.querySelectorAll('[data-tooltiptext]');
+      for (const el of els) {
+        const t = (el.getAttribute('data-tooltiptext') || '').trim();
+        if (t) tooltips.push(t);
+      }
+      const states = new Set();
+      for (const text of tooltips) {
+        const lower = text.toLowerCase();
+        let excluded = false;
+        for (const re of EXCLUDE_PATTERNS) {
+          if (re.test(text)) { excluded = true; break; }
+        }
+        if (excluded) continue;
+        for (const { pattern, state } of TOOLTIP_TO_STATE) {
+          if (pattern.test(text)) {
+            states.add(state);
+            break;
+          }
+        }
+      }
+      return { tooltips, states: Array.from(states) };
     }
 
     /** Retourne le tableau des systèmes (présence), ou null si introuvable. */
@@ -239,22 +300,6 @@
       return null;
     }
 
-    /** Extrait le total "Présente dans X systèmes" depuis l'encart faction. */
-    function extractTotalFromEncart() {
-      const body = (document.body?.innerText || document.body?.textContent || '').toLowerCase();
-      const patterns = [
-        /présente\s+dans\s+(\d+)\s+systèmes/i,
-        /present\s+in\s+(\d+)\s+(?:star\s+)?systems?/i,
-        /(\d+)\s+systèmes?\s+\(présence\)/i,
-        /(\d+)\s+systems?\s+\(presence\)/i,
-      ];
-      for (const re of patterns) {
-        const m = body.match(re);
-        if (m) return parseInt(m[1], 10);
-      }
-      return null;
-    }
-
     /** Nom du premier système visible dans le tableau. */
     function getFirstSystemName(table) {
       const firstLink = table.querySelector('tbody tr a[href*="/elite/starsystem/"]');
@@ -284,8 +329,8 @@
         } catch (_) {}
       }
       if (!nextBtn) {
-        plog('nextSelector=(none) nextFound=false nextDisabled=(n/a) totalPages=1');
-        return { nextBtn: null, totalPages: 1, disabled: true, nextText: null };
+        plog('nextSelector=(none) nextFound=false nextDisabled=(n/a) totalPages=1 currentPage=1');
+        return { nextBtn: null, totalPages: 1, disabled: true, currentPage: 1, nextText: null };
       }
       const cls = (nextBtn.className || '').toLowerCase();
       const disabled = cls.includes('disabled') ||
@@ -324,7 +369,48 @@
         return 1;
       })() : 1;
       plog('nextSelector=' + JSON.stringify(usedSelector) + ' nextFound=true nextDisabled=' + disabled + ' totalPages=' + totalPages + ' currentPage=' + currentPage);
-      return { nextBtn, totalPages, disabled, nextText: usedSelector };
+      return { nextBtn, totalPages, disabled, currentPage, nextText: usedSelector };
+    }
+
+    /** Retourne à la page 1 si nécessaire. Attend le changement du tableau. Retourne { ok, reason }. */
+    async function goToPage1IfNeeded(table) {
+      const { currentPage, totalPages } = findPaginationControls(table);
+      plog('currentPage detected=' + currentPage);
+      if (currentPage <= 1) {
+        plog('déjà sur page 1, pas de retour');
+        return { ok: true, reason: null };
+      }
+      plog('retour à la page 1');
+      const pager = table.closest('.dataTables_wrapper')?.querySelector('.dataTables_paginate');
+      if (!pager) {
+        plog('STOP reason="pager not found"');
+        return { ok: false, reason: 'pager not found' };
+      }
+      const prev = getFirstSystemName(table);
+      const page1Btn = pager.querySelector('.paginate_button[data-dt-idx="0"]')
+        || Array.from(pager.querySelectorAll('.paginate_button')).find((b) => (b.textContent || '').trim() === '1');
+      if (page1Btn) {
+        page1Btn.click();
+      } else {
+        const prevBtn = pager.querySelector('.paginate_button.previous, .paginate_button[data-dt-idx="previous"]');
+        if (!prevBtn) {
+          plog('STOP reason="no page1 or previous button"');
+          return { ok: false, reason: 'no page1 or previous button' };
+        }
+        for (let i = 0; i < currentPage - 1; i++) {
+          prevBtn.click();
+          await new Promise((r) => setTimeout(r, 150));
+        }
+      }
+      const { changed, newFirst } = await waitForTableChange(table, prev);
+      plog('changed=' + changed + ' before=' + JSON.stringify(prev ?? '(vide)') + ' after=' + JSON.stringify(newFirst ?? '(vide)'));
+      if (!changed) {
+        plog('STOP reason="table did not change after goToPage1"');
+        return { ok: false, reason: 'table did not change' };
+      }
+      await new Promise((r) => setTimeout(r, 75));
+      plog('scan démarré depuis page 1');
+      return { ok: true, reason: null };
     }
 
     /** Attend que le premier système change (max 6s, poll 80ms). Retourne { changed, newFirst }. */
@@ -371,6 +457,8 @@
       return { ok: true, reason: null };
     }
 
+    const AUDIT_SYSTEM_NAMES = ['HIP 4332', 'Mayang', 'Sabines', 'Nanapan', 'Khwarakan', 'NGC 6357'];
+
     function parseDataRowsFromTable(table, indices, seen) {
       const allRows = Array.from(table.querySelectorAll('tr'));
       const dataRows = allRows.filter((r) => r.querySelector('a[href*="/elite/starsystem/"]'));
@@ -385,13 +473,30 @@
         if (!name || seen.has(name.toLowerCase())) continue;
         seen.add(name.toLowerCase());
         const get = (i) => (i >= 0 && cells[i] ? (cells[i].textContent || '').trim() : null);
-        systems.push({
-          name, government: get(iG), allegiance: get(iA), power: cells[iP] ? extractPower(cells[iP]) : null,
-          population: parseLong(get(iPop)), factionCount: (() => { const v = get(iF); return v ? (parseInt(v.replace(/\D/g, ''), 10) || null) : null; })(),
+        const infCellEl = iI >= 0 && cells[iI] ? cells[iI] : null;
+        const tags = extractTagsFromRow(row);
+        const influencePercent = parsePercent(get(iI));
+        const { tooltips: rawTooltips, states: extractedStates } = extractStatesFromInfluenceCellTooltips(infCellEl);
+        if (AUDIT_SYSTEM_NAMES.some((a) => name.toLowerCase().includes(a.toLowerCase())) && typeof console !== 'undefined' && console.log) {
+          console.log('[Inara Sync][Systems][States]', name, '| tooltips=', JSON.stringify(rawTooltips), '| states=', JSON.stringify(extractedStates));
+        }
+        const system = {
+          name,
+          government: get(iG),
+          allegiance: get(iA),
+          power: cells[iP] ? extractPower(cells[iP]) : null,
+          population: parseLong(get(iPop)),
+          factionCount: (() => { const v = get(iF); return v ? (parseInt(v.replace(/\D/g, ''), 10) || null) : null; })(),
           stationCount: (() => { const v = get(iS); return v ? (parseInt(v.replace(/\D/g, ''), 10) || null) : null; })(),
-          influencePercent: parsePercent(get(iI)), lastUpdatedText: parseUpdated(get(iU)),
-          category: 'Guild', isClean: false,
-        });
+          influencePercent,
+          influenceDelta24h: undefined,
+          states: extractedStates.length ? extractedStates : undefined,
+          tags: tags.length ? tags : undefined,
+          lastUpdatedText: parseUpdated(get(iU)),
+          category: 'Guild',
+          isClean: false,
+        };
+        systems.push(system);
       }
       return systems;
     }
@@ -401,10 +506,8 @@
       const targetTable = getSystemsTable();
       if (!targetTable) return { systems: [], error: 'Table de présence introuvable' };
 
-      const totalEncart = extractTotalFromEncart();
-      const countBefore = Array.from(targetTable.querySelectorAll('tbody tr')).filter((r) => r.querySelector('a[href*="/elite/starsystem/"]')).length;
-      log('Total encart faction:', totalEncart ?? '(non trouvé)');
-      log('Lignes DOM visibles (page courante):', countBefore);
+      const linesPerPage = Array.from(targetTable.querySelectorAll('tbody tr')).filter((r) => r.querySelector('a[href*="/elite/starsystem/"]')).length;
+      log('Lignes visibles sur la page courante:', linesPerPage);
 
       const allRows = Array.from(targetTable.querySelectorAll('tr'));
       const headerRow = targetTable.querySelector('thead tr') || allRows[0];
@@ -415,31 +518,35 @@
       const idxPop = findColumnIndex(headerCells, 'population', 'pop');
       const idxInf = findColumnIndex(headerCells, 'influence', 'presence');
       const idxUpd = findColumnIndex(headerCells, 'updated');
+      const idxDelta = findColumnIndex(headerCells, 'change', 'variation', 'delta', 'trend');
       const indices = {
-        iG: idxGov >= 0 ? idxGov : 1, iA: idxAlleg >= 0 ? idxAlleg : 2, iP: idxPower >= 0 ? idxPower : 3,
-        iPop: idxPop >= 0 ? idxPop : 4, iF: idxPop >= 0 ? idxPop + 1 : 5, iS: idxPop >= 0 ? idxPop + 2 : 6,
-        iI: idxInf >= 0 ? idxInf : 7, iU: idxUpd >= 0 ? idxUpd : 8,
+        iG: idxGov >= 0 ? idxGov : 1,
+        iA: idxAlleg >= 0 ? idxAlleg : 2,
+        iP: idxPower >= 0 ? idxPower : 3,
+        iPop: idxPop >= 0 ? idxPop : 4,
+        iF: idxPop >= 0 ? idxPop + 1 : 5,
+        iS: idxPop >= 0 ? idxPop + 2 : 6,
+        iI: idxInf >= 0 ? idxInf : 7,
+        iU: idxUpd >= 0 ? idxUpd : 8,
+        iD: idxDelta,
       };
 
       const systems = [];
       const seen = new Set();
 
       plog('START');
-      const { nextBtn, totalPages: detectedPages, nextText } = findPaginationControls(targetTable);
-      const totalPages = Math.max(
-        1,
-        detectedPages,
-        totalEncart && countBefore ? Math.ceil(totalEncart / countBefore) : 1
-      );
+      const { nextBtn, totalPages: detectedPages } = findPaginationControls(targetTable);
+      const totalPages = Math.max(1, detectedPages);
 
-      const usePagination = nextBtn && (totalPages > 1 || (totalEncart && totalEncart > countBefore));
-      if (!usePagination) {
-        if (!nextBtn) plog('STOP reason="next not found"');
-        else if (totalPages <= 1) plog('STOP reason="totalPages=1"');
-        else plog('STOP reason="usePagination=false"');
-      }
+      log('Nombre total de pages:', totalPages, '| Lignes par page:', linesPerPage);
+      const usePagination = nextBtn && totalPages > 1;
+
       if (usePagination) {
         log('Pagination dynamique détectée');
+        const goTo1 = await goToPage1IfNeeded(targetTable);
+        if (!goTo1.ok) {
+          return { systems: [], error: 'Impossible de revenir à la page 1 (extraction incomplète évitée)' };
+        }
         let pagesTraversed = 0;
         const maxPages = Math.min(totalPages, 20);
         for (let p = 1; p <= maxPages; p++) {
@@ -458,7 +565,9 @@
         }
         plog('pagesTraversed=' + pagesTraversed + ' totalExtrait=' + systems.length);
       } else {
-        log('Pagination non détectée ou page unique, extraction directe');
+        if (!nextBtn) log('Pagination non détectée (bouton Next absent)');
+        else if (totalPages <= 1) log('Page unique détectée');
+        log('Extraction directe (sans pagination)');
         systems.push(...parseDataRowsFromTable(targetTable, indices, seen));
       }
 
@@ -482,7 +591,8 @@
       const skipped = j.skipped ?? 0;
       const deleted = j.deleted ?? 0;
       const totalReceived = j.totalReceived ?? 0;
-      return { ok: true, message: `Importé : ${inserted} insérés, ${updated} mis à jour, ${skipped} ignorés (${totalReceived} reçus)`, json: j };
+      const msg = `Importé : ${inserted} insérés, ${updated} mis à jour, ${skipped} ignorés (${totalReceived} reçus)`;
+      return { ok: true, message: msg, json: j };
     }
 
     async function runSystems(mode) {
@@ -501,6 +611,12 @@
         console.log('[Inara Sync][Systems] 1. Origin detected:', extracted ? originSystemName : 'NON');
         console.log('[Inara Sync][Systems] 2. Payload envoyé:', JSON.stringify({ originSystemName: payload.originSystemName ?? '(absent)', systemsCount: systems.length }));
         console.log('[Inara Sync][Systems] DIAG: extracted=' + extracted + ' inPayload=' + inPayload + ' → ' + (extracted && inPayload ? 'OK (backend devrait recevoir)' : extracted ? 'PERDU?' : 'non extrait (DOM)'));
+        AUDIT_SYSTEM_NAMES.forEach((auditName) => {
+          const sys = systems.find((s) => s.name.toLowerCase().includes(auditName.toLowerCase()));
+          if (sys) {
+            console.log('[Inara Sync][Systems][Payload]', sys.name, '| influence=', sys.influencePercent ?? 'null', 'states=', JSON.stringify(sys.states ?? []));
+          }
+        });
       }
       if (mode === 'download') {
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -532,7 +648,7 @@
       btn.id = 'inara-sync-faction-btn';
       btn.className = 'inara-sync-btn';
       btn.textContent = 'Extraire les systèmes';
-      btn.onclick = () => { const m = document.getElementById('inara-sync-faction-menu'); m.style.display = m.style.display === 'none' ? 'flex' : 'none'; };
+      btn.onclick = (e) => { e.stopPropagation(); const m = document.getElementById('inara-sync-faction-menu'); m.classList.toggle('inara-sync-menu--open'); };
 
       const menu = document.createElement('div');
       menu.id = 'inara-sync-faction-menu';
@@ -541,12 +657,12 @@
       const dl = document.createElement('button');
       dl.className = 'inara-sync-menu-item';
       dl.textContent = 'Télécharger JSON';
-      dl.onclick = () => { runSystems('download'); menu.style.display = 'none'; };
+      dl.onclick = (e) => { e.stopPropagation(); runSystems('download'); menu.classList.remove('inara-sync-menu--open'); };
 
       const post = document.createElement('button');
       post.className = 'inara-sync-menu-item';
       post.textContent = 'Envoyer au backend';
-      post.onclick = () => { runSystems('post'); menu.style.display = 'none'; };
+      post.onclick = (e) => { e.stopPropagation(); runSystems('post'); menu.classList.remove('inara-sync-menu--open'); };
 
       menu.appendChild(dl);
       menu.appendChild(post);
@@ -793,7 +909,7 @@
       btn.id = 'inara-sync-roster-btn';
       btn.className = 'inara-sync-btn';
       btn.textContent = 'Extraire les CMDRs';
-      btn.onclick = () => { const m = document.getElementById('inara-sync-roster-menu'); m.style.display = m.style.display === 'none' ? 'flex' : 'none'; };
+      btn.onclick = (e) => { e.stopPropagation(); const m = document.getElementById('inara-sync-roster-menu'); m.classList.toggle('inara-sync-menu--open'); };
 
       const menu = document.createElement('div');
       menu.id = 'inara-sync-roster-menu';
@@ -802,12 +918,12 @@
       const dl = document.createElement('button');
       dl.className = 'inara-sync-menu-item';
       dl.textContent = 'Télécharger JSON';
-      dl.onclick = () => { runCommanders('download'); menu.style.display = 'none'; };
+      dl.onclick = (e) => { e.stopPropagation(); runCommanders('download'); menu.classList.remove('inara-sync-menu--open'); };
 
       const post = document.createElement('button');
       post.className = 'inara-sync-menu-item';
       post.textContent = 'Envoyer au backend';
-      post.onclick = () => { runCommanders('post'); menu.style.display = 'none'; };
+      post.onclick = (e) => { e.stopPropagation(); runCommanders('post'); menu.classList.remove('inara-sync-menu--open'); };
 
       menu.appendChild(dl);
       menu.appendChild(post);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Inara Sync — Guild Dashboard
 // @namespace    https://github.com/elitebridgeplanner
-// @version      2.14.0
+// @version      2.15.0
 // @description  Script unique : bridge sur dashboard, extraction systèmes (faction), extraction CMDRs (squadron)
 // @author       EliteBridgePlanner
 // @match        https://inara.cz/elite/*
@@ -78,7 +78,7 @@
     return;
   }
 
-  // ——— Styles dashboard (cohérence graphique) ———
+  // ——— Styles identiques au bouton Import Inara (systems-menu-item) ———
   function injectDashboardStyles() {
     if (document.getElementById('inara-sync-styles')) return;
     const link = document.createElement('link');
@@ -90,24 +90,28 @@
     const style = document.createElement('style');
     style.id = 'inara-sync-styles';
     style.textContent = `
-      .inara-sync-box{position:fixed;bottom:24px;right:24px;z-index:999998;
-        background:rgba(6,20,35,0.95);border:1px solid rgba(0,212,255,0.2);
-        border-radius:16px;box-shadow:0 0 10px rgba(0,234,255,0.05),0 4px 20px rgba(0,0,0,0.4);
-        padding:1rem 1.25rem;font-family:'Exo 2',sans-serif;
-        display:flex;flex-direction:column;gap:0.5rem;min-width:200px;}
-      .inara-sync-box h3{margin:0 0 0.5rem;font-family:'Orbitron',sans-serif;font-size:0.7rem;
-        font-weight:600;color:#00d4ff;text-transform:uppercase;letter-spacing:0.08em;}
-      .inara-sync-btn{padding:0.5rem 0.85rem;font-size:0.75rem;font-family:'Orbitron',sans-serif;
-        background:rgba(0,212,255,0.2);border:1px solid rgba(0,212,255,0.4);color:#00d4ff;
-        border-radius:8px;cursor:pointer;transition:background 0.15s,border-color 0.15s;}
-      .inara-sync-btn:hover{background:rgba(0,212,255,0.3);border-color:rgba(0,212,255,0.5);}
-      .inara-sync-menu{display:none;flex-direction:column;gap:0.35rem;margin-top:0.5rem;
-        padding-top:0.5rem;border-top:1px solid rgba(0,212,255,0.14);}
-      .inara-sync-menu-item{padding:0.4rem 0.6rem;font-size:0.7rem;font-family:'Exo 2',sans-serif;
-        background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);
-        color:rgba(255,255,255,0.9);border-radius:6px;cursor:pointer;text-align:left;
-        transition:background 0.15s;}
-      .inara-sync-menu-item:hover{background:rgba(0,212,255,0.18);}
+      .inara-sync-box{position:fixed !important;bottom:24px !important;right:24px !important;z-index:999998 !important;
+        background:rgba(6,20,35,0.98) !important;border:1px solid rgba(0,212,255,0.4) !important;
+        border-radius:4px !important;box-shadow:0 4px 12px rgba(0,0,0,0.4) !important;
+        padding:0.5rem !important;font-family:'Exo 2',sans-serif !important;
+        display:flex !important;flex-direction:column !important;gap:0.2rem !important;min-width:180px !important;}
+      .inara-sync-box h3{margin:0 0 0.35rem !important;font-family:'Orbitron',sans-serif !important;font-size:0.65rem !important;
+        font-weight:600 !important;color:#00d4ff !important;text-transform:uppercase !important;letter-spacing:0.1em !important;}
+      button.inara-sync-btn{padding:0.35rem 0.6rem !important;font-size:0.65rem !important;font-family:'Orbitron',sans-serif !important;
+        background:rgba(0,212,255,0.1) !important;border:1px solid rgba(0,212,255,0.25) !important;color:#00d4ff !important;
+        border-radius:4px !important;cursor:pointer !important;text-align:left !important;transition:background 0.15s !important;
+        display:flex !important;align-items:center !important;justify-content:flex-start !important;width:100% !important;margin:0 !important;box-sizing:border-box !important;line-height:1 !important;}
+      button.inara-sync-btn:hover:not(:disabled){background:rgba(0,212,255,0.25) !important;}
+      button.inara-sync-btn:disabled{opacity:0.5 !important;cursor:not-allowed !important;}
+      .inara-sync-menu{display:none !important;flex-direction:column !important;gap:0.2rem !important;margin-top:0.25rem !important;
+        padding-top:0.25rem !important;border-top:1px solid rgba(0,212,255,0.2) !important;}
+      .inara-sync-menu.inara-sync-menu--open{display:flex !important;}
+      button.inara-sync-menu-item{padding:0.35rem 0.6rem !important;font-size:0.65rem !important;font-family:'Orbitron',sans-serif !important;
+        background:rgba(0,212,255,0.1) !important;border:1px solid rgba(0,212,255,0.25) !important;color:#00d4ff !important;
+        border-radius:4px !important;cursor:pointer !important;text-align:left !important;transition:background 0.15s !important;
+        display:flex !important;align-items:center !important;justify-content:flex-start !important;width:100% !important;margin:0 !important;box-sizing:border-box !important;line-height:1 !important;}
+      button.inara-sync-menu-item:hover:not(:disabled){background:rgba(0,212,255,0.25) !important;}
+      button.inara-sync-menu-item:disabled{opacity:0.5 !important;cursor:not-allowed !important;}
       .inara-sync-toast{position:fixed;bottom:100px;right:24px;z-index:999999;padding:1rem 1.25rem;
         font-family:'Exo 2',sans-serif;font-size:0.85rem;max-width:360px;
         background:rgba(6,20,35,0.98);border:1px solid rgba(0,212,255,0.3);
@@ -644,7 +648,7 @@
       btn.id = 'inara-sync-faction-btn';
       btn.className = 'inara-sync-btn';
       btn.textContent = 'Extraire les systèmes';
-      btn.onclick = () => { const m = document.getElementById('inara-sync-faction-menu'); m.style.display = m.style.display === 'none' ? 'flex' : 'none'; };
+      btn.onclick = (e) => { e.stopPropagation(); const m = document.getElementById('inara-sync-faction-menu'); m.classList.toggle('inara-sync-menu--open'); };
 
       const menu = document.createElement('div');
       menu.id = 'inara-sync-faction-menu';
@@ -653,12 +657,12 @@
       const dl = document.createElement('button');
       dl.className = 'inara-sync-menu-item';
       dl.textContent = 'Télécharger JSON';
-      dl.onclick = () => { runSystems('download'); menu.style.display = 'none'; };
+      dl.onclick = (e) => { e.stopPropagation(); runSystems('download'); menu.classList.remove('inara-sync-menu--open'); };
 
       const post = document.createElement('button');
       post.className = 'inara-sync-menu-item';
       post.textContent = 'Envoyer au backend';
-      post.onclick = () => { runSystems('post'); menu.style.display = 'none'; };
+      post.onclick = (e) => { e.stopPropagation(); runSystems('post'); menu.classList.remove('inara-sync-menu--open'); };
 
       menu.appendChild(dl);
       menu.appendChild(post);
@@ -905,7 +909,7 @@
       btn.id = 'inara-sync-roster-btn';
       btn.className = 'inara-sync-btn';
       btn.textContent = 'Extraire les CMDRs';
-      btn.onclick = () => { const m = document.getElementById('inara-sync-roster-menu'); m.style.display = m.style.display === 'none' ? 'flex' : 'none'; };
+      btn.onclick = (e) => { e.stopPropagation(); const m = document.getElementById('inara-sync-roster-menu'); m.classList.toggle('inara-sync-menu--open'); };
 
       const menu = document.createElement('div');
       menu.id = 'inara-sync-roster-menu';
@@ -914,12 +918,12 @@
       const dl = document.createElement('button');
       dl.className = 'inara-sync-menu-item';
       dl.textContent = 'Télécharger JSON';
-      dl.onclick = () => { runCommanders('download'); menu.style.display = 'none'; };
+      dl.onclick = (e) => { e.stopPropagation(); runCommanders('download'); menu.classList.remove('inara-sync-menu--open'); };
 
       const post = document.createElement('button');
       post.className = 'inara-sync-menu-item';
       post.textContent = 'Envoyer au backend';
-      post.onclick = () => { runCommanders('post'); menu.style.display = 'none'; };
+      post.onclick = (e) => { e.stopPropagation(); runCommanders('post'); menu.classList.remove('inara-sync-menu--open'); };
 
       menu.appendChild(dl);
       menu.appendChild(post);
