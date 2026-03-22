@@ -104,6 +104,8 @@
   color: #ff8c00;
   display: block;
   margin-bottom: 0.5rem;
+  padding-left: 8px;
+  padding-right: 8px;
 }
 
 /* Contenu : Exo 2 pour lisibilité (titres restent Orbitron) */
@@ -113,7 +115,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.35rem 0;
+  padding: 0.35rem 8px;
   font-family: 'Exo 2', sans-serif;
   font-size: 0.75rem;
   cursor: pointer;
@@ -222,6 +224,8 @@
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.5);
   margin: 0;
+  padding-left: 8px;
+  padding-right: 8px;
 
   &--error {
     color: #ff6b6b;
