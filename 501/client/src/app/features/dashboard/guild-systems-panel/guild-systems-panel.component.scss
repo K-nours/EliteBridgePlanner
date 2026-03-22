@@ -1,5 +1,28 @@
 /* Harmonisé avec le design system du dashboard (.box) */
 
+/* Quand dans col-left-systems-fill : prendre toute la hauteur dispo, liste scrollable */
+:host-context(.col-left-systems-fill) {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+:host-context(.col-left-systems-fill) .panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:host-context(.col-left-systems-fill) .systems-list {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
 .panel {
   position: relative;
   overflow: hidden;
@@ -22,9 +45,17 @@
   margin-bottom: 1rem;
 }
 
-.btn-sync-action {
-  padding: 0.35rem 0.6rem;
-  font-size: 0.65rem;
+.systems-more-dropdown {
+  position: relative;
+}
+
+.btn-icon-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   font-family: 'Orbitron', sans-serif;
   background: rgba(0, 212, 255, 0.2);
   border: 1px solid rgba(0, 212, 255, 0.4);
@@ -40,6 +71,61 @@
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+}
+
+.systems-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9997;
+}
+
+.systems-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 0.25rem;
+  z-index: 9998;
+  min-width: 140px;
+  padding: 0.35rem;
+  background: rgba(6, 20, 35, 0.98);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.systems-menu-item {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.65rem;
+  font-family: 'Orbitron', sans-serif;
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  color: #00d4ff;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+
+  &:hover:not(:disabled) {
+    background: rgba(0, 212, 255, 0.25);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &--danger {
+    background: rgba(255, 107, 107, 0.1);
+    border-color: rgba(255, 107, 107, 0.25);
+    color: #ff6b6b;
+
+    &:hover:not(:disabled) {
+      background: rgba(255, 107, 107, 0.25);
+    }
   }
 }
 

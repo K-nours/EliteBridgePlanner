@@ -198,6 +198,36 @@
       return -1;
     }
 
+    /** Extrait l'origine depuis le bloc d'infos faction (header Inara), ex. "HIP 4332". */
+    function extractOriginFromHeader() {
+      const log = typeof console !== 'undefined' && console.log ? (...a) => console.log('[Inara Sync][Systems][Origin]', ...a) : () => {};
+      const labelTexts = ['origin', 'origine'];
+      const labels = document.querySelectorAll('dt, td, th, div, span, label');
+      log('extractOriginFromHeader: scanning', labels.length, 'éléments (dt,td,th,div,span,label)');
+      for (const el of labels) {
+        const raw = (el.textContent || '').trim();
+        const rawLower = raw.toLowerCase();
+        const isOriginLabel = raw && (labelTexts.includes(rawLower) || labelTexts.some(l => rawLower.startsWith(l + ' ') || rawLower.startsWith(l + ':')));
+        if (isOriginLabel && !el.closest('table thead')) {
+          const link = el.parentElement?.querySelector?.('a[href*="/elite/starsystem/"]')
+            || el.nextElementSibling?.querySelector?.('a[href*="/elite/starsystem/"]')
+            || el.closest('tr')?.querySelector?.('a[href*="/elite/starsystem/"]');
+          log('Label trouvé:', raw, '| bloc:', el.tagName, el.className || '(pas de class)', '| link:', link ? link.href : 'NON');
+          if (link) {
+            const name = cleanName(link.textContent);
+            const linkText = (link.textContent || '').trim();
+            log('Texte brut lien:', JSON.stringify(linkText), '| cleanName:', name);
+            if (name) {
+              log('Origin détectée:', name);
+              return name;
+            }
+          }
+        }
+      }
+      log('Aucun label Origin/Origine trouvé avec lien starsystem');
+      return null;
+    }
+
     function extractSystems() {
       const tables = document.querySelectorAll('table');
       let targetTable = null;
@@ -229,12 +259,21 @@
       const iI = idxInf >= 0 ? idxInf : 7;
       const iU = idxUpd >= 0 ? idxUpd : 8;
 
+      // Header vs row structure : header a th/td pour chaque colonne ; les lignes data ont th scope="row" + td.
+      // Ne pas mélanger : utiliser th,td dans les deux pour aligner les index.
       const dataRows = allRows.filter((r) => r.querySelector('a[href*="/elite/starsystem/"]'));
       const systems = [];
       const seen = new Set();
 
+      const firstDataRow = dataRows[0];
+      const firstCells = firstDataRow ? Array.from(firstDataRow.querySelectorAll('th, td')) : [];
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[Inara Sync] extractSystems: headerCells=', headerCells, 'cells.length=', firstCells.length, 'iI=', iI, 'iU=', iU,
+          'influenceCell=', firstCells[iI]?.textContent?.trim()?.slice(0, 30), 'updatedCell=', firstCells[iU]?.textContent?.trim()?.slice(0, 30));
+      }
+
       for (const row of dataRows) {
-        const cells = row.querySelectorAll('td');
+        const cells = Array.from(row.querySelectorAll('th, td'));
         if (cells.length < 2) continue;
         const link = row.querySelector('a[href*="/elite/starsystem/"]');
         if (!link) continue;
@@ -268,6 +307,11 @@
 
     async function postSystems(payload) {
       const url = `${BACKEND_URL.replace(/\/$/, '')}/api/guild/systems/import`;
+      if (typeof console !== 'undefined' && console.log) {
+        const val = payload?.originSystemName;
+        const present = val != null && val !== '';
+        console.log('[Inara Sync][Systems] 3. postSystems: originSystemName present=', present, 'value=', val ?? '(absent)');
+      }
       const r = await gmPost(url, payload);
       if (!r.ok) return { ok: false, message: r.message, json: {} };
       const j = r.json ?? {};
@@ -286,7 +330,15 @@
         showToast('Aucun système extrait. Vérifiez que la page affiche le tableau de présence.', true);
         return;
       }
-      const payload = { systems };
+      const originSystemName = extractOriginFromHeader();
+      const payload = { originSystemName: originSystemName || undefined, systems };
+      if (typeof console !== 'undefined' && console.log) {
+        const extracted = !!originSystemName;
+        const inPayload = payload.originSystemName != null && payload.originSystemName !== '';
+        console.log('[Inara Sync][Systems] 1. Origin detected:', extracted ? originSystemName : 'NON');
+        console.log('[Inara Sync][Systems] 2. Payload envoyé:', JSON.stringify({ originSystemName: payload.originSystemName ?? '(absent)', systemsCount: systems.length }));
+        console.log('[Inara Sync][Systems] DIAG: extracted=' + extracted + ' inPayload=' + inPayload + ' → ' + (extracted && inPayload ? 'OK (backend devrait recevoir)' : extracted ? 'PERDU?' : 'non extrait (DOM)'));
+      }
       if (mode === 'download') {
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
@@ -355,8 +407,17 @@
           notifyOpenerError('systems', msg);
           return;
         }
+        const originSystemName = extractOriginFromHeader();
+        const payload = { originSystemName: originSystemName || undefined, systems };
+        if (typeof console !== 'undefined' && console.log) {
+          const extracted = !!originSystemName;
+          const inPayload = payload.originSystemName != null && payload.originSystemName !== '';
+          console.log('[Inara Sync][Systems] 1. Origin detected:', extracted ? originSystemName : 'NON');
+          console.log('[Inara Sync][Systems] 2. Payload envoyé:', JSON.stringify({ originSystemName: payload.originSystemName ?? '(absent)', systemsCount: systems.length }));
+          console.log('[Inara Sync][Systems] DIAG: extracted=' + extracted + ' inPayload=' + inPayload + ' → ' + (extracted && inPayload ? 'OK (backend devrait recevoir)' : extracted ? 'PERDU?' : 'non extrait (DOM)'));
+        }
         showToast('Envoi en cours…');
-        postSystems({ systems }).then((r) => {
+        postSystems({ originSystemName: originSystemName || undefined, systems }).then((r) => {
           try {
             if (!r.ok) {
               showToast(r.message, true);

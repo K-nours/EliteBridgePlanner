@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using GuildDashboard.Server.Data;
 using GuildDashboard.Server.Models;
@@ -26,8 +27,20 @@ public class GuildSystemsImportService
     public async Task<GuildSystemsImportResult> ImportAsync(int guildId, GuildSystemsImportPayload payload, bool purgeAbsent = true, CancellationToken ct = default)
     {
         var totalReceived = payload?.Systems?.Count ?? 0;
+        _log.LogInformation("[GuildSystemsImport] DÉBUT guildId={GuildId} totalReceived={TotalReceived} payloadNull={PayloadNull} originSystemName={Origin}",
+            guildId, totalReceived, payload == null, payload?.OriginSystemName ?? "(null)");
+
         if (totalReceived == 0)
             return new GuildSystemsImportResult(0, 0, 0, 0, 0, "Aucun système dans le payload");
+
+        var firstRaw = payload!.Systems!.FirstOrDefault();
+        if (firstRaw != null)
+        {
+            _log.LogInformation("[GuildSystemsImport] Premier système: Name={Name} InfluencePercent={Inf} Category={Cat}",
+                firstRaw.Name ?? "(null)", firstRaw.InfluencePercent?.ToString("0.##") ?? "null", firstRaw.Category ?? "(null)");
+        }
+        var samplePayloadCategories = payload!.Systems!.Take(5).Select(s => s.Category ?? "null").ToList();
+        _log.LogInformation("[GuildSystemsImport] Échantillon payload categories (5 premiers): [{Cats}]", string.Join(", ", samplePayloadCategories));
 
         // Nettoyage des influences corrompues (> 100) avant la prochaine resync
         await CleanupCorruptedInfluenceAsync(guildId, ct);
@@ -50,6 +63,9 @@ public class GuildSystemsImportService
         var controlledSystems = await _db.ControlledSystems
             .Where(c => c.GuildId == guildId)
             .ToListAsync(ct);
+
+        _log.LogInformation("[GuildSystemsImport] État base: guildSystems={GsCount} controlledSystems={CsCount} (reset/vide={BaseVide})",
+            guildSystems.Count, controlledSystems.Count, guildSystems.Count == 0 && controlledSystems.Count == 0);
 
         // Purge des systèmes absents du payload (remise à plat propre)
         if (purgeAbsent && incomingNames.Count > 0)
@@ -113,6 +129,7 @@ public class GuildSystemsImportService
                 var influenceVal = raw.InfluencePercent.HasValue ? InfluenceParse.Sanitize(raw.InfluencePercent.Value) : (decimal?)null;
                 SyncControlledSystemFromImport(controlledSystems, name, influenceVal, existing.Category);
                 LogSystemAudit(auditNames, existing.Name, raw.InfluencePercent, influenceVal, existing.InfluencePercent, existing.Category, controlledSystems);
+                LogCategoryAndInfluenceDiagnostic(auditNames, name, raw.Category, existing.Category, raw.InfluencePercent, influenceVal, existing.InfluencePercent, controlledSystems);
                 updated++;
             }
             else
@@ -120,14 +137,38 @@ public class GuildSystemsImportService
                 var entity = ToGuildSystem(guildId, raw, name);
                 _db.GuildSystems.Add(entity);
                 guildSystems.Add(entity);
-                LogSystemAudit(auditNames, name, raw.InfluencePercent, entity.InfluencePercent, entity.InfluencePercent, entity.Category, controlledSystems);
+                var influenceVal = raw.InfluencePercent.HasValue ? InfluenceParse.Sanitize(raw.InfluencePercent.Value) : 0m;
+                var cs = new ControlledSystem
+                {
+                    GuildId = guildId,
+                    Name = name,
+                    InfluencePercent = influenceVal,
+                    Category = entity.Category,
+                    IsClean = entity.IsClean,
+                    IsFromSeed = false,
+                    IsControlled = false,
+                    IsHeadquarter = false,
+                    IsThreatened = false,
+                    IsExpansionCandidate = false,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                };
+                _db.ControlledSystems.Add(cs);
+                controlledSystems.Add(cs);
+                _log.LogDebug("[GuildSystemsImport] ControlledSystem créé: {Name} influence={Inf} category={Cat}", name, influenceVal, entity.Category);
+                LogSystemAudit(auditNames, name, raw.InfluencePercent, influenceVal, entity.InfluencePercent, entity.Category, controlledSystems);
+                LogCategoryAndInfluenceDiagnostic(auditNames, name, raw.Category, entity.Category, raw.InfluencePercent, influenceVal, entity.InfluencePercent, controlledSystems);
                 inserted++;
             }
         }
 
         if (inserted > 0 || updated > 0 || deleted > 0)
         {
-            await RebuildCategoriesAsync(guildId, firstImportedName, ct);
+            var originFromPayload = !string.IsNullOrWhiteSpace(payload.OriginSystemName)
+                ? SystemNameNormalizer.Normalize(CleanName(payload.OriginSystemName))
+                : null;
+            await RebuildCategoriesAsync(guildId, originFromPayload, firstImportedName, guildSystems, controlledSystems, ct);
+            LogPostRebuildDiagnostic(auditNames, guildSystems, controlledSystems);
             await _db.SaveChangesAsync(ct);
             await _db.Guilds
                 .Where(g => g.Id == guildId)
@@ -161,28 +202,42 @@ public class GuildSystemsImportService
         }
     }
 
-    /// <summary>Reconstruit les catégories après import : Origine (premier système si aucun), HQ conservé.</summary>
-    private async Task RebuildCategoriesAsync(int guildId, string? firstImportedName, CancellationToken ct)
+    /// <summary>Reconstruit les catégories après import : Origine (originSystemName du payload = source de vérité, sinon fallback premier système).</summary>
+    /// <remarks>Utilise la liste en mémoire car SaveChanges n'a pas encore été appelé — les nouvelles entités ne sont pas en DB.</remarks>
+    private Task RebuildCategoriesAsync(int guildId, string? originFromPayload, string? firstImportedName, List<GuildSystem> guildSystems, List<ControlledSystem> controlledSystems, CancellationToken ct)
     {
-        var hasOrigin = await _db.GuildSystems
-            .AnyAsync(s => s.GuildId == guildId && string.Equals(s.Category, "Origine", StringComparison.OrdinalIgnoreCase), ct);
-        if (!hasOrigin && !string.IsNullOrWhiteSpace(firstImportedName))
+        var hasOrigin = guildSystems.Any(s => string.Equals(s.Category, "Origine", StringComparison.OrdinalIgnoreCase));
+        _log.LogInformation("[GuildSystemsImport] RebuildCategories: count={Count} hasOrigin={HasOrigin} originFromPayload={Origin} fallback={Fallback}",
+            guildSystems.Count, hasOrigin, originFromPayload ?? "(null)", firstImportedName ?? "(null)");
+
+        var originToApply = !string.IsNullOrWhiteSpace(originFromPayload)
+            ? originFromPayload
+            : (!hasOrigin ? firstImportedName : null);
+
+        if (!string.IsNullOrWhiteSpace(originToApply))
         {
-            var allGuild = await _db.GuildSystems.Where(s => s.GuildId == guildId).ToListAsync(ct);
-            var first = allGuild.FirstOrDefault(s =>
-                string.Equals(SystemNameNormalizer.Normalize(s.Name), firstImportedName, StringComparison.OrdinalIgnoreCase));
-            if (first != null)
+            foreach (var gs in guildSystems.Where(s => string.Equals(s.Category, "Origine", StringComparison.OrdinalIgnoreCase)))
             {
-                first.Category = "Origine";
-                var allControlled = await _db.ControlledSystems.Where(c => c.GuildId == guildId).ToListAsync(ct);
-                foreach (var cs in allControlled.Where(c =>
-                    string.Equals(SystemNameNormalizer.Normalize(c.Name), firstImportedName, StringComparison.OrdinalIgnoreCase)))
+                gs.Category = "Guild";
+                foreach (var cs in controlledSystems.Where(c => string.Equals(SystemNameNormalizer.Normalize(c.Name), SystemNameNormalizer.Normalize(gs.Name), StringComparison.OrdinalIgnoreCase)))
+                    cs.Category = "Guild";
+            }
+            var target = guildSystems.FirstOrDefault(s =>
+                string.Equals(SystemNameNormalizer.Normalize(s.Name), originToApply, StringComparison.OrdinalIgnoreCase));
+            if (target != null)
+            {
+                target.Category = "Origine";
+                foreach (var cs in controlledSystems.Where(c =>
+                    string.Equals(SystemNameNormalizer.Normalize(c.Name), originToApply, StringComparison.OrdinalIgnoreCase)))
                 {
                     cs.Category = "Origine";
                 }
-                _log.LogInformation("[GuildSystemsImport] Origine assignée au premier système: {Name}", first.Name);
+                _log.LogInformation("[GuildSystemsImport] Origine assignée: {Name}", target.Name);
             }
+            else
+                _log.LogWarning("[GuildSystemsImport] originSystemName={Origin} non trouvé dans guildSystems", originToApply ?? "(null)");
         }
+        return Task.CompletedTask;
     }
 
     private void LogSystemAudit(HashSet<string> auditNames, string name, decimal? rawInara, decimal? parsed, decimal guildVal, string? category, List<ControlledSystem> controlledSystems)
@@ -195,6 +250,45 @@ public class GuildSystemsImportService
             "[Systems] {Name} — rawInara={Raw} parsed={Parsed} guild={Guild} controlled={Controlled} category={Category}",
             name, rawInara?.ToString("0.##") ?? "null", parsed?.ToString("0.##") ?? "null",
             guildVal.ToString("0.##"), (cVal ?? 0).ToString("0.##"), category ?? "null");
+    }
+
+    /// <summary>Diagnostic catégorisation et influence pour les systèmes d'audit (Mayang, HIP 4332, Sabines, Nanapan). Avant RebuildCategories.</summary>
+    private void LogCategoryAndInfluenceDiagnostic(HashSet<string> auditNames, string name, string? payloadCategory, string guildSystemCategory, decimal? rawInara, decimal? parsedInfluence, decimal guildSystemInfluence, List<ControlledSystem> controlledSystems)
+    {
+        var norm = SystemNameNormalizer.Normalize(name);
+        if (string.IsNullOrWhiteSpace(norm) || !auditNames.Contains(norm)) return;
+        var cs = controlledSystems.FirstOrDefault(c => string.Equals(SystemNameNormalizer.Normalize(c.Name), norm, StringComparison.OrdinalIgnoreCase));
+        var isOrigin = string.Equals(guildSystemCategory, "Origine", StringComparison.OrdinalIgnoreCase);
+        var isHq = cs?.IsHeadquarter == true;
+        var isCritical = cs?.IsThreatened == true || cs?.IsExpansionCandidate == true;
+        var finalDisplay = isOrigin ? "origin" : (isHq ? "headquarter" : (isCritical ? "critical" : "others"));
+        var controlledVal = cs?.InfluencePercent;
+        _log.LogWarning(
+            "[DIAG-PRE] {Name} | payloadCategory={PayloadCat} guildSystemCategory={GsCat} finalDisplay={Final} | isHq={Hq} isThreatened={Thr} isExpansion={Exp} | rawInara={Raw} parsed={Parsed} guild={Gs} controlled={Cs}",
+            name, payloadCategory ?? "null", guildSystemCategory ?? "null", finalDisplay,
+            isHq, cs?.IsThreatened ?? false, cs?.IsExpansionCandidate ?? false,
+            rawInara?.ToString("0.##") ?? "null", parsedInfluence?.ToString("0.##") ?? "null", guildSystemInfluence.ToString("0.##"), (controlledVal ?? 0).ToString("0.##"));
+    }
+
+    /// <summary>Diagnostic APRÈS RebuildCategories — état final pour audit (Mayang, HIP 4332, Sabines, Nanapan).</summary>
+    private void LogPostRebuildDiagnostic(HashSet<string> _1, List<GuildSystem> guildSystems, List<ControlledSystem> controlledSystems)
+    {
+        foreach (var name in AuditSystemNames)
+        {
+            var norm = SystemNameNormalizer.Normalize(name);
+            if (string.IsNullOrWhiteSpace(norm)) continue;
+            var gs = guildSystems.FirstOrDefault(s => string.Equals(SystemNameNormalizer.Normalize(s.Name), norm, StringComparison.OrdinalIgnoreCase));
+            var cs = gs != null ? controlledSystems.FirstOrDefault(c => string.Equals(SystemNameNormalizer.Normalize(c.Name), SystemNameNormalizer.Normalize(gs.Name), StringComparison.OrdinalIgnoreCase)) : null;
+            if (gs == null) continue;
+            var isOrigin = string.Equals(gs.Category, "Origine", StringComparison.OrdinalIgnoreCase);
+            var isHq = cs?.IsHeadquarter == true;
+            var isCritical = cs?.IsThreatened == true || cs?.IsExpansionCandidate == true;
+            var finalDisplay = isOrigin ? "origin" : (isHq ? "headquarter" : (isCritical ? "critical" : "others"));
+            var dtoInfluence = gs.InfluencePercent; // source de vérité DTO = GuildSystem
+            _log.LogWarning(
+                "[DIAG-POST] {Name} | guildSystemCategory={GsCat} finalDisplayCategory={Final} dtoInfluence={Dto} | guildInfluence={Gs} controlledInfluence={Cs}",
+                gs.Name, gs.Category ?? "null", finalDisplay, dtoInfluence.ToString("0.##"), gs.InfluencePercent.ToString("0.##"), (cs?.InfluencePercent ?? 0).ToString("0.##"));
+        }
     }
 
     private void ApplyUpdate(GuildSystem entity, GuildSystemImportItem raw, string normalizedName)
@@ -300,6 +394,10 @@ public class GuildSystemsImportService
 /// <summary>Payload d'import (format userscript Inara / seed).</summary>
 public class GuildSystemsImportPayload
 {
+    /// <summary>Nom du système Origine lu depuis le header Inara (bloc infos faction). Source de vérité pour la catégorie Origine.</summary>
+    [JsonPropertyName("originSystemName")]
+    public string? OriginSystemName { get; set; }
+    [JsonPropertyName("systems")]
     public List<GuildSystemImportItem> Systems { get; set; } = new();
 }
 

@@ -23,8 +23,10 @@ export class GuildSystemsSyncService {
   readonly systems = signal<GuildSystemsResponseDto>({
     origin: [],
     headquarter: [],
+    critical: [],
     others: [],
     dataSource: 'seed',
+    influenceThresholds: { critical: 10, low: 30, high: 60 },
   });
   readonly lastError = signal<string | null>(null);
 
@@ -47,8 +49,10 @@ export class GuildSystemsSyncService {
         this.systems.set({
           origin: data?.origin ?? [],
           headquarter: data?.headquarter ?? [],
+          critical: data?.critical ?? [],
           others: data?.others ?? [],
           dataSource: ds,
+          influenceThresholds: data?.influenceThresholds ?? { critical: 10, low: 30, high: 60 },
         });
         this.panelState.set(ds === 'cached' ? 'cached' : 'not-synced');
       },
