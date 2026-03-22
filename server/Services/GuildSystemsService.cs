@@ -16,14 +16,20 @@ namespace GuildDashboard.Server.Services;
 public class GuildSystemsService
 {
     private readonly GuildDashboardDbContext _db;
+    private readonly InaraFactionService _inaraFaction;
 
-    public GuildSystemsService(GuildDashboardDbContext db) => _db = db;
+    public GuildSystemsService(GuildDashboardDbContext db, InaraFactionService inaraFaction)
+    {
+        _db = db;
+        _inaraFaction = inaraFaction;
+    }
 
     public async Task<GuildSystemsResponseDto> GetSystemsAsync(int guildId = 1)
     {
         var guildExists = await _db.Guilds.AnyAsync(g => g.Id == guildId);
         if (!guildExists)
-            return new GuildSystemsResponseDto([], [], [], "seed");
+            return new GuildSystemsResponseDto([], [], [], [], "seed", new InfluenceThresholdsDto(
+                InfluenceThresholds.Critical, InfluenceThresholds.Low, InfluenceThresholds.High));
 
         var guildSystems = await _db.GuildSystems
             .Where(s => s.GuildId == guildId)
@@ -35,6 +41,7 @@ public class GuildSystemsService
 
         var origin = new List<GuildSystemBgsDto>();
         var headquarter = new List<GuildSystemBgsDto>();
+        var critical = new List<GuildSystemBgsDto>();
         var others = new List<GuildSystemBgsDto>();
         var anyFromSync = false;
 
@@ -55,19 +62,18 @@ public class GuildSystemsService
             else if (isHq)
                 headquarter.Add(dto);
             else if (isCritical)
-                others.Add(dto); // Seront triés en tête des "others"
+                critical.Add(dto);
             else
                 others.Add(dto);
         }
 
-        others = others
-            .OrderByDescending(s => s.IsThreatened || s.IsExpansionCandidate)
-            .ThenByDescending(s => s.InfluencePercent)
-            .ThenBy(s => s.Name)
-            .ToList();
+        critical = critical.OrderByDescending(s => s.InfluencePercent).ThenBy(s => s.Name).ToList();
+        others = others.OrderByDescending(s => s.InfluencePercent).ThenBy(s => s.Name).ToList();
 
         var dataSource = anyFromSync ? "cached" : "seed";
-        return new GuildSystemsResponseDto(origin, headquarter, others, dataSource);
+        var thresholds = new InfluenceThresholdsDto(
+            InfluenceThresholds.Critical, InfluenceThresholds.Low, InfluenceThresholds.High);
+        return new GuildSystemsResponseDto(origin, headquarter, critical, others, dataSource, thresholds);
     }
 
     /// <summary>Audit ciblé : pour chaque système demandé, retourne valeurs brutes, parsées, stockées, DTO, catégorie et statut.</summary>
@@ -83,6 +89,22 @@ public class GuildSystemsService
             .ToList();
         if (normalized.Count == 0) return result;
 
+        var guild = await _db.Guilds.AsNoTracking().FirstOrDefaultAsync(g => g.Id == guildId, ct);
+        var inaraByName = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        if (guild?.InaraFactionId is > 0)
+        {
+            var presence = await _inaraFaction.GetFactionPresenceAsync(guild.InaraFactionId.Value, ct);
+            if (presence != null)
+            {
+                foreach (var p in presence)
+                {
+                    var n = SystemNameNormalizer.Normalize(p.SystemName ?? "");
+                    if (!string.IsNullOrWhiteSpace(n))
+                        inaraByName[n] = p.InfluencePercent;
+                }
+            }
+        }
+
         var guildSystems = await _db.GuildSystems
             .Where(s => s.GuildId == guildId)
             .ToListAsync(ct);
@@ -97,25 +119,45 @@ public class GuildSystemsService
             var gs = guildByName.GetValueOrDefault(name);
             var cs = gs != null ? controlledByName.GetValueOrDefault(gs.Name) : null;
             var dto = gs != null ? ToDto(gs, cs) : null;
+            var inaraVal = inaraByName.TryGetValue(name, out var v) ? v : (decimal?)null;
 
             var influencePercent = dto?.InfluencePercent ?? 0;
-            var influenceClass = GetInfluenceClass(influencePercent);
+            var influenceClass = InfluenceThresholds.GetInfluenceClass(influencePercent);
 
             string categoryDisplay;
+            string finalDisplayCategory;
             if (gs == null)
+            {
                 categoryDisplay = "(absent)";
+                finalDisplayCategory = "absent";
+            }
             else if (string.Equals(gs.Category, "Origine", StringComparison.OrdinalIgnoreCase))
+            {
                 categoryDisplay = "Origine";
+                finalDisplayCategory = "origin";
+            }
             else if (cs?.IsHeadquarter == true)
+            {
                 categoryDisplay = "Quartier général";
+                finalDisplayCategory = "headquarter";
+            }
             else if (cs?.IsThreatened == true || cs?.IsExpansionCandidate == true)
+            {
                 categoryDisplay = "Systèmes critiques";
+                finalDisplayCategory = "critical";
+            }
             else
+            {
                 categoryDisplay = "Autres";
+                finalDisplayCategory = "others";
+            }
 
             result.Add(new GuildSystemAuditEntry(
                 RequestedName: name,
                 Found: gs != null,
+                InaraInfluencePercent: inaraVal,
+                RawInaraInfluence: inaraVal,
+                ParsedInfluence: gs?.InfluencePercent,
                 GuildSystemId: gs?.Id,
                 GuildSystemInfluencePercent: gs?.InfluencePercent,
                 GuildSystemCategory: gs?.Category,
@@ -127,20 +169,13 @@ public class GuildSystemsService
                 DtoInfluencePercent: dto?.InfluencePercent,
                 DtoState: dto?.State,
                 CategoryDisplay: categoryDisplay,
+                FinalDisplayCategory: finalDisplayCategory,
                 InfluenceClass: influenceClass,
                 SourceUsed: "GuildSystem"
             ));
         }
 
         return result;
-    }
-
-    private static string GetInfluenceClass(decimal influencePercent)
-    {
-        if (influencePercent < 10) return "influence-critical";
-        if (influencePercent < 30) return "influence-low";
-        if (influencePercent >= 60) return "influence-high";
-        return "influence-normal";
     }
 
     /// <summary>Toggle HQ : si le système n'est pas HQ, le définit comme HQ (et retire les autres). S'il est déjà HQ, retire le statut.</summary>

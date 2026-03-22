@@ -105,8 +105,10 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       </header>
       <main class="main-grid">
         <aside class="col col-left">
-          <app-guild-systems-panel />
-          <div class="box"><h3>Prochaine réunion galactique</h3></div>
+          <div class="col-left-systems-fill">
+            <app-guild-systems-panel />
+          </div>
+          <div class="box box-reunion"><h3>Prochaine réunion galactique</h3></div>
         </aside>
         <section class="col col-center">
           <div class="map-section">
@@ -125,9 +127,26 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
           <div class="box box-sync-status">
             <div class="sync-status-header">
               <h3>État de la synchronisation</h3>
-              <div class="sync-buttons">
-                <button type="button" class="btn-copy" (click)="copyLogsToClipboard()" [disabled]="!syncLogsWithRecap()">Copier</button>
-                <button type="button" class="btn-clear" (click)="clearLogs()" [disabled]="syncLog.logs().length === 0">Effacer</button>
+              <div class="sync-status-more-dropdown">
+                @if (syncStatusMenuOpen()) {
+                  <div class="sync-status-menu-backdrop" (click)="syncStatusMenuOpen.set(false)"></div>
+                }
+                <button type="button"
+                  class="btn-icon-more-sync"
+                  title="Actions"
+                  (click)="syncStatusMenuOpen.set(!syncStatusMenuOpen())">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <circle cx="12" cy="6" r="1.5"/>
+                    <circle cx="12" cy="12" r="1.5"/>
+                    <circle cx="12" cy="18" r="1.5"/>
+                  </svg>
+                </button>
+                @if (syncStatusMenuOpen()) {
+                  <div class="sync-status-menu">
+                    <button type="button" class="sync-status-menu-item" [disabled]="!syncLogsWithRecap()" (click)="copyLogsToClipboard(); syncStatusMenuOpen.set(false)">Copier</button>
+                    <button type="button" class="sync-status-menu-item sync-status-menu-item--danger" [disabled]="syncLog.logs().length === 0" (click)="clearLogs(); syncStatusMenuOpen.set(false)">Effacer</button>
+                  </div>
+                }
               </div>
             </div>
             <div class="sync-logs-container">
@@ -192,20 +211,28 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             <div class="box-cmdrs-header">
               <h3 class="box-cmdrs-title">CMDRs</h3>
               <div class="box-cmdrs-actions">
-                <button type="button"
-                  class="btn-copy"
-                  [disabled]="!guildSettings.inaraSquadronUrl()"
-                  [title]="syncAvatarsRosterTooltip()"
-                  (click)="onSyncAvatarsRosterClick()">
-                  Sync avatars
-                </button>
-                <button type="button"
-                  class="btn-copy"
-                  [disabled]="!guildSettings.inaraSquadronUrl()"
-                  [title]="syncCmdrsTooltip()"
-                  (click)="onSyncCmdrsClick()">
-                  Synchronisation
-                </button>
+                <div class="cmdrs-more-dropdown">
+                  @if (cmdrsMenuOpen()) {
+                    <div class="cmdrs-menu-backdrop" (click)="cmdrsMenuOpen.set(false)"></div>
+                  }
+                  <button type="button"
+                    class="btn-icon-more"
+                    [disabled]="!guildSettings.inaraSquadronUrl()"
+                    title="Actions"
+                    (click)="cmdrsMenuOpen.set(!cmdrsMenuOpen())">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                      <circle cx="12" cy="6" r="1.5"/>
+                      <circle cx="12" cy="12" r="1.5"/>
+                      <circle cx="12" cy="18" r="1.5"/>
+                    </svg>
+                  </button>
+                  @if (cmdrsMenuOpen()) {
+                    <div class="cmdrs-menu">
+                      <button type="button" class="cmdrs-menu-item" [disabled]="!guildSettings.inaraSquadronUrl()" [title]="syncAvatarsRosterTooltip()" (click)="onSyncAvatarsRosterClick(); cmdrsMenuOpen.set(false)">Sync avatars</button>
+                      <button type="button" class="cmdrs-menu-item" [disabled]="!guildSettings.inaraSquadronUrl()" [title]="syncCmdrsTooltip()" (click)="onSyncCmdrsClick(); cmdrsMenuOpen.set(false)">Synchronisation</button>
+                    </div>
+                  }
+                </div>
               </div>
             </div>
             @if (commandersForList(); as data) {
@@ -315,7 +342,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       width: 100%;
       background: rgba(6, 20, 35, 0.88);
       border-bottom: 1px solid rgba(0, 212, 255, 0.22);
-      padding: 8px 8px 8px 1rem;
+      padding: 8px 1rem 8px 1rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -576,7 +603,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       box-sizing: border-box;
     }
     @media (min-width: 1200px) {
-      .header-zone { padding: 8px 8px 8px 1.5rem; }
+      .header-zone { padding: 8px 1.5rem 8px 1.5rem; }
       .main-grid {
         width: 100%;
         grid-template-columns: minmax(200px, 400px) minmax(0, 1fr) minmax(200px, 400px);
@@ -586,7 +613,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       }
     }
     @media (min-width: 900px) and (max-width: 1199px) {
-      .header-zone { padding: 8px 8px 8px 1.5rem; }
+      .header-zone { padding: 8px 1.5rem 8px 1.5rem; }
       .main-grid {
         gap: 1.5rem;
         padding: 63px 1.5rem 1.5rem;
@@ -610,6 +637,9 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       gap: 1rem;
       min-width: 0;
     }
+    .col-left {
+      min-height: 0;
+    }
     .col-center {
       width: 100%;
       min-height: 0;
@@ -624,6 +654,15 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .col-right .box {
       flex: 1 1 auto;
       min-height: 0;
+    }
+    .col-left-systems-fill {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .col-left .box-reunion {
+      max-height: 80px;
     }
     .box {
       background: rgba(6, 20, 35, 0.88);
@@ -680,9 +719,74 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       opacity: 0.5;
       cursor: not-allowed;
     }
-    .sync-buttons {
+    .sync-status-more-dropdown {
+      position: relative;
+    }
+    .btn-icon-more-sync {
       display: flex;
-      gap: 0.5rem;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      font-family: 'Orbitron', sans-serif;
+      background: rgba(0, 212, 255, 0.2);
+      border: 1px solid rgba(0, 212, 255, 0.4);
+      color: #00d4ff;
+      border-radius: 4px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-icon-more-sync:hover {
+      background: rgba(0, 212, 255, 0.3);
+    }
+    .sync-status-menu-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 9997;
+    }
+    .sync-status-menu {
+      position: absolute;
+      right: 0;
+      top: 100%;
+      margin-top: 0.25rem;
+      z-index: 9998;
+      min-width: 120px;
+      padding: 0.35rem;
+      background: rgba(6, 20, 35, 0.98);
+      border: 1px solid rgba(0, 212, 255, 0.4);
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .sync-status-menu-item {
+      padding: 0.35rem 0.6rem;
+      font-size: 0.65rem;
+      font-family: 'Orbitron', sans-serif;
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.25);
+      color: #00d4ff;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s;
+    }
+    .sync-status-menu-item:hover:not(:disabled) {
+      background: rgba(0, 212, 255, 0.25);
+    }
+    .sync-status-menu-item:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .sync-status-menu-item--danger {
+      background: rgba(255, 107, 107, 0.1);
+      border-color: rgba(255, 107, 107, 0.25);
+      color: #ff6b6b;
+    }
+    .sync-status-menu-item--danger:hover:not(:disabled) {
+      background: rgba(255, 107, 107, 0.25);
     }
     .btn-clear {
       padding: 0.35rem 0.6rem;
@@ -887,6 +991,71 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       display: flex;
       gap: 0.4rem;
     }
+    .cmdrs-more-dropdown {
+      position: relative;
+    }
+    .btn-icon-more {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      font-family: 'Orbitron', sans-serif;
+      background: rgba(0, 212, 255, 0.2);
+      border: 1px solid rgba(0, 212, 255, 0.4);
+      color: #00d4ff;
+      border-radius: 4px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-icon-more:hover:not(:disabled) {
+      background: rgba(0, 212, 255, 0.3);
+    }
+    .btn-icon-more:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .cmdrs-menu-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 9997;
+    }
+    .cmdrs-menu {
+      position: absolute;
+      right: 0;
+      top: 100%;
+      margin-top: 0.25rem;
+      z-index: 9998;
+      min-width: 140px;
+      padding: 0.35rem;
+      background: rgba(6, 20, 35, 0.98);
+      border: 1px solid rgba(0, 212, 255, 0.4);
+      border-radius: 4px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+    .cmdrs-menu-item {
+      padding: 0.35rem 0.6rem;
+      font-size: 0.65rem;
+      font-family: 'Orbitron', sans-serif;
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.25);
+      color: #00d4ff;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s;
+    }
+    .cmdrs-menu-item:hover:not(:disabled) {
+      background: rgba(0, 212, 255, 0.25);
+    }
+    .cmdrs-menu-item:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
     .box-cmdrs-title {
       font-family: 'Orbitron', sans-serif;
       font-size: 0.75rem;
@@ -982,6 +1151,8 @@ export class DashboardComponent implements OnInit {
   protected readonly syncHelpModal = inject(SyncHelpModalService);
   protected readonly frontierAuth = inject(FrontierAuthService);
   protected readonly frontierMenuOpen = signal(false);
+  protected readonly cmdrsMenuOpen = signal(false);
+  protected readonly syncStatusMenuOpen = signal(false);
   protected readonly headerAvatarError = signal(false);
   protected readonly boxAvatarError = signal(false);
   protected readonly cmdrAvatarError = signal<Set<string>>(new Set());

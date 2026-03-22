@@ -15,17 +15,25 @@ public record GuildSystemBgsDto(
     bool IsFromSeed
 );
 
+/// <summary>Seuils d'influence (source unique backend).</summary>
+public record InfluenceThresholdsDto(decimal Critical, decimal Low, decimal High);
+
 public record GuildSystemsResponseDto(
     IReadOnlyList<GuildSystemBgsDto> Origin,
     IReadOnlyList<GuildSystemBgsDto> Headquarter,
+    IReadOnlyList<GuildSystemBgsDto> Critical,
     IReadOnlyList<GuildSystemBgsDto> Others,
-    string DataSource // "seed" | "cached" — jamais "live" sans sync réelle
+    string DataSource, // "seed" | "cached" — jamais "live" sans sync réelle
+    InfluenceThresholdsDto InfluenceThresholds
 );
 
-/// <summary>Entrée d'audit pour un système : valeurs stockées, DTO, catégorie et classe influence.</summary>
+/// <summary>Entrée d'audit pour un système : Inara, GuildSystem, ControlledSystem, DTO final. Diagnostic catégorisation et influence.</summary>
 public record GuildSystemAuditEntry(
     string RequestedName,
     bool Found,
+    decimal? InaraInfluencePercent,
+    decimal? RawInaraInfluence,      // alias InaraInfluencePercent (valeur Inara API)
+    decimal? ParsedInfluence,       // = GuildSystemInfluencePercent (résultat InfluenceParse)
     int? GuildSystemId,
     decimal? GuildSystemInfluencePercent,
     string? GuildSystemCategory,
@@ -36,7 +44,9 @@ public record GuildSystemAuditEntry(
     bool? ControlledSystemIsHeadquarter,
     decimal? DtoInfluencePercent,
     string? DtoState,
-    string CategoryDisplay,
+    string CategoryDisplay,         // libellé: Origine | Quartier général | Systèmes critiques | Autres
+    string FinalDisplayCategory,    // clé: origin | headquarter | critical | others
     string InfluenceClass,
-    string SourceUsed // "GuildSystem" — source de vérité pour l'affichage
+    string SourceUsed,
+    string? PayloadCategory = null  // null à l'audit (uniquement pendant import, voir logs)
 );

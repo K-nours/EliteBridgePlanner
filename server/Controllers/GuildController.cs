@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace GuildDashboard.Server.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/guild")]
 public class GuildController : ControllerBase
 {
     private readonly GuildSystemsService _service;
@@ -19,8 +19,9 @@ public class GuildController : ControllerBase
     private readonly GuildDashboardDbContext _db;
     private readonly GuildSystemsImportService _importService;
     private readonly GuildSystemsSeedLoader _seedLoader;
+    private readonly ILogger<GuildController> _log;
 
-    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader)
+    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader, ILogger<GuildController> log)
     {
         _service = service;
         _dashboard = dashboard;
@@ -31,6 +32,7 @@ public class GuildController : ControllerBase
         _db = db;
         _importService = importService;
         _seedLoader = seedLoader;
+        _log = log;
     }
 
     /// <summary>GET /api/integrations/elitebgs/test — diagnostic Elite BGS. HTML si Accept:text/html, sinon JSON.</summary>
@@ -336,6 +338,20 @@ public class GuildController : ControllerBase
         return Ok(new { updated = result.UpdatedCount });
     }
 
+    /// <summary>POST /api/guild/systems/reset — purge tous les GuildSystems et ControlledSystems de la guilde. État propre avant import Inara complet.</summary>
+    [HttpPost("~/api/guild/systems/reset")]
+    public async Task<IActionResult> ResetSystems([FromQuery] int? guildId, CancellationToken ct = default)
+    {
+        var id = ResolveGuildId(guildId);
+        var deletedControlled = await _db.ControlledSystems
+            .Where(c => c.GuildId == id)
+            .ExecuteDeleteAsync(ct);
+        var deletedGuild = await _db.GuildSystems
+            .Where(s => s.GuildId == id)
+            .ExecuteDeleteAsync(ct);
+        return Ok(new { deletedGuildSystems = deletedGuild, deletedControlledSystems = deletedControlled });
+    }
+
     /// <summary>POST /api/guild/systems/import — importe les systèmes depuis JSON (userscript Inara). Upsert idempotent.</summary>
     [HttpPost("systems/import")]
     public async Task<IActionResult> ImportSystems([FromBody] GuildSystemsImportPayload? payload, [FromQuery] int? guildId, CancellationToken ct = default)
@@ -344,17 +360,41 @@ public class GuildController : ControllerBase
         if (payload == null)
             return BadRequest(new { error = "Payload invalide (JSON requis)" });
 
-        var result = await _importService.ImportAsync(id, payload, purgeAbsent: true, ct);
-        return Ok(new
+        var originVal = payload.OriginSystemName;
+        var originStatus = originVal == null ? "NULL" : (string.IsNullOrWhiteSpace(originVal) ? "VIDE" : "VALEUR");
+        _log.LogWarning("[ImportSystems] originSystemName reçu: {Status} | valeur=[{Value}]", originStatus, originVal ?? "(null)");
+
+        try
         {
-            totalReceived = result.TotalReceived,
-            inserted = result.Inserted,
-            updated = result.Updated,
-            skipped = result.Skipped,
-            deleted = result.Deleted,
-            totalProcessed = result.Inserted + result.Updated + result.Skipped,
-            error = result.Error,
-        });
+            var result = await _importService.ImportAsync(id, payload, purgeAbsent: true, ct);
+            if (result.Error != null)
+                return BadRequest(new { error = result.Error, totalReceived = result.TotalReceived, inserted = result.Inserted, updated = result.Updated, skipped = result.Skipped, deleted = result.Deleted });
+            return Ok(new
+            {
+                totalReceived = result.TotalReceived,
+                inserted = result.Inserted,
+                updated = result.Updated,
+                skipped = result.Skipped,
+                deleted = result.Deleted,
+                totalProcessed = result.Inserted + result.Updated + result.Skipped,
+                error = result.Error,
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _log.LogError(ex, "[ImportSystems] Erreur EF Core (requête non traduisible): {Message}", ex.Message);
+            return StatusCode(500, new { error = $"Erreur import: {ex.Message}", detail = ex.InnerException?.Message });
+        }
+        catch (DbUpdateException ex)
+        {
+            _log.LogError(ex, "[ImportSystems] Erreur DB: {Message}", ex.Message);
+            return StatusCode(500, new { error = "Erreur base de données pendant l'import.", detail = ex.InnerException?.Message });
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "[ImportSystems] Erreur inattendue: {Message}", ex.Message);
+            return StatusCode(500, new { error = "Erreur inattendue pendant l'import.", detail = ex.Message });
+        }
     }
 
     /// <summary>POST /api/guild/systems/{systemId}/toggle-headquarter — toggle HQ (déclaratif).</summary>

@@ -12,11 +12,6 @@ import { SyncHelpModalService } from '../../../core/services/sync-help-modal.ser
 import { SyncLogService } from '../../../core/services/sync-log.service';
 import type { GuildSystemBgsDto } from '../../../core/models/guild-systems.model';
 
-/** Seuils influence — voir docs/GUILD-SYSTEMS.md */
-const INFLUENCE_CRITICAL = 10;  // < 10% = rouge vif
-const INFLUENCE_LOW = 30;       // < 30% = rouge
-const INFLUENCE_HIGH = 60;      // >= 60% = vert
-
 @Component({
   selector: 'app-guild-systems-panel',
   standalone: true,
@@ -36,6 +31,8 @@ export class GuildSystemsPanelComponent implements OnInit {
   protected readonly lastSystemsImportAt = this.guildSettings.lastSystemsImportAt;
 
   toggling = signal(false);
+  resetting = signal(false);
+  systemsMenuOpen = signal(false);
   /** ID du système dont le nom vient d'être copié (feedback tooltip "Copié") */
   copiedSystemId = signal<number | null>(null);
 
@@ -56,6 +53,22 @@ export class GuildSystemsPanelComponent implements OnInit {
   protected formatLastSync(iso: string): string {
     const d = new Date(iso);
     return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
+  }
+
+  protected onResetClick(): void {
+    if (!confirm('Supprimer tous les systèmes de la guilde ? État propre pour un import Inara complet.')) return;
+    this.resetting.set(true);
+    this.api.resetSystems().subscribe({
+      next: (res) => {
+        this.syncLog.addLog(`Reset systèmes: ${res.deletedGuildSystems} GuildSystems, ${res.deletedControlledSystems} ControlledSystems supprimés`);
+        this.guildSync.loadSystems();
+      },
+      error: (err) => {
+        const msg = err?.error?.error ?? err?.message ?? 'Erreur';
+        this.syncLog.addLog('Reset systèmes échec: ' + msg);
+      },
+      complete: () => this.resetting.set(false),
+    });
   }
 
   protected onSyncSystemsClick(): void {
@@ -85,9 +98,10 @@ export class GuildSystemsPanelComponent implements OnInit {
   }
 
   getInfluenceClass(sys: GuildSystemBgsDto): string {
-    if (sys.influencePercent < INFLUENCE_CRITICAL) return 'influence-critical';
-    if (sys.influencePercent < INFLUENCE_LOW) return 'influence-low';
-    if (sys.influencePercent >= INFLUENCE_HIGH) return 'influence-high';
+    const t = this.systems().influenceThresholds ?? { critical: 10, low: 30, high: 60 };
+    if (sys.influencePercent < t.critical) return 'influence-critical';
+    if (sys.influencePercent < t.low) return 'influence-low';
+    if (sys.influencePercent >= t.high) return 'influence-high';
     return 'influence-normal';
   }
 
@@ -126,38 +140,14 @@ export class GuildSystemsPanelComponent implements OnInit {
     return this.copiedSystemId() === sysId ? 'Copié' : 'Copier';
   }
 
-  get criticalSystems() {
-    return this.systems().others.filter(s => s.isThreatened || s.isExpansionCandidate);
-  }
-
-  get otherSystems() {
-    return this.systems().others.filter(s => !s.isThreatened && !s.isExpansionCandidate);
-  }
-
-  /** Base interne = source primaire. Tous les systèmes seedés sont affichés. */
-  get displayableOrigin() {
-    return this.systems().origin;
-  }
-
-  get displayableHeadquarter() {
-    return this.systems().headquarter;
-  }
-
-  get displayableCriticalSystems() {
-    return this.criticalSystems;
-  }
-
-  get displayableOtherSystems() {
-    return this.otherSystems;
-  }
-
-  /** Configuration des catégories pour le template unique */
+  /** Configuration des catégories pour le template unique. Une seule catégorie par système. */
   get categoryConfig(): { key: string; label: string; systems: GuildSystemBgsDto[] }[] {
+    const s = this.systems();
     return [
-      { key: 'origin', label: 'Origine', systems: this.displayableOrigin },
-      { key: 'hq', label: 'Quartier général', systems: this.displayableHeadquarter },
-      { key: 'critical', label: 'Systèmes critiques', systems: this.displayableCriticalSystems },
-      { key: 'others', label: 'Autres', systems: this.displayableOtherSystems },
+      { key: 'origin', label: 'Origine', systems: s.origin },
+      { key: 'hq', label: 'Quartier général', systems: s.headquarter },
+      { key: 'critical', label: 'Systèmes critiques', systems: s.critical },
+      { key: 'others', label: 'Autres', systems: s.others },
     ];
   }
 }

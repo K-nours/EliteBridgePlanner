@@ -16,9 +16,18 @@ export interface GuildSystemBgsDto {
 
 export type GuildSystemsDataSource = 'seed' | 'cached';
 
+/** Seuils d'influence (source unique backend). */
+export interface InfluenceThresholdsDto {
+  critical: number;
+  low: number;
+  high: number;
+}
+
 export interface GuildSystemsResponseDto {
   origin: GuildSystemBgsDto[];
   headquarter: GuildSystemBgsDto[];
+  critical: GuildSystemBgsDto[];
   others: GuildSystemBgsDto[];
   dataSource: GuildSystemsDataSource;
+  influenceThresholds: InfluenceThresholdsDto;
 }
