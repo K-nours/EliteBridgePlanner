@@ -636,9 +636,6 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       .center-row {
         grid-template-columns: 1fr;
       }
-      .box-cmdrs .cmdrs-list {
-        grid-template-columns: repeat(2, 1fr);
-      }
     }
     .col {
       display: flex;
@@ -1093,6 +1090,9 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       opacity: 0.5;
       cursor: not-allowed;
     }
+    .box-cmdrs {
+      min-width: 0;
+    }
     .box-cmdrs-title {
       font-family: 'Orbitron', sans-serif;
       font-size: 0.75rem;
@@ -1111,9 +1111,10 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .box-cmdrs .cmdrs-list {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
       gap: 8px;
       padding-top: 0.5rem;
+      min-width: 0;
     }
     .cmdr-item {
       display: flex;
