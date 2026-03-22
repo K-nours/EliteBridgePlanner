@@ -1177,6 +1177,48 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       white-space: nowrap;
       line-height: 1.2;
     }
+    @media (max-width: 768px) {
+      .box-cmdrs .cmdrs-list {
+        grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+        gap: 6px;
+      }
+      .cmdr-item {
+        min-width: 56px;
+        padding: 6px;
+      }
+      .cmdr-avatar {
+        width: 32px;
+        height: 32px;
+      }
+      .cmdr-name {
+        font-size: 0.65rem;
+        max-width: 56px;
+      }
+      .cmdr-initial {
+        font-size: 0.8rem;
+      }
+    }
+    @media (max-width: 480px) {
+      .box-cmdrs .cmdrs-list {
+        grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+        gap: 4px;
+      }
+      .cmdr-item {
+        min-width: 48px;
+        padding: 4px;
+      }
+      .cmdr-avatar {
+        width: 28px;
+        height: 28px;
+      }
+      .cmdr-name {
+        font-size: 0.6rem;
+        max-width: 48px;
+      }
+      .cmdr-initial {
+        font-size: 0.7rem;
+      }
+    }
   `],
 })
 export class DashboardComponent implements OnInit {
