@@ -38,9 +38,9 @@ export class GuildSystemsPanelComponent implements OnInit {
   /** ID du système dont le nom vient d'être copié (feedback tooltip "Copié") */
   copiedSystemId = signal<number | null>(null);
 
-  /** Sections collapseables : low et others. true = section visible (expanded). */
-  lowExpanded = signal(true);
-  othersExpanded = signal(true);
+  /** Sections collapseables : low et others. true = section visible (expanded). Collapsed par défaut. */
+  lowExpanded = signal(false);
+  othersExpanded = signal(false);
 
   panelState = this.guildSync.panelState;
   systems = this.guildSync.systems;
@@ -167,11 +167,11 @@ export class GuildSystemsPanelComponent implements OnInit {
   protected toggleLow = (): void => this.lowExpanded.update((v) => !v);
   protected toggleOthers = (): void => this.othersExpanded.update((v) => !v);
 
-  protected isCollapsible(catKey: SystemsFilterValue): boolean {
+  protected isCollapsible(catKey: string): boolean {
     return catKey === 'low' || catKey === 'others';
   }
 
-  protected isSectionExpanded(catKey: SystemsFilterValue): boolean {
+  protected isSectionExpanded(catKey: string): boolean {
     if (catKey === 'low') return this.lowExpanded();
     if (catKey === 'others') return this.othersExpanded();
     return true;
@@ -196,8 +196,8 @@ export class GuildSystemsPanelComponent implements OnInit {
       { key: 'hq', label: 'Quartier général', systems: s.headquarter ?? [] },
       { key: 'conflicts', label: 'Systèmes en conflits', systems: systemsWithConflict },
       { key: 'critical', label: 'Systèmes critiques', systems: s.critical ?? [] },
-      { key: 'low', label: 'Systèmes bas', systems: s.low ?? [] },
       { key: 'healthy', label: 'Systèmes sains', systems: s.healthy ?? [] },
+      { key: 'low', label: 'Systèmes bas', systems: s.low ?? [] },
       { key: 'others', label: 'Autres', systems: s.others ?? [] },
     ];
     if (filter === 'all') return raw;
