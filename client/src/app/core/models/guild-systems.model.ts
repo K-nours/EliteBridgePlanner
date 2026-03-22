@@ -4,6 +4,8 @@ export interface GuildSystemBgsDto {
   influencePercent: number;
   influenceDelta24h?: number;
   state?: string;
+  /** États BGS multiples (War, Civil War, Expansion, etc.). Utilisé pour les badges. */
+  states?: string[];
   isThreatened: boolean;
   isExpansionCandidate: boolean;
   isHeadquarter: boolean;
@@ -23,11 +25,24 @@ export interface InfluenceThresholdsDto {
   high: number;
 }
 
+/** Seuils tactiques pour catégorisation (Critical < 5%, Low < 15%, Healthy ≥ 60%). */
+export interface TacticalThresholdsDto {
+  critical: number;
+  low: number;
+  high: number;
+}
+
 export interface GuildSystemsResponseDto {
   origin: GuildSystemBgsDto[];
   headquarter: GuildSystemBgsDto[];
+  conflicts: GuildSystemBgsDto[];
   critical: GuildSystemBgsDto[];
+  low: GuildSystemBgsDto[];
+  healthy: GuildSystemBgsDto[];
   others: GuildSystemBgsDto[];
   dataSource: GuildSystemsDataSource;
   influenceThresholds: InfluenceThresholdsDto;
+  tacticalThresholds?: TacticalThresholdsDto;
 }
+
+export type SystemsFilterValue = 'all' | 'origin' | 'hq' | 'healthy' | 'conflicts' | 'low' | 'critical' | 'others';

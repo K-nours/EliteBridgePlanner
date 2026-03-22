@@ -181,6 +181,52 @@
   }
 }
 
+/* En-tête de section (label seul ou cliquable avec chevron) */
+.category-header {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.2rem 8px;
+  margin-bottom: 0.5rem;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: default;
+
+  &--clickable {
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 0.15s;
+
+    &:hover {
+      background: rgba(0, 212, 255, 0.08);
+    }
+
+    &:focus-visible {
+      outline: 1px solid rgba(0, 212, 255, 0.5);
+      outline-offset: 2px;
+    }
+  }
+}
+
+.category-chevron {
+  flex-shrink: 0;
+  color: #ff8c00;
+  opacity: 0.9;
+  transition: transform 0.2s ease;
+
+  .category-header--expanded & {
+    transform: rotate(0deg);
+  }
+
+  .category-header:not(.category-header--expanded) & {
+    transform: rotate(-90deg);
+  }
+}
+
 /* Titres de sections : orange Elite HUD (burnt orange / #ff8c00) */
 .category-label {
   font-family: 'Orbitron', sans-serif;
@@ -188,10 +234,13 @@
   font-weight: 600;
   letter-spacing: 0.05em;
   color: #ff8c00;
-  display: block;
-  margin-bottom: 0.5rem;
-  padding-left: 8px;
-  padding-right: 8px;
+}
+
+.category-count {
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 /* Contenu : une ligne compacte par système */
@@ -242,9 +291,6 @@
     color: #00eaff;
   }
 
-  &--copied .btn-copy .icon-copy {
-    opacity: 1;
-  }
 }
 
 .system-row-left {
@@ -306,10 +352,10 @@
   .system-row:hover .btn-copy & {
     opacity: 1;
   }
+}
 
-  .system-row--copied .btn-copy & {
-    color: #00ff88;
-  }
+.icon-check {
+  color: #00ff88;
 }
 
 .delta-badge {
@@ -344,13 +390,19 @@
   font-variant-numeric: tabular-nums;
 }
 
-.influence-critical .influence,
-.influence-low .influence {
+/* Critiques < 5% : rouge fort */
+.influence-critical .influence {
   color: #ff6b6b;
 }
+/* Bas < 15% : blanc */
+.influence-low .influence {
+  color: rgba(255, 255, 255, 0.9);
+}
+/* Sains ≥ 60% : vert */
 .influence-high .influence {
   color: #00ff88;
 }
+/* Autres 15–60% : neutre */
 .influence-normal .influence {
   color: rgba(255, 255, 255, 0.85);
 }

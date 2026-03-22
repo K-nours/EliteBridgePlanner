@@ -13,6 +13,8 @@ import { InaraSyncBridgeService } from '../../core/services/inara-sync-bridge.se
 import { SyncHelpModalService } from '../../core/services/sync-help-modal.service';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
+import type { SystemsFilterValue } from '../../core/models/guild-systems.model';
+import { hasConflictState } from '../../core/utils/guild-systems.util';
 import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constants';
 
 @Component({
@@ -114,13 +116,20 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
           <div class="map-section">
             <div class="box map-box">
               <h3>Carte The 501st Guild</h3>
-              <div class="map-counter map-counter--left">
-                <span class="map-counter-label">Total de systèmes</span>
-                <span class="map-counter-value">{{ mapSystemCounts().total }}</span>
-              </div>
-              <div class="map-counter map-counter--right map-counter--healthy">
-                <span class="map-counter-label">Systèmes sains</span>
-                <span class="map-counter-value">{{ mapSystemCounts().healthy }}</span>
+              <div class="map-filter-counters">
+                @for (fb of mapFilterCounts(); track fb.value) {
+                  <button type="button"
+                    class="map-counter"
+                    [class.map-counter--active]="guildSystemsSync.systemsFilter() === fb.value"
+                    [class.map-counter--healthy]="fb.value === 'healthy'"
+                    [class.map-counter--critical]="fb.value === 'critical'"
+                    [class.map-counter--conflicts]="fb.value === 'conflicts'"
+                    [disabled]="fb.count === 0 && fb.value !== 'all'"
+                    (click)="setSystemsFilter(fb.value)">
+                    <span class="map-counter-label">{{ fb.label }}</span>
+                    <span class="map-counter-value">{{ fb.count }}</span>
+                  </button>
+                }
               </div>
             </div>
           </div>
@@ -870,10 +879,21 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       position: relative;
       min-height: 420px;
     }
-    .map-counter {
+    .map-filter-counters {
       position: absolute;
       bottom: 0.75rem;
-      width: 6rem;
+      left: 0.75rem;
+      right: 0.75rem;
+      display: flex;
+      align-items: flex-end;
+      gap: 0.5rem;
+      z-index: 2;
+    }
+    .map-filter-counters .map-counter:first-child {
+      margin-right: auto;
+    }
+    .map-counter {
+      width: 5.5rem;
       min-height: 3.5rem;
       padding: 0.5rem 0.6rem;
       display: flex;
@@ -885,17 +905,21 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       border: 1px solid rgba(0, 212, 255, 0.3);
       border-radius: 10px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-      z-index: 2;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
     }
-    .map-counter--left {
-      left: 0.75rem;
+    .map-counter:hover {
+      background: rgba(0, 212, 255, 0.08);
+      border-color: rgba(0, 212, 255, 0.5);
     }
-    .map-counter--right {
-      right: 0.75rem;
+    .map-counter--active {
+      background: rgba(0, 212, 255, 0.15);
+      border-color: rgba(0, 212, 255, 0.6);
+      box-shadow: 0 0 8px rgba(0, 212, 255, 0.2);
     }
     .map-counter-label {
       font-family: 'Exo 2', sans-serif;
-      font-size: 0.6rem;
+      font-size: 0.55rem;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.04em;
@@ -908,12 +932,25 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       font-size: 1.25rem;
       font-weight: 700;
       font-variant-numeric: tabular-nums;
-    }
-    .map-counter--left .map-counter-value {
       color: #00d4ff;
+    }
+    .map-counter--active:not(.map-counter--healthy):not(.map-counter--critical):not(.map-counter--conflicts) .map-counter-value {
+      color: #00eaff;
     }
     .map-counter--healthy .map-counter-value {
       color: #00ff88;
+    }
+    .map-counter--critical .map-counter-value,
+    .map-counter--conflicts .map-counter-value {
+      color: #ff6b6b;
+    }
+    .map-counter:disabled {
+      opacity: 0.4;
+      cursor: default;
+      border-color: rgba(0, 212, 255, 0.15);
+    }
+    .map-counter:disabled .map-counter-value {
+      color: rgba(255, 255, 255, 0.5);
     }
     .frontier-cmdr-header {
       display: flex;
@@ -1210,15 +1247,31 @@ export class DashboardComponent implements OnInit {
     return cmdr?.avatarUrl ?? null;
   });
 
-  /** Compteurs pour le panneau carte : total unique, sains (influence ≥ 30 %). */
-  protected mapSystemCounts = computed(() => {
+  /** Compteurs filtres : design carré (compteur + texte), cliquables. */
+  protected mapFilterCounts = computed((): { value: SystemsFilterValue; label: string; count: number }[] => {
     const s = this.guildSystemsSync.systems();
-    const all = [...s.origin, ...s.headquarter, ...s.others];
-    const byId = new Map(all.map(x => [x.id, x]));
-    const total = byId.size;
-    const healthy = [...byId.values()].filter(x => x.influencePercent >= 30).length;
-    return { total, healthy };
+    const allList = [
+      ...(s.origin ?? []),
+      ...(s.headquarter ?? []),
+      ...(s.conflicts ?? []),
+      ...(s.critical ?? []),
+      ...(s.low ?? []),
+      ...(s.healthy ?? []),
+      ...(s.others ?? []),
+    ];
+    const conflictsCount = allList.filter((sys) => hasConflictState(sys)).length;
+    return [
+      { value: 'all', label: 'Total', count: allList.length },
+      { value: 'critical', label: 'Critiques', count: s.critical?.length ?? 0 },
+      { value: 'conflicts', label: 'Conflits', count: conflictsCount },
+      { value: 'healthy', label: 'Sains', count: s.healthy?.length ?? 0 },
+    ];
   });
+
+  protected setSystemsFilter(value: SystemsFilterValue): void {
+    this.guildSystemsSync.systemsFilter.set(value);
+  }
+
   protected showCmdrConnected = signal(true);
 
   private addLog(msg: string): void {

@@ -106,8 +106,11 @@ public class BgsSyncService
                 _db.ControlledSystems.Add(cs);
             }
 
-            cs.State = string.IsNullOrWhiteSpace(info.FactionState) ? null : info.FactionState.Trim();
             cs.IsControlled = string.Equals(info.Faction?.Trim(), factionName.Trim(), StringComparison.OrdinalIgnoreCase);
+            // State : EDSM quand on contrôle. Sinon conserver Inara (tooltips cellule Inf, mapping strict).
+            if (cs.IsControlled && !string.IsNullOrWhiteSpace(info.FactionState))
+                cs.State = info.FactionState!.Trim();
+            // !IsControlled : ne pas écraser State (Inara tooltips restent)
             cs.LastUpdated = now;
             cs.UpdatedAt = now;
 

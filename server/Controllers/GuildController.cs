@@ -369,6 +369,7 @@ public class GuildController : ControllerBase
             var result = await _importService.ImportAsync(id, payload, purgeAbsent: true, ct);
             if (result.Error != null)
                 return BadRequest(new { error = result.Error, totalReceived = result.TotalReceived, inserted = result.Inserted, updated = result.Updated, skipped = result.Skipped, deleted = result.Deleted });
+            // EDSM désactivé temporairement — flux 100 % Inara pour validation.
             return Ok(new
             {
                 totalReceived = result.TotalReceived,

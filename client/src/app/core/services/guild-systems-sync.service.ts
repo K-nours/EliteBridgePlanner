@@ -5,7 +5,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { GuildSystemsApiService } from './guild-systems-api.service';
 import { SyncLogService } from './sync-log.service';
-import type { GuildSystemsResponseDto } from '../models/guild-systems.model';
+import type { GuildSystemsResponseDto, SystemsFilterValue } from '../models/guild-systems.model';
 import { timeout } from 'rxjs';
 
 export type GuildSystemsPanelState = 'not-synced' | 'loading' | 'failed' | 'cached';
@@ -23,12 +23,19 @@ export class GuildSystemsSyncService {
   readonly systems = signal<GuildSystemsResponseDto>({
     origin: [],
     headquarter: [],
+    conflicts: [],
     critical: [],
+    low: [],
+    healthy: [],
     others: [],
     dataSource: 'seed',
     influenceThresholds: { critical: 10, low: 30, high: 60 },
+    tacticalThresholds: { critical: 5, low: 15, high: 60 },
   });
   readonly lastError = signal<string | null>(null);
+
+  /** Filtre actif pour la colonne systèmes et la carte. */
+  readonly systemsFilter = signal<SystemsFilterValue>('all');
 
   /** Dernière tentative de sync (succès ou échec) */
   readonly lastAttemptAt = signal<Date | null>(null);
@@ -49,10 +56,14 @@ export class GuildSystemsSyncService {
         this.systems.set({
           origin: data?.origin ?? [],
           headquarter: data?.headquarter ?? [],
+          conflicts: data?.conflicts ?? [],
           critical: data?.critical ?? [],
+          low: data?.low ?? [],
+          healthy: data?.healthy ?? [],
           others: data?.others ?? [],
           dataSource: ds,
           influenceThresholds: data?.influenceThresholds ?? { critical: 10, low: 30, high: 60 },
+          tacticalThresholds: data?.tacticalThresholds ?? { critical: 5, low: 15, high: 60 },
         });
         this.panelState.set(ds === 'cached' ? 'cached' : 'not-synced');
       },
