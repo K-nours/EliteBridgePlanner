@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal, computed, ViewChild } from '@angular/core';
+import { Component, OnInit, inject, signal, computed, effect, ViewChild } from '@angular/core';
 import { TruncateTooltipDirective } from '../../shared/directives/truncate-tooltip.directive';
 import { SettingsModalComponent } from '../../shared/components/settings-modal/settings-modal.component';
 import { SyncHelpModalComponent } from '../../shared/components/sync-help-modal/sync-help-modal.component';
@@ -13,6 +13,7 @@ import { InaraSyncBridgeService } from '../../core/services/inara-sync-bridge.se
 import { SyncHelpModalService } from '../../core/services/sync-help-modal.service';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
+import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constants';
 
 @Component({
   selector: 'app-dashboard',
@@ -60,9 +61,11 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
                 (keydown.space.prevent)="frontierMenuOpen.set(!frontierMenuOpen())">
                 <span class="frontier-cmdr-name">{{ frontierAuth.commanderName() ?? 'CMDR' }}</span>
                 <div class="frontier-cmdr-avatar">
-                  @if (frontierAuth.profile()?.avatarUrl; as url) {
-                    <img [src]="url" [alt]="frontierAuth.commanderName() ?? 'CMDR'" referrerpolicy="no-referrer" />
-                  } @else {
+                  @if (connectedCmdrAvatar() && !headerAvatarError()) {
+                    <img [src]="connectedCmdrAvatar()!" [alt]="frontierAuth.commanderName() ?? 'CMDR'" referrerpolicy="no-referrer"
+                      (error)="headerAvatarError.set(true)" />
+                  }
+                  @if (!connectedCmdrAvatar() || headerAvatarError()) {
                     <span class="frontier-cmdr-initial">{{ (frontierAuth.commanderName() ?? 'C').charAt(0).toUpperCase() }}</span>
                   }
                 </div>
@@ -128,7 +131,11 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
               </div>
             </div>
             <div class="sync-logs-container">
-              <pre class="sync-logs">{{ syncLogsWithRecap() || '(aucun log)' }}</pre>
+              <div class="sync-logs">
+                @for (line of syncLogLines(); track $index) {
+                  <div class="log-line" [class.log-line--error]="isErrorLine(line)">{{ line }}</div>
+                }
+              </div>
             </div>
           </div>
           <div class="center-row">
@@ -143,9 +150,20 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
               <h3 class="frontier-cmdr-title">CMDR CONNECTÉ</h3>
             </div>
             <div class="frontier-cmdr-data">
-              <div class="frontier-cmdr-row">
-                <span class="frontier-cmdr-label">CMDR</span>
-                <span class="frontier-cmdr-value">{{ fp.commanderName }}</span>
+              <div class="frontier-cmdr-row frontier-cmdr-row--avatar">
+                <div class="frontier-cmdr-avatar-block">
+                  @if (connectedCmdrAvatar() && !boxAvatarError()) {
+                    <img [src]="connectedCmdrAvatar()!" [alt]="fp.commanderName" referrerpolicy="no-referrer"
+                      (error)="boxAvatarError.set(true)" />
+                  }
+                  @if (!connectedCmdrAvatar() || boxAvatarError()) {
+                    <span class="frontier-cmdr-initial">{{ fp.commanderName?.charAt(0)?.toUpperCase() ?? 'C' }}</span>
+                  }
+                </div>
+                <div>
+                  <span class="frontier-cmdr-label">CMDR</span>
+                  <span class="frontier-cmdr-value">{{ fp.commanderName }}</span>
+                </div>
               </div>
               @if (fp.squadronName) {
               <div class="frontier-cmdr-row">
@@ -173,28 +191,64 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
           <div class="box box-cmdrs">
             <div class="box-cmdrs-header">
               <h3 class="box-cmdrs-title">CMDRs</h3>
-              <button type="button"
-                class="btn-copy"
-                [disabled]="!guildSettings.inaraSquadronUrl()"
-                [title]="syncCmdrsTooltip()"
-                (click)="onSyncCmdrsClick()">
-                Synchronisation
-              </button>
+              <div class="box-cmdrs-actions">
+                <button type="button"
+                  class="btn-copy"
+                  [disabled]="!guildSettings.inaraSquadronUrl()"
+                  [title]="syncAvatarsRosterTooltip()"
+                  (click)="onSyncAvatarsRosterClick()">
+                  Sync avatars
+                </button>
+                <button type="button"
+                  class="btn-copy"
+                  [disabled]="!guildSettings.inaraSquadronUrl()"
+                  [title]="syncCmdrsTooltip()"
+                  (click)="onSyncCmdrsClick()">
+                  Synchronisation
+                </button>
+              </div>
             </div>
             @if (commandersForList(); as data) {
             @if (data.commanders.length > 0) {
             <div class="cmdrs-list">
               @for (cmdr of data.commanders; track cmdr.name) {
-                <div class="cmdr-item" [class.is-current]="(frontierAuth.commanderName() ?? '').trim().toLowerCase() === cmdr.name.trim().toLowerCase()">
-                  <div class="cmdr-avatar">
-                    @if (cmdr.avatarUrl) {
-                      <img [src]="cmdr.avatarUrl" [alt]="cmdr.name" referrerpolicy="no-referrer" />
-                    } @else {
-                      <span class="cmdr-initial">{{ cmdr.name.charAt(0) }}</span>
-                    }
+                @if (cmdr.inaraUrl) {
+                  <a [href]="cmdr.inaraUrl" target="_blank" rel="noopener noreferrer"
+                    class="cmdr-item cmdr-item--link" [class.is-current]="(frontierAuth.commanderName() ?? '').trim().toLowerCase() === cmdr.name.trim().toLowerCase()"
+                    title="Ouvrir le profil Inara">
+                    <div class="cmdr-avatar">
+                      @if (cmdr.avatarUrl && !cmdrAvatarError().has(cmdr.name)) {
+                        <img [src]="cmdr.avatarUrl" [alt]="cmdr.name" referrerpolicy="no-referrer"
+                          (error)="addCmdrAvatarError(cmdr.name)" />
+                      }
+                      @if (!cmdr.avatarUrl && AVATAR_DEFAULT_FALLBACK_URL && !cmdrAvatarError().has(cmdr.name)) {
+                        <img [src]="AVATAR_DEFAULT_FALLBACK_URL" [alt]="cmdr.name" referrerpolicy="no-referrer"
+                          (error)="addCmdrAvatarError(cmdr.name)" />
+                      }
+                      @if ((!cmdr.avatarUrl && !AVATAR_DEFAULT_FALLBACK_URL) || cmdrAvatarError().has(cmdr.name)) {
+                        <span class="cmdr-initial">{{ cmdr.name.charAt(0) }}</span>
+                      }
+                    </div>
+                    <span class="cmdr-name">{{ cmdr.name }}</span>
+                  </a>
+                } @else {
+                  <div class="cmdr-item" [class.is-current]="(frontierAuth.commanderName() ?? '').trim().toLowerCase() === cmdr.name.trim().toLowerCase()">
+                    <div class="cmdr-avatar">
+                      @if (cmdr.avatarUrl && !cmdrAvatarError().has(cmdr.name)) {
+                        <img [src]="cmdr.avatarUrl" [alt]="cmdr.name" referrerpolicy="no-referrer"
+                          (error)="addCmdrAvatarError(cmdr.name)" />
+                      }
+                      @if (!cmdr.avatarUrl && AVATAR_DEFAULT_FALLBACK_URL && !cmdrAvatarError().has(cmdr.name)) {
+                        <img [src]="AVATAR_DEFAULT_FALLBACK_URL" [alt]="cmdr.name" referrerpolicy="no-referrer"
+                          (error)="addCmdrAvatarError(cmdr.name)" />
+                      }
+                      @if ((!cmdr.avatarUrl && !AVATAR_DEFAULT_FALLBACK_URL) || cmdrAvatarError().has(cmdr.name)) {
+                        <span class="cmdr-initial">{{ cmdr.name.charAt(0) }}</span>
+                      }
+                    </div>
+                    <span class="cmdr-name">{{ cmdr.name }}</span>
                   </div>
-                  <span class="cmdr-name">{{ cmdr.name }}</span>
-                </div>
+                }
               }
             </div>
           } @else {
@@ -689,6 +743,16 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       font-family: monospace;
       white-space: pre-wrap;
       word-break: break-all;
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+    }
+    .log-line {
+      line-height: 1.35;
+    }
+    .log-line--error {
+      color: #ff6b6b;
+      font-weight: 500;
     }
     .center-row {
       display: grid;
@@ -772,6 +836,33 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       flex-direction: column;
       gap: 0.5rem;
     }
+    .frontier-cmdr-row--avatar {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .frontier-cmdr-avatar-block {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      background: rgba(0, 212, 255, 0.2);
+      border: 1px solid rgba(0, 212, 255, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .frontier-cmdr-avatar-block img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .frontier-cmdr-row--avatar > div {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
     .frontier-cmdr-label {
       font-family: 'Orbitron', sans-serif;
       font-size: 0.65rem;
@@ -792,6 +883,10 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       gap: 0.5rem;
       margin-bottom: 1rem;
     }
+    .box-cmdrs-actions {
+      display: flex;
+      gap: 0.4rem;
+    }
     .box-cmdrs-title {
       font-family: 'Orbitron', sans-serif;
       font-size: 0.75rem;
@@ -811,7 +906,7 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     .box-cmdrs .cmdrs-list {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 1.5rem;
+      gap: 8px;
       padding-top: 0.5rem;
     }
     .cmdr-item {
@@ -820,6 +915,21 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       align-items: center;
       gap: 0.5rem;
       min-width: 72px;
+      padding: 8px;
+      box-sizing: border-box;
+      border: 1px solid transparent;
+      border-radius: 10px;
+    }
+    .cmdr-item--link {
+      text-decoration: none;
+      color: inherit;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .cmdr-item--link:hover {
+      background: rgba(0, 212, 255, 0.08);
+      border-color: rgba(0, 212, 255, 0.4);
+      box-shadow: 0 0 8px rgba(0, 234, 255, 0.25);
     }
     .cmdr-item.is-current .cmdr-avatar {
       box-shadow: 0 0 10px rgba(0, 234, 255, 0.6);
@@ -872,11 +982,28 @@ export class DashboardComponent implements OnInit {
   protected readonly syncHelpModal = inject(SyncHelpModalService);
   protected readonly frontierAuth = inject(FrontierAuthService);
   protected readonly frontierMenuOpen = signal(false);
+  protected readonly headerAvatarError = signal(false);
+  protected readonly boxAvatarError = signal(false);
+  protected readonly cmdrAvatarError = signal<Set<string>>(new Set());
+  protected addCmdrAvatarError(name: string): void {
+    this.cmdrAvatarError.update((s) => new Set(s).add(name));
+  }
   protected readonly syncLog = inject(SyncLogService);
+  protected readonly AVATAR_DEFAULT_FALLBACK_URL = AVATAR_DEFAULT_FALLBACK_URL;
   protected readonly guildSystemsSync = inject(GuildSystemsSyncService);
 
   protected readonly strokeCircumference = 2 * Math.PI * 34;
   protected refreshProgress = signal(0);
+
+  constructor() {
+    effect(() => {
+      const url = this.connectedCmdrAvatar();
+      if (url) {
+        this.headerAvatarError.set(false);
+        this.boxAvatarError.set(false);
+      }
+    });
+  }
   protected strokeDashOffset = computed(() => this.strokeCircumference * (1 - this.refreshProgress() / 100));
 
   /** Dernières erreurs Inara (postMessage depuis onglet), effacées au succès. */
@@ -901,6 +1028,16 @@ export class DashboardComponent implements OnInit {
     return { ...data, commanders: sorted };
   });
   protected factionName = computed(() => this.dashboard()?.factionName ?? 'The 501st Guild');
+
+  /** Avatar du CMDR connecté : priorité frontierAuth, sinon depuis la liste des commandeurs (match par nom). */
+  protected connectedCmdrAvatar = computed(() => {
+    const url = this.frontierAuth.profile()?.avatarUrl;
+    if (url) return url;
+    const current = this.frontierAuth.commanderName()?.trim().toLowerCase();
+    if (!current) return null;
+    const cmdr = this.commanders()?.commanders?.find(c => c.name.trim().toLowerCase() === current);
+    return cmdr?.avatarUrl ?? null;
+  });
 
   /** Compteurs pour le panneau carte : total unique, sains (influence ≥ 30 %). */
   protected mapSystemCounts = computed(() => {
@@ -931,9 +1068,9 @@ export class DashboardComponent implements OnInit {
     const text = this.syncLogsWithRecap();
     try {
       await navigator.clipboard.writeText(text);
-      this.addLog('→ Copié dans le presse-papier');
+      this.addLog('Journal copié dans le presse-papier');
     } catch (e) {
-      this.addLog('→ Erreur copie: ' + (e instanceof Error ? e.message : String(e)));
+      this.addLog('Erreur copie : ' + (e instanceof Error ? e.message : String(e)));
     }
   }
 
@@ -946,6 +1083,12 @@ export class DashboardComponent implements OnInit {
     const last = this.guildSettings.lastCommandersSyncAt();
     if (!url) return "Configurer l'URL squadron dans Paramètres";
     return last ? `Dernière sync CMDRs: ${this.formatLastSync(last)}` : 'Jamais synchronisé — Cliquer pour ouvrir Inara';
+  });
+
+  protected syncAvatarsRosterTooltip = computed(() => {
+    const url = this.guildSettings.inaraSquadronUrl();
+    if (!url) return "Configurer l'URL squadron dans Paramètres";
+    return "Récupérer les avatars de tous les membres du roster (ouvre chaque page CMDR)";
   });
 
   protected formatLastSync(iso: string): string {
@@ -970,6 +1113,16 @@ export class DashboardComponent implements OnInit {
     return recap + (logsContent ? `\n\n${logsContent}` : '');
   });
 
+  /** Lignes du journal pour affichage (récap + logs). */
+  protected syncLogLines = computed(() => {
+    const text = this.syncLogsWithRecap() || '(aucun log)';
+    return text.split('\n');
+  });
+
+  protected isErrorLine(line: string): boolean {
+    return line.toLowerCase().includes('erreur');
+  }
+
   /** Horodatage le plus récent parmi les 3 syncs Inara (systèmes, CMDRs, avatar). */
   protected lastInaraSyncTs = computed(() => {
     const arr = [
@@ -987,6 +1140,7 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit(): void {
     this.addLog('Dashboard initialisé');
+    this.addLog('Prêt — utilisez les boutons sync pour importer depuis Inara');
     this.guildSettings.load();
     this.inaraBridge.check();
     if (typeof document !== 'undefined') {
@@ -998,22 +1152,66 @@ export class DashboardComponent implements OnInit {
       window.addEventListener('message', (ev: MessageEvent) => {
         if (ev.origin !== 'https://inara.cz') return;
         const d = ev.data;
-        if (!d || typeof d !== 'object' || (d.type !== 'inara-sync-success' && d.type !== 'inara-sync-error')) return;
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('[Dashboard] postMessage RECU depuis Inara', { origin: ev.origin, type: d?.type, source: d?.source, isObject: !!(d && typeof d === 'object') });
+        }
+        if (!d || typeof d !== 'object') return;
         const src = d.source as 'systems' | 'roster' | 'avatar';
+        const detail = d.detail as { inserted?: number; updated?: number; total?: number; imported?: number; commanderName?: string } | undefined;
+        if (d.type === 'inara-sync-started') {
+          const labels = { systems: 'systèmes', roster: 'roster', avatar: 'avatar' };
+          this.addLog(`Import ${labels[src]} démarré`);
+          return;
+        }
         if (d.type === 'inara-sync-success') {
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[Dashboard] postMessage inara-sync-success RECU — type:', src, '— refresh démarré');
+          }
           if (src === 'systems') this.lastSystemsSyncError.set(null);
           if (src === 'roster') this.lastRosterSyncError.set(null);
           if (src === 'avatar') this.lastAvatarSyncError.set(null);
           this.guildSettings.load();
           if (src === 'systems') this.guildSystemsSync.loadSystems();
           if (src === 'roster' || src === 'avatar') this.loadCommanders();
-          this.addLog(`Sync Inara ${src} OK`);
-        } else {
+          if (src === 'systems' && detail) {
+            const total = (detail.inserted ?? 0) + (detail.updated ?? 0);
+            this.addLog(total > 0 ? `${total} système${total > 1 ? 's' : ''} mis à jour` : 'Sync systèmes réussie');
+          } else if (src === 'roster' && detail) {
+            const n = detail.imported ?? detail.total ?? 0;
+            this.addLog(n > 0 ? `${n} CMDR(s) importés` : 'Sync roster réussie');
+          } else if (src === 'avatar' && detail?.commanderName) {
+            this.addLog(`Avatar mis à jour pour ${detail.commanderName}`);
+          } else {
+            this.addLog(`Sync ${src} réussie`);
+          }
+          this.addLog('Onglet fermé');
+          this.addLog('Dashboard rafraîchi');
+          if (src === 'avatar' && this.avatarUrlsQueue.length > 0) this.openNextAvatarFromQueue();
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[Dashboard] Refresh terminé');
+          }
+          return;
+        }
+        if (d.type === 'inara-sync-error') {
           const msg = (d.message as string) || 'Erreur inconnue';
           if (src === 'systems') this.lastSystemsSyncError.set(msg);
           if (src === 'roster') this.lastRosterSyncError.set(msg);
           if (src === 'avatar') this.lastAvatarSyncError.set(msg);
-          this.addLog(`Erreur sync ${src}: ${msg}`);
+          const labels = { systems: 'Systèmes', roster: 'Roster', avatar: 'Avatar' };
+          this.addLog(`Erreur ${labels[src]} : ${msg}`);
+          if (src === 'avatar' && this.avatarUrlsQueue.length > 0) this.openNextAvatarFromQueue();
+          return;
+        }
+        if (d.type === 'inara-roster-cmdr-urls') {
+          const urls = (d.urls as string[]) || [];
+          if (urls.length === 0) {
+            this.addLog('Sync avatars roster : aucun lien CMDR trouvé sur la page');
+            return;
+          }
+          this.avatarUrlsQueue = [...urls];
+          this.avatarUrlsTotal = urls.length;
+          this.addLog(`Sync avatars roster : ${urls.length} membre(s) à traiter`);
+          this.openNextAvatarFromQueue();
         }
       });
     }
@@ -1041,9 +1239,26 @@ export class DashboardComponent implements OnInit {
     if (!skipFrontierCheck) this.frontierAuth.checkAndLoadProfile();
     this.dashboardApi.getDashboard(null).subscribe({
       next: (d) => this.dashboard.set(d),
-      error: (err) => this.addLog('Erreur dashboard: ' + (err?.message || err?.error?.message || JSON.stringify(err))),
+      error: (err) => this.addLog('Erreur chargement dashboard : ' + (err?.error?.error ?? err?.message ?? 'Erreur serveur')),
     });
     this.loadCommanders();
+  }
+
+  private openNextAvatarFromQueue(): void {
+    const url = this.avatarUrlsQueue.shift();
+    if (!url) {
+      this.addLog('Sync avatars roster : terminé');
+      this.loadCommanders();
+      return;
+    }
+    const fullUrl = this.inaraBridge.buildAutoImportUrl(url);
+    if (!fullUrl) {
+      this.addLog('Erreur build URL pour ' + url);
+      this.openNextAvatarFromQueue();
+      return;
+    }
+    this.addLog(`Ouverture page CMDR ${this.avatarUrlsTotal - this.avatarUrlsQueue.length}/${this.avatarUrlsTotal} (avatar)`);
+    window.open(fullUrl, '_blank');
   }
 
   private loadCommanders(): void {
@@ -1051,13 +1266,13 @@ export class DashboardComponent implements OnInit {
       next: (d) => this.commanders.set(d),
       error: (err) => {
         this.commanders.set({ commanders: [], lastSyncedAt: null, dataSource: 'cached' });
-        this.addLog('Erreur commanders: ' + (err?.message || err?.error?.message || JSON.stringify(err)));
+        this.addLog('Erreur chargement CMDRs : ' + (err?.error?.error ?? err?.message ?? 'Erreur serveur'));
       },
     });
   }
 
   protected onSyncSystemsClick(): void {
-    this.addLog('Sync systèmes Inara');
+    this.addLog('Clic bouton squadron → sync systèmes');
     const url = this.guildSettings.inaraFactionPresenceUrl();
     if (!url) {
       this.addLog('URL faction non configurée — Paramètres');
@@ -1065,14 +1280,15 @@ export class DashboardComponent implements OnInit {
       return;
     }
     if (!this.inaraBridge.openWithAutoImport(url)) {
+      this.addLog('Script Inara absent — installez Tampermonkey');
       this.syncHelpModal.show();
       return;
     }
-    this.addLog('Ouverture page faction — import auto puis fermeture si succès');
+    this.addLog('Ouverture page Inara systems');
   }
 
   protected onSyncCmdrsClick(): void {
-    this.addLog('Sync roster Inara');
+    this.addLog('Clic sync roster → lancement');
     const url = this.guildSettings.inaraSquadronUrl();
     if (!url) {
       this.addLog('URL squadron non configurée — Paramètres');
@@ -1080,14 +1296,35 @@ export class DashboardComponent implements OnInit {
       return;
     }
     if (!this.inaraBridge.openWithAutoImport(url)) {
+      this.addLog('Script Inara absent — installez Tampermonkey');
       this.syncHelpModal.show();
       return;
     }
-    this.addLog('Ouverture page roster — import auto puis fermeture si succès');
+    this.addLog('Ouverture page Inara roster');
+  }
+
+  /** File d'attente des URLs CMDR à traiter pour sync avatars roster. */
+  private avatarUrlsQueue: string[] = [];
+  private avatarUrlsTotal = 0;
+
+  protected onSyncAvatarsRosterClick(): void {
+    this.addLog('Clic sync avatars roster → lancement');
+    const url = this.guildSettings.inaraSquadronUrl();
+    if (!url) {
+      this.addLog('URL squadron non configurée — Paramètres');
+      this.syncHelpModal.show();
+      return;
+    }
+    if (!this.inaraBridge.openSyncAvatarsRoster(url)) {
+      this.addLog('Script Inara absent — installez Tampermonkey');
+      this.syncHelpModal.show();
+      return;
+    }
+    this.addLog('Ouverture page Inara roster (extraction liens CMDR)');
   }
 
   protected onSyncCmdrAvatarClick(): void {
-    this.addLog('Sync avatar Inara');
+    this.addLog('Clic sync avatar → lancement');
     const url = this.guildSettings.inaraCmdrUrl();
     if (!url) {
       this.addLog('URL CMDR non configurée — Paramètres');
@@ -1095,19 +1332,20 @@ export class DashboardComponent implements OnInit {
       return;
     }
     if (!this.inaraBridge.openWithAutoImport(url)) {
+      this.addLog('Script Inara absent — installez Tampermonkey');
       this.syncHelpModal.show();
       return;
     }
-    this.addLog('Ouverture page CMDR — import auto puis fermeture si succès');
+    this.addLog('Ouverture page Inara CMDR');
   }
 
   /** Sync Inara → cache puis recharge les commanders. */
   private refreshDashboard(): void {
     if (this.refreshProgress() > 0) {
-      this.addLog('Refresh déjà en cours, ignoré');
+      this.addLog('Rafraîchissement déjà en cours — ignoré');
       return;
     }
-    this.addLog('Démarrage refresh...');
+    this.addLog('Rafraîchissement manuel démarré');
     this.refreshProgress.set(1);
     const start = performance.now();
     const duration = 3000;
@@ -1125,7 +1363,7 @@ export class DashboardComponent implements OnInit {
       next: (res) => {
         cancelAnimationFrame(frameId);
         this.refreshProgress.set(100);
-        this.addLog('Sync OK: ' + res.syncedCount + ' CMDRs');
+        this.addLog(res.syncedCount > 0 ? `${res.syncedCount} CMDR(s) synchronisés` : 'Rafraîchissement terminé');
         this.guildSettings.load();
         this.loadCommanders();
         setTimeout(() => this.refreshProgress.set(0), 400);
@@ -1134,7 +1372,7 @@ export class DashboardComponent implements OnInit {
         cancelAnimationFrame(frameId);
         this.refreshProgress.set(0);
         const msg = err?.error?.error ?? err?.error?.message ?? err?.message ?? JSON.stringify(err);
-        this.addLog('Erreur sync: ' + msg);
+        this.addLog('Erreur rafraîchissement : ' + msg);
       },
     });
   }

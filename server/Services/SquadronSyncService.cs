@@ -135,6 +135,7 @@ public class SquadronSyncService
             if (byName.TryGetValue(name, out var member))
             {
                 member.Role = c.Role ?? member.Role;
+                member.InaraUrl = c.InaraUrl ?? member.InaraUrl;
                 member.LastSyncedAt = now;
                 _db.SquadronMembers.Update(member);
             }
@@ -145,6 +146,7 @@ public class SquadronSyncService
                     GuildId = guildId,
                     CommanderName = name,
                     Role = c.Role,
+                    InaraUrl = c.InaraUrl,
                     LastSyncedAt = now
                 });
                 byName[name] = null!; // évite doublon

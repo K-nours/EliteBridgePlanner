@@ -3,6 +3,7 @@ export interface CommanderDto {
   avatarUrl: string | null;
   role: string | null;
   lastSyncedAt: string | null;
+  inaraUrl: string | null;
 }
 
 export interface CommandersResponseDto {

@@ -9,6 +9,7 @@ public class SquadronMember
     public string? AvatarUrl { get; set; }
     public string? Role { get; set; }
     public DateTime? LastSyncedAt { get; set; }
+    public string? InaraUrl { get; set; }
 
     public Guild Guild { get; set; } = null!;
 }

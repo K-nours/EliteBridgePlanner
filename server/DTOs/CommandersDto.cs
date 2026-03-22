@@ -8,7 +8,8 @@ public record CommandersImportPayload(
 /// <summary>Un CMDR extrait depuis la page roster Inara.</summary>
 public record CommanderImportItem(
     string Name,
-    string? Role
+    string? Role,
+    string? InaraUrl
 );
 
 /// <summary>Payload d'import avatar depuis la page CMDR Inara.</summary>
@@ -29,5 +30,6 @@ public record CommanderDto(
     string Name,
     string? AvatarUrl,
     string? Role,
-    DateTime? LastSyncedAt
+    DateTime? LastSyncedAt,
+    string? InaraUrl
 );
