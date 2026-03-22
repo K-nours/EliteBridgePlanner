@@ -56,7 +56,7 @@
     tabindex="0"
     title="Cliquer pour définir ou retirer le HQ">
     <span class="system-row-left">
-      <span class="system-name">{{ sys.name }}@if (sys.isHeadquarter) { <span class="hq-mark">★</span> }</span>
+      <span class="system-name">@if (sys.isHeadquarter) { <span class="hq-mark">🏛️</span> }{{ sys.name }}</span>
       <button type="button"
         class="btn-copy"
         [title]="copyTooltip(sys.id)"
