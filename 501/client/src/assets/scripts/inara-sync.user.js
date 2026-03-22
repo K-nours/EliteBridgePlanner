@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Inara Sync — Guild Dashboard
 // @namespace    https://github.com/elitebridgeplanner
-// @version      2.11.0
+// @version      2.13.0
 // @description  Script unique : bridge sur dashboard, extraction systèmes (faction), extraction CMDRs (squadron)
 // @author       EliteBridgePlanner
 // @match        https://inara.cz/elite/*
@@ -160,6 +160,8 @@
 
   // ——— Contexte FACTION PRESENCE : extraction systèmes ———
   if (isFactionPresence) {
+    const plog = typeof console !== 'undefined' && console.log
+      ? (...a) => console.log('[Inara Sync][Systems][Pagination]', ...a) : () => {};
     const SPECIAL_CHARS = /[^\p{L}\p{N}\s.\-']/gu;
     const PERCENT_REGEX = /(\d+(?:[.,]\d+)?)\s*%?/;
     const UPDATED_REGEX = /(\d+\s*(?:day|hour|minute|week)s?\s*(?:ago)?|il y a \d+\s*(?:jour|heure|minute)s?)/i;
@@ -198,13 +200,24 @@
       return -1;
     }
 
-    /** Extrait l'origine depuis le bloc d'infos faction (header Inara), ex. "HIP 4332". */
+    /** Retourne le tableau des systèmes (présence), ou null si introuvable. */
+    function getSystemsTable() {
+      const tables = document.querySelectorAll('table');
+      for (const t of tables) {
+        if (t.querySelector('a[href*="/elite/starsystem/"]')) return t;
+      }
+      return null;
+    }
+
+    /** Extrait l'origine depuis l'encart faction (au-dessus du tableau), jamais depuis le tableau paginé. */
     function extractOriginFromHeader() {
       const log = typeof console !== 'undefined' && console.log ? (...a) => console.log('[Inara Sync][Systems][Origin]', ...a) : () => {};
+      const systemsTable = getSystemsTable();
       const labelTexts = ['origin', 'origine'];
       const labels = document.querySelectorAll('dt, td, th, div, span, label');
-      log('extractOriginFromHeader: scanning', labels.length, 'éléments (dt,td,th,div,span,label)');
+      log('extractOriginFromHeader: scanning encart uniquement (hors tableau systèmes)');
       for (const el of labels) {
+        if (systemsTable && el.closest && el.closest('table') === systemsTable) continue;
         const raw = (el.textContent || '').trim();
         const rawLower = raw.toLowerCase();
         const isOriginLabel = raw && (labelTexts.includes(rawLower) || labelTexts.some(l => rawLower.startsWith(l + ' ') || rawLower.startsWith(l + ':')));
@@ -212,11 +225,9 @@
           const link = el.parentElement?.querySelector?.('a[href*="/elite/starsystem/"]')
             || el.nextElementSibling?.querySelector?.('a[href*="/elite/starsystem/"]')
             || el.closest('tr')?.querySelector?.('a[href*="/elite/starsystem/"]');
-          log('Label trouvé:', raw, '| bloc:', el.tagName, el.className || '(pas de class)', '| link:', link ? link.href : 'NON');
+          log('Label trouvé (encart):', raw, '| link:', link ? link.href : 'NON');
           if (link) {
             const name = cleanName(link.textContent);
-            const linkText = (link.textContent || '').trim();
-            log('Texte brut lien:', JSON.stringify(linkText), '| cleanName:', name);
             if (name) {
               log('Origin détectée:', name);
               return name;
@@ -224,20 +235,176 @@
           }
         }
       }
-      log('Aucun label Origin/Origine trouvé avec lien starsystem');
+      log('Aucun label Origin/Origine trouvé dans l\'encart faction');
       return null;
     }
 
-    function extractSystems() {
-      const tables = document.querySelectorAll('table');
-      let targetTable = null;
-      for (const t of tables) {
-        if (t.querySelector('a[href*="/elite/starsystem/"]')) {
-          targetTable = t;
-          break;
+    /** Extrait le total "Présente dans X systèmes" depuis l'encart faction. */
+    function extractTotalFromEncart() {
+      const body = (document.body?.innerText || document.body?.textContent || '').toLowerCase();
+      const patterns = [
+        /présente\s+dans\s+(\d+)\s+systèmes/i,
+        /present\s+in\s+(\d+)\s+(?:star\s+)?systems?/i,
+        /(\d+)\s+systèmes?\s+\(présence\)/i,
+        /(\d+)\s+systems?\s+\(presence\)/i,
+      ];
+      for (const re of patterns) {
+        const m = body.match(re);
+        if (m) return parseInt(m[1], 10);
+      }
+      return null;
+    }
+
+    /** Nom du premier système visible dans le tableau. */
+    function getFirstSystemName(table) {
+      const firstLink = table.querySelector('tbody tr a[href*="/elite/starsystem/"]');
+      return firstLink ? cleanName(firstLink.textContent) : null;
+    }
+
+    /** Retourne le bouton Next (DOM Inara DataTables) et le nombre de pages. Ne dépend pas du texte visible. */
+    function findPaginationControls(table) {
+      const nextSelectors = [
+        '#DataTables_Table_0_next',
+        '.dataTables_paginate .paginate_button.next',
+        'a.paginate_button.next[data-dt-idx="next"]',
+        '.dataTables_paginate a.paginate_button.next',
+        '[id$="_next"]',
+      ];
+      let nextBtn = null;
+      let usedSelector = '';
+      const wrapper = table.closest('.dataTables_wrapper') || document;
+      for (const sel of nextSelectors) {
+        try {
+          const el = wrapper.querySelector(sel);
+          if (el) {
+            nextBtn = el;
+            usedSelector = sel;
+            break;
+          }
+        } catch (_) {}
+      }
+      if (!nextBtn) {
+        plog('nextSelector=(none) nextFound=false nextDisabled=(n/a) totalPages=1');
+        return { nextBtn: null, totalPages: 1, disabled: true, nextText: null };
+      }
+      const cls = (nextBtn.className || '').toLowerCase();
+      const disabled = cls.includes('disabled') ||
+        nextBtn.getAttribute('aria-disabled') === 'true' ||
+        nextBtn.getAttribute('tabindex') === '-1';
+      const pager = nextBtn.closest('.dataTables_paginate');
+      let totalPages = 1;
+      if (pager) {
+        const pageButtons = pager.querySelectorAll('.paginate_button[data-dt-idx]');
+        const indexes = [];
+        for (const b of pageButtons) {
+          const idx = b.getAttribute('data-dt-idx');
+          if (idx && idx !== 'previous' && idx !== 'next') {
+            const n = parseInt(idx, 10);
+            if (!isNaN(n)) indexes.push(n);
+          }
+        }
+        if (indexes.length > 0) totalPages = Math.max(...indexes) + 1;
+        else {
+          const nums = [];
+          pager.querySelectorAll('.paginate_button').forEach((p) => {
+            const n = parseInt((p.textContent || '').trim(), 10);
+            if (!isNaN(n) && n >= 1 && n <= 999) nums.push(n);
+          });
+          if (nums.length > 0) totalPages = Math.max(...nums);
         }
       }
+      const currentPage = pager ? (() => {
+        const cur = pager.querySelector('.paginate_button.current');
+        if (cur) {
+          const idx = cur.getAttribute('data-dt-idx');
+          if (idx) { const n = parseInt(idx, 10); if (!isNaN(n)) return n + 1; }
+          const t = parseInt((cur.textContent || '').trim(), 10);
+          if (!isNaN(t)) return t;
+        }
+        return 1;
+      })() : 1;
+      plog('nextSelector=' + JSON.stringify(usedSelector) + ' nextFound=true nextDisabled=' + disabled + ' totalPages=' + totalPages + ' currentPage=' + currentPage);
+      return { nextBtn, totalPages, disabled, nextText: usedSelector };
+    }
+
+    /** Attend que le premier système change (max 6s, poll 80ms). Retourne { changed, newFirst }. */
+    function waitForTableChange(table, previousFirstSystem) {
+      return new Promise((resolve) => {
+        const start = Date.now();
+        const maxMs = 6000;
+        const pollMs = 80;
+        const check = () => {
+          const current = getFirstSystemName(table);
+          const timedOut = Date.now() - start > maxMs;
+          if (current !== previousFirstSystem || timedOut) {
+            resolve({ changed: current !== previousFirstSystem, newFirst: current });
+            return;
+          }
+          setTimeout(check, pollMs);
+        };
+        check();
+      });
+    }
+
+    /** Clique sur Next et attend le changement du contenu. Retourne { ok, reason }. */
+    async function goToNextPage(table, pageNum) {
+      const prev = getFirstSystemName(table);
+      plog('tentative page suivante page=' + pageNum + ' premierSysteme=' + JSON.stringify(prev ?? '(vide)'));
+      const { nextBtn, disabled } = findPaginationControls(table);
+      if (!nextBtn) {
+        plog('STOP reason="next not found"');
+        return { ok: false, reason: 'next not found' };
+      }
+      if (disabled) {
+        plog('STOP reason="next disabled"');
+        return { ok: false, reason: 'next disabled' };
+      }
+      plog('click next page=' + (pageNum + 1));
+      nextBtn.click();
+      const { changed, newFirst } = await waitForTableChange(table, prev);
+      plog('changed=' + changed + ' before=' + JSON.stringify(prev ?? '(vide)') + ' after=' + JSON.stringify(newFirst ?? '(vide)'));
+      if (!changed) {
+        plog('STOP reason="table did not change"');
+        return { ok: false, reason: 'table did not change' };
+      }
+      await new Promise((r) => setTimeout(r, 75));
+      return { ok: true, reason: null };
+    }
+
+    function parseDataRowsFromTable(table, indices, seen) {
+      const allRows = Array.from(table.querySelectorAll('tr'));
+      const dataRows = allRows.filter((r) => r.querySelector('a[href*="/elite/starsystem/"]'));
+      const systems = [];
+      const { iG, iA, iP, iPop, iF, iS, iI, iU } = indices;
+      for (const row of dataRows) {
+        const cells = Array.from(row.querySelectorAll('th, td'));
+        if (cells.length < 2) continue;
+        const link = row.querySelector('a[href*="/elite/starsystem/"]');
+        if (!link) continue;
+        const name = cleanName(link.textContent);
+        if (!name || seen.has(name.toLowerCase())) continue;
+        seen.add(name.toLowerCase());
+        const get = (i) => (i >= 0 && cells[i] ? (cells[i].textContent || '').trim() : null);
+        systems.push({
+          name, government: get(iG), allegiance: get(iA), power: cells[iP] ? extractPower(cells[iP]) : null,
+          population: parseLong(get(iPop)), factionCount: (() => { const v = get(iF); return v ? (parseInt(v.replace(/\D/g, ''), 10) || null) : null; })(),
+          stationCount: (() => { const v = get(iS); return v ? (parseInt(v.replace(/\D/g, ''), 10) || null) : null; })(),
+          influencePercent: parsePercent(get(iI)), lastUpdatedText: parseUpdated(get(iU)),
+          category: 'Guild', isClean: false,
+        });
+      }
+      return systems;
+    }
+
+    async function extractSystems() {
+      const log = typeof console !== 'undefined' && console.log ? (...a) => console.log('[Inara Sync][Systems]', ...a) : () => {};
+      const targetTable = getSystemsTable();
       if (!targetTable) return { systems: [], error: 'Table de présence introuvable' };
+
+      const totalEncart = extractTotalFromEncart();
+      const countBefore = Array.from(targetTable.querySelectorAll('tbody tr')).filter((r) => r.querySelector('a[href*="/elite/starsystem/"]')).length;
+      log('Total encart faction:', totalEncart ?? '(non trouvé)');
+      log('Lignes DOM visibles (page courante):', countBefore);
 
       const allRows = Array.from(targetTable.querySelectorAll('tr'));
       const headerRow = targetTable.querySelector('thead tr') || allRows[0];
@@ -248,60 +415,55 @@
       const idxPop = findColumnIndex(headerCells, 'population', 'pop');
       const idxInf = findColumnIndex(headerCells, 'influence', 'presence');
       const idxUpd = findColumnIndex(headerCells, 'updated');
-      const idxFac = idxPop >= 0 ? idxPop + 1 : 5;
-      const idxSta = idxPop >= 0 ? idxPop + 2 : 6;
-      const iG = idxGov >= 0 ? idxGov : 1;
-      const iA = idxAlleg >= 0 ? idxAlleg : 2;
-      const iP = idxPower >= 0 ? idxPower : 3;
-      const iPop = idxPop >= 0 ? idxPop : 4;
-      const iF = idxPop >= 0 ? idxPop + 1 : 5;
-      const iS = idxPop >= 0 ? idxPop + 2 : 6;
-      const iI = idxInf >= 0 ? idxInf : 7;
-      const iU = idxUpd >= 0 ? idxUpd : 8;
+      const indices = {
+        iG: idxGov >= 0 ? idxGov : 1, iA: idxAlleg >= 0 ? idxAlleg : 2, iP: idxPower >= 0 ? idxPower : 3,
+        iPop: idxPop >= 0 ? idxPop : 4, iF: idxPop >= 0 ? idxPop + 1 : 5, iS: idxPop >= 0 ? idxPop + 2 : 6,
+        iI: idxInf >= 0 ? idxInf : 7, iU: idxUpd >= 0 ? idxUpd : 8,
+      };
 
-      // Header vs row structure : header a th/td pour chaque colonne ; les lignes data ont th scope="row" + td.
-      // Ne pas mélanger : utiliser th,td dans les deux pour aligner les index.
-      const dataRows = allRows.filter((r) => r.querySelector('a[href*="/elite/starsystem/"]'));
       const systems = [];
       const seen = new Set();
 
-      const firstDataRow = dataRows[0];
-      const firstCells = firstDataRow ? Array.from(firstDataRow.querySelectorAll('th, td')) : [];
-      if (typeof console !== 'undefined' && console.log) {
-        console.log('[Inara Sync] extractSystems: headerCells=', headerCells, 'cells.length=', firstCells.length, 'iI=', iI, 'iU=', iU,
-          'influenceCell=', firstCells[iI]?.textContent?.trim()?.slice(0, 30), 'updatedCell=', firstCells[iU]?.textContent?.trim()?.slice(0, 30));
+      plog('START');
+      const { nextBtn, totalPages: detectedPages, nextText } = findPaginationControls(targetTable);
+      const totalPages = Math.max(
+        1,
+        detectedPages,
+        totalEncart && countBefore ? Math.ceil(totalEncart / countBefore) : 1
+      );
+
+      const usePagination = nextBtn && (totalPages > 1 || (totalEncart && totalEncart > countBefore));
+      if (!usePagination) {
+        if (!nextBtn) plog('STOP reason="next not found"');
+        else if (totalPages <= 1) plog('STOP reason="totalPages=1"');
+        else plog('STOP reason="usePagination=false"');
+      }
+      if (usePagination) {
+        log('Pagination dynamique détectée');
+        let pagesTraversed = 0;
+        const maxPages = Math.min(totalPages, 20);
+        for (let p = 1; p <= maxPages; p++) {
+          const firstBefore = getFirstSystemName(targetTable);
+          log('Page', p + '/' + totalPages, '→ premier système:', firstBefore ?? '(vide)');
+          const pageSystems = parseDataRowsFromTable(targetTable, indices, seen);
+          systems.push(...pageSystems);
+          pagesTraversed = p;
+          log('Systèmes extraits sur la page:', pageSystems.length, '| Total cumulé:', systems.length);
+          if (p < maxPages) {
+            const result = await goToNextPage(targetTable, p);
+            if (!result.ok) break;
+          } else if (maxPages >= 20) {
+            plog('STOP reason="maxPages reached"');
+          }
+        }
+        plog('pagesTraversed=' + pagesTraversed + ' totalExtrait=' + systems.length);
+      } else {
+        log('Pagination non détectée ou page unique, extraction directe');
+        systems.push(...parseDataRowsFromTable(targetTable, indices, seen));
       }
 
-      for (const row of dataRows) {
-        const cells = Array.from(row.querySelectorAll('th, td'));
-        if (cells.length < 2) continue;
-        const link = row.querySelector('a[href*="/elite/starsystem/"]');
-        if (!link) continue;
-
-        const name = cleanName(link.textContent);
-        if (!name || seen.has(name.toLowerCase())) continue;
-        seen.add(name.toLowerCase());
-
-        const get = (i) => (i >= 0 && cells[i] ? (cells[i].textContent || '').trim() : null);
-        const gov = get(iG);
-        const alleg = get(iA);
-        const power = cells[iP] ? extractPower(cells[iP]) : null;
-        const pop = parseLong(get(iPop));
-        const facVal = get(iF);
-        const staVal = get(iS);
-        const factionCount = facVal ? (parseInt(facVal.replace(/\D/g, ''), 10) || null) : null;
-        const stationCount = staVal ? (parseInt(staVal.replace(/\D/g, ''), 10) || null) : null;
-        const influence = parsePercent(get(iI));
-        const updated = parseUpdated(get(iU));
-
-        systems.push({
-          name, government: gov, allegiance: alleg, power,
-          population: pop, factionCount, stationCount,
-          influencePercent: influence, lastUpdatedText: updated,
-          category: 'Guild', isClean: false,
-        });
-      }
-
+      plog('END totalExtraitFinal=' + systems.length);
+      log('Total extrait final:', systems.length);
       return { systems, error: null };
     }
 
@@ -323,8 +485,9 @@
       return { ok: true, message: `Importé : ${inserted} insérés, ${updated} mis à jour, ${skipped} ignorés (${totalReceived} reçus)`, json: j };
     }
 
-    function runSystems(mode) {
-      const { systems, error } = extractSystems();
+    async function runSystems(mode) {
+      showToast('Extraction en cours (chargement de toutes les pages)…');
+      const { systems, error } = await extractSystems();
       if (error) { showToast(error, true); return; }
       if (systems.length === 0) {
         showToast('Aucun système extrait. Vérifiez que la page affiche le tableau de présence.', true);
@@ -392,10 +555,11 @@
       document.body.appendChild(container);
     }
     if (autoImport) {
-      setTimeout(() => {
+      setTimeout(async () => {
         console.log('[Inara Sync] Auto-import systèmes (autoImport=1)');
         notifyOpenerStarted('systems');
-        const { systems, error } = extractSystems();
+        showToast('Extraction en cours (chargement de toutes les pages)…');
+        const { systems, error } = await extractSystems();
         if (error) {
           showToast(error, true);
           notifyOpenerError('systems', error);
