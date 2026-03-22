@@ -63,11 +63,31 @@ export class InaraSyncBridgeService {
     return hash ? `${withParam}#${hash}` : withParam;
   }
 
-  /** Ouvre une page Inara en mode autoImport. Retourne l'URL ouverte si OK, null si modal d'aide à afficher. */
+  /** Construit l'URL roster avec syncAvatars=1 pour récupérer les liens CMDR et sync avatars un par un. */
+  buildSyncAvatarsRosterUrl(url: string | null): string | null {
+    if (!url) return null;
+    if (!this.checkNow()) return null;
+    const openerOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    const [base, hash] = url.split('#');
+    const sep = base.includes('?') ? '&' : '?';
+    const withParam = base + sep + `syncAvatars=1&openerOrigin=${encodeURIComponent(openerOrigin)}`;
+    return hash ? `${withParam}#${hash}` : withParam;
+  }
+
+  /** Ouvre une page Inara en mode autoImport. Retourne l'URL ouverte si OK, null si modal d'aide à afficher.
+   * Important : on n'utilise ni noopener ni noreferrer — l'onglet doit avoir window.opener pour postMessage et window.close(). */
   openWithAutoImport(url: string | null): string | null {
     const fullUrl = this.buildAutoImportUrl(url);
     if (!fullUrl) return null;
-    window.open(fullUrl, '_blank', 'noopener,noreferrer');
+    window.open(fullUrl, '_blank');
+    return fullUrl;
+  }
+
+  /** Ouvre la page roster Inara en mode sync avatars (extraction des liens CMDR). */
+  openSyncAvatarsRoster(url: string | null): string | null {
+    const fullUrl = this.buildSyncAvatarsRosterUrl(url);
+    if (!fullUrl) return null;
+    window.open(fullUrl, '_blank');
     return fullUrl;
   }
 }

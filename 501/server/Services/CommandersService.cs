@@ -35,7 +35,8 @@ public class CommandersService
                 m.CommanderName,
                 m.AvatarUrl,
                 m.Role,
-                m.LastSyncedAt))
+                m.LastSyncedAt,
+                m.InaraUrl))
             .ToListAsync(ct);
 
         var lastSyncedAt = snapshot?.LastSyncedAt;

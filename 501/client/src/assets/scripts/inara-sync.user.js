@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Inara Sync — Guild Dashboard
 // @namespace    https://github.com/elitebridgeplanner
-// @version      2.10.0
+// @version      2.11.0
 // @description  Script unique : bridge sur dashboard, extraction systèmes (faction), extraction CMDRs (squadron)
 // @author       EliteBridgePlanner
 // @match        https://inara.cz/elite/*
@@ -27,14 +27,39 @@
 
   const BACKEND_URL = 'https://localhost:7294';
 
+  /** URLs ou patterns identifiant l'avatar par défaut Inara (placeholder). Ne pas enregistrer en base.
+   * Garder synchronisé avec avatar.constants.ts (AVATAR_PLACEHOLDER_PATTERNS). */
+  const AVATAR_PLACEHOLDER_PATTERNS = [
+    'inara.cz/data/avatars/default',
+    'inara.cz/images/default-avatar',
+    '/default-avatar',
+    'noavatar',
+  ];
+  function isPlaceholderAvatarUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    const lower = url.toLowerCase();
+    return AVATAR_PLACEHOLDER_PATTERNS.some(p => lower.includes(p.toLowerCase()));
+  }
+  function urlMatchesPlaceholderPattern(url) {
+    if (!url || typeof url !== 'string') return false;
+    const lower = url.toLowerCase();
+    return AVATAR_PLACEHOLDER_PATTERNS.some(p => lower.includes(p.toLowerCase()));
+  }
+
   /** Détecte si la page a été ouverte avec autoImport=1 (depuis le bouton sync du dashboard). */
   const urlParams = new URLSearchParams(location.search || '');
   const autoImport = urlParams.get('autoImport') === '1';
+  const syncAvatars = urlParams.get('syncAvatars') === '1';
   const openerOrigin = urlParams.get('openerOrigin') || '';
 
-  function notifyOpenerSuccess(source) {
+  function notifyOpenerStarted(source) {
     if (openerOrigin && window.opener) {
-      try { window.opener.postMessage({ type: 'inara-sync-success', source }, openerOrigin); } catch (_) {}
+      try { window.opener.postMessage({ type: 'inara-sync-started', source }, openerOrigin); } catch (_) {}
+    }
+  }
+  function notifyOpenerSuccess(source, detail) {
+    if (openerOrigin && window.opener) {
+      try { window.opener.postMessage({ type: 'inara-sync-success', source, detail }, openerOrigin); } catch (_) {}
     }
   }
   function notifyOpenerError(source, message) {
@@ -115,14 +140,19 @@
         headers: { 'Content-Type': 'application/json' },
         data: typeof data === 'string' ? data : JSON.stringify(data),
         onload: (res) => {
-          let json = {};
-          try { json = JSON.parse(res.responseText || '{}'); } catch (_) {}
+          let json = null;
+          try { json = JSON.parse(res.responseText || '{}'); } catch (e) { json = {}; }
+          if (json === null || typeof json !== 'object') json = {};
           const ok = res.status >= 200 && res.status < 300;
           const msg = json.error || json.message || res.statusText || (ok ? 'OK' : `Erreur ${res.status}`);
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[Inara Sync] Réponse HTTP:', { status: res.status, responseText: (res.responseText || '').slice(0, 500), json });
+          }
           resolve({ ok, message: msg, json });
         },
         onerror: (err) => {
-          resolve({ ok: false, message: (err && err.message) || 'Erreur réseau. Vérifiez que le backend est démarré.', json: {} });
+          const json = {};
+          resolve({ ok: false, message: (err && err.message) || 'Erreur réseau. Vérifiez que le backend est démarré.', json });
         }
       });
     });
@@ -239,9 +269,14 @@
     async function postSystems(payload) {
       const url = `${BACKEND_URL.replace(/\/$/, '')}/api/guild/systems/import`;
       const r = await gmPost(url, payload);
-      if (!r.ok) return { ok: false, message: r.message };
-      const j = r.json;
-      return { ok: true, message: `Importé : ${j.inserted ?? 0} insérés, ${j.updated ?? 0} mis à jour, ${j.skipped ?? 0} ignorés (${j.totalReceived ?? 0} reçus)` };
+      if (!r.ok) return { ok: false, message: r.message, json: {} };
+      const j = r.json ?? {};
+      const inserted = j.inserted ?? 0;
+      const updated = j.updated ?? 0;
+      const skipped = j.skipped ?? 0;
+      const deleted = j.deleted ?? 0;
+      const totalReceived = j.totalReceived ?? 0;
+      return { ok: true, message: `Importé : ${inserted} insérés, ${updated} mis à jour, ${skipped} ignorés (${totalReceived} reçus)`, json: j };
     }
 
     function runSystems(mode) {
@@ -307,6 +342,7 @@
     if (autoImport) {
       setTimeout(() => {
         console.log('[Inara Sync] Auto-import systèmes (autoImport=1)');
+        notifyOpenerStarted('systems');
         const { systems, error } = extractSystems();
         if (error) {
           showToast(error, true);
@@ -321,13 +357,28 @@
         }
         showToast('Envoi en cours…');
         postSystems({ systems }).then((r) => {
-          if (r.ok) {
+          try {
+            if (!r.ok) {
+              showToast(r.message, true);
+              notifyOpenerError('systems', r.message);
+              return;
+            }
+            console.log('[Inara Sync] Import systèmes réussi');
             showToast(r.message);
-            notifyOpenerSuccess('systems');
+            const j = r.json ?? {};
+            const inserted = j.inserted ?? 0;
+            const updated = j.updated ?? 0;
+            const totalReceived = j.totalReceived ?? systems.length;
+            const detail = { inserted, updated, total: totalReceived };
+            console.log('[Inara Sync] Avant postMessage:', { hasOpener: !!window.opener, typeofOpener: typeof window.opener, openerOrigin, urlCourante: location.href });
+            notifyOpenerSuccess('systems', detail);
+            console.log('[Inara Sync] Tentative fermeture');
+            window.close();
+            console.log('[Inara Sync] window.close() appelé');
+          } catch (e) {
+            console.log('[Inara Sync] Erreur fin de flux (postMessage/close):', e);
+            try { notifyOpenerSuccess('systems', { inserted: 0, updated: 0, total: systems.length }); } catch (_) {}
             try { window.close(); } catch (_) {}
-          } else {
-            showToast(r.message, true);
-            notifyOpenerError('systems', r.message);
           }
         });
       }, 1200);
@@ -335,8 +386,48 @@
     return;
   }
 
-  // ——— Contexte SQUADRON ROSTER : extraction CMDRs ———
+  // ——— Contexte SQUADRON ROSTER : extraction CMDRs ou sync avatars ———
   if (isSquadronRoster) {
+    /** Extrait les URLs complètes des pages CMDR depuis le tableau roster (pour sync avatars). */
+    function extractCmdrPageUrls() {
+      const urls = [];
+      const seen = new Set();
+      const tables = document.querySelectorAll('table');
+      let rosterTable = null;
+      for (const t of tables) {
+        const cmdrLink = t.querySelector('a[href*="/elite/cmdr/"]');
+        if (cmdrLink) {
+          const row = cmdrLink.closest('tr');
+          if (row && row.querySelectorAll('td').length >= 2) {
+            rosterTable = t;
+            break;
+          }
+        }
+      }
+      const root = rosterTable || document.body;
+      root.querySelectorAll('a[href*="/elite/cmdr/"]').forEach(link => {
+        const href = (link.getAttribute('href') || '').trim();
+        if (!href.includes('/elite/cmdr/') || href.match(/\/elite\/cmdr\/\s*$/)) return;
+        const full = href.startsWith('http') ? href : new URL(href, location.origin).href;
+        if (seen.has(full)) return;
+        seen.add(full);
+        urls.push(full);
+      });
+      return urls;
+    }
+
+    if (syncAvatars && openerOrigin && window.opener) {
+      setTimeout(() => {
+        const urls = extractCmdrPageUrls();
+        console.log('[Inara Sync] syncAvatars=1 :', urls.length, 'lien(s) CMDR extrait(s)');
+        try {
+          window.opener.postMessage({ type: 'inara-roster-cmdr-urls', urls }, openerOrigin);
+        } catch (e) {
+          console.log('[Inara Sync] postMessage inara-roster-cmdr-urls échec:', e);
+        }
+      }, 1500);
+    }
+
     // Répare UTF-8 mal interprété comme Latin-1 (ex. "AperÃ§u" → "Aperçu"). N'applique que si mojibake détecté.
     function fixUtf8Mojibake(str) {
       if (!str || typeof str !== 'string') return str || '';
@@ -388,6 +479,7 @@
         if (row.querySelector('th')) return;
         const href = (link.getAttribute('href') || '').trim();
         if (!href.includes('/elite/cmdr/') || href.match(/\/elite\/cmdr\/\s*$/)) return;
+        const inaraUrl = href.startsWith('http') ? href : new URL(href, location.origin).href;
         let name = fixUtf8Mojibake((link.textContent || '').trim());
         if (!name || seen.has(name.toLowerCase())) return;
         if (isBlockedName(name)) return;
@@ -397,7 +489,7 @@
         const idx = Array.from(cells).findIndex((c) => c.contains(link));
         if (idx >= 0 && cells[idx + 1]) role = fixUtf8Mojibake((cells[idx + 1].textContent || '').trim()) || null;
 
-        commanders.push({ name, role: role || undefined });
+        commanders.push({ name, role: role || undefined, inaraUrl });
       });
 
       const names = commanders.map((c) => c.name);
@@ -415,7 +507,7 @@
         if (seen.has(key)) continue;
         if (isBlockedName(name)) continue;
         seen.add(key);
-        filtered.push({ name, role: c.role || undefined });
+        filtered.push({ name, role: c.role || undefined, inaraUrl: c.inaraUrl || undefined });
       }
       console.log('[Inara Sync] Après validation: ' + filtered.length + ' CMDR(s), noms=' + JSON.stringify(filtered.map(f => f.name)));
       return filtered;
@@ -423,12 +515,13 @@
 
     async function postCommanders(payload) {
       const url = `${BACKEND_URL.replace(/\/$/, '')}/api/sync/inara/commanders/import`;
-      console.log('[Inara Sync] Envoi POST (GM_xmlhttpRequest):', url, 'payload:', JSON.stringify(payload));
+      console.log('[Inara Sync] Envoi POST roster:', url);
       const r = await gmPost(url, payload);
-      console.log('[Inara Sync] Réponse:', r.ok ? 'OK' : 'Erreur', r.message, r.json);
-      if (!r.ok) return { ok: false, message: r.message };
-      const j = r.json;
-      return { ok: true, message: `Importé : ${j.imported ?? 0} CMDR(s) (${j.totalReceived ?? 0} reçus)` };
+      if (!r.ok) return { ok: false, message: r.message, json: {} };
+      const j = r.json ?? {};
+      const imported = j.imported ?? 0;
+      const totalReceived = j.totalReceived ?? 0;
+      return { ok: true, message: `Importé : ${imported} CMDR(s) (${totalReceived} reçus)`, json: j };
     }
 
     function runCommanders(mode) {
@@ -509,24 +602,38 @@
       }
       showToast('Envoi en cours…');
       postCommanders({ commanders }).then((r) => {
-        if (r.ok) {
+        try {
+          if (!r.ok) {
+            showToast('Erreur : ' + r.message, true);
+            notifyOpenerError('roster', r.message);
+            return;
+          }
+          console.log('[Inara Sync] Import roster réussi');
           showToast(r.message);
-          notifyOpenerSuccess('roster');
+          const j = r.json ?? {};
+          const imported = j.imported ?? commanders.length;
+          const totalReceived = j.totalReceived ?? commanders.length;
+          const detail = { imported, total: totalReceived };
+          console.log('[Inara Sync] Avant postMessage:', { hasOpener: !!window.opener, typeofOpener: typeof window.opener, openerOrigin, urlCourante: location.href });
+          notifyOpenerSuccess('roster', detail);
+          console.log('[Inara Sync] Tentative fermeture');
+          window.close();
+          console.log('[Inara Sync] window.close() appelé');
+        } catch (e) {
+          console.log('[Inara Sync] Erreur fin de flux roster:', e);
+          try { notifyOpenerSuccess('roster', { imported: commanders.length, total: commanders.length }); } catch (_) {}
           try { window.close(); } catch (_) {}
-        } else {
-          showToast('Erreur : ' + r.message, true);
-          notifyOpenerError('roster', r.message);
         }
       });
     };
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
         injectRosterButton();
-        if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import CMDRs (autoImport=1)'); doRosterAutoImport(); }, 1200);
+        if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import CMDRs (autoImport=1)'); notifyOpenerStarted('roster'); doRosterAutoImport(); }, 1200);
       });
     } else {
       injectRosterButton();
-      if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import CMDRs (autoImport=1)'); doRosterAutoImport(); }, 1200);
+      if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import CMDRs (autoImport=1)'); notifyOpenerStarted('roster'); doRosterAutoImport(); }, 1200);
     }
     return;
   }
@@ -566,30 +673,86 @@
       return null;
     }
 
-    /** Extrait le nom du CMDR via document.title puis header précis. Ne jamais mélanger avec le contenu des cellules. */
-    function extractCommanderName() {
-      const title = document.title || '';
-      const titleMatch = title.match(/(?:CMDR|Commandant)\s+(.+?)(?:\s*[|–\-]|$)/i);
-      if (titleMatch) {
-        const name = titleMatch[1].trim();
-        if (name && !isBlockedName(name) && name.length >= 2) {
-          console.log('[Inara Sync] commanderName extrait (title):', name);
-          return name;
+    /** Supprime uniquement les préfixes UI (CMD, CMDR, Commander, Commandant). Ne touche pas aux caractères valides du nom. */
+    function normalizeCommanderName(raw) {
+      if (!raw || typeof raw !== 'string') return '';
+      let s = raw.trim();
+      const prefixes = ['CMDR ', 'Commander ', 'Commandant ', 'CMD ', 'Cmdr '];
+      for (const p of prefixes) {
+        if (s.toLowerCase().startsWith(p.toLowerCase())) {
+          s = s.slice(p.length).trim();
+          break;
         }
       }
-      const headerH1 = document.querySelector('[class*="mainheader"] h1, [class*="profile"] h1, header h1, .mainheader');
+      return s.trim();
+    }
+
+    /** Sépare le nom du reste du titre. N'utilise que pipe | et en-dash – (séparateurs de sections Inara), pas le tiret -. */
+    function extractNameFromTitlePart(raw) {
+      if (!raw || typeof raw !== 'string') return raw || '';
+      const sep = /\s*[|\u2013]\s*/;
+      const parts = raw.split(sep);
+      return (parts[0] || '').trim();
+    }
+
+    /** Caractères autorisés dans un nom : lettres, chiffres, tiret -, apostrophe ', espaces. */
+    const VALID_NAME_CHARS = /^[\p{L}\p{N}\s\-']+$/u;
+    function sanitizeCommanderName(name) {
+      if (!name || typeof name !== 'string') return { name: '', stripped: false };
+      const trimmed = name.trim();
+      const cleaned = trimmed.replace(/[\s]+/g, ' ');
+      if (VALID_NAME_CHARS.test(cleaned)) return { name: cleaned, stripped: false };
+      const kept = cleaned.replace(/[^\p{L}\p{N}\s\-']/gu, '');
+      const changed = kept !== cleaned;
+      return { name: kept.replace(/[\s]+/g, ' ').trim(), stripped: changed };
+    }
+
+    /** Extrait le nom du CMDR. Priorité document.title. Préserve noms avec tiret (Kal-Hagar), chiffres (Arbiiter-117). */
+    function extractCommanderName() {
+      let title = (document.title || '').trim();
+      if (!title) {
+        const ogTitle = document.querySelector('meta[property="og:title"]');
+        title = (ogTitle && ogTitle.getAttribute('content')) || '';
+      }
+      console.log('[Inara Sync][Avatar] document.title brut:', JSON.stringify(title));
+
+      if (title) {
+        const patterns = [
+          { re: /(?:CMDR|Commandant|Cmdr|CMD)\s*[:–\-]?\s*(.+?)(?:\s*[|\u2013]\s*|$)/i, idx: 1 },
+          { re: /^(.+?)\s*[|\u2013]\s*Elite/i, idx: 1 },
+        ];
+        for (const { re, idx } of patterns) {
+          const m = title.match(re);
+          if (m && m[idx]) {
+            const rawPart = m[idx].trim();
+            const rawName = extractNameFromTitlePart(rawPart);
+            const unprefixed = normalizeCommanderName(rawName);
+            const { name, stripped } = sanitizeCommanderName(unprefixed);
+            if (stripped) console.log('[Inara Sync][Avatar] filtre caractères:', JSON.stringify(unprefixed), '->', JSON.stringify(name));
+            if (name && !isBlockedName(name) && name.length >= 2 && name.length < 50) {
+              console.log('[Inara Sync][Avatar] rawName=', JSON.stringify(rawPart), 'normalizedName=', JSON.stringify(name));
+              return name;
+            }
+          }
+        }
+      }
+
+      const headerH1 = document.querySelector('[class*="mainheader"] h1, [class*="profile"] h1, header h1, .mainheader, h1');
       if (headerH1) {
-        const t = headerH1.textContent?.trim() || '';
-        const h1Match = t.match(/(?:CMDR|Commandant)\s+(.+?)(?:\s|$)/i) || (t.length >= 2 && t.length < 50 && !isBlockedName(t) ? [null, t] : null);
+        const t = (headerH1.textContent || '').trim();
+        console.log('[Inara Sync][Avatar] header rawText:', JSON.stringify(t), 'selector:', headerH1.className || headerH1.tagName);
+        const h1Match = t.match(/(?:CMDR|Commandant|Cmdr|CMD)\s*[:–\-]?\s*(.+?)(?:\s|$)/i) || (t.length >= 2 && t.length < 50 && !isBlockedName(t) ? [null, t] : null);
         if (h1Match && h1Match[1]) {
-          const name = h1Match[1].trim();
+          const unprefixed = normalizeCommanderName(h1Match[1]);
+          const { name, stripped } = sanitizeCommanderName(unprefixed);
+          if (stripped) console.log('[Inara Sync][Avatar] filtre caractères:', JSON.stringify(unprefixed), '->', JSON.stringify(name));
           if (name && !isBlockedName(name) && name.length >= 2) {
-            console.log('[Inara Sync] commanderName extrait (header):', name);
+            console.log('[Inara Sync][Avatar] rawName=', JSON.stringify(h1Match[1]), 'normalizedName=', JSON.stringify(name));
             return name;
           }
         }
       }
-      console.log('[Inara Sync] commanderName extrait: (aucun)');
+      console.log('[Inara Sync][Avatar] commanderName final: (aucun) — title invalide ou absent');
       return null;
     }
 
@@ -605,6 +768,14 @@
       const commanderName = extractCommanderName();
       if (!avatarUrl) {
         showToast('Aucune image avatar trouvée sur cette page.', true);
+        return;
+      }
+      if (isPlaceholderAvatarUrl(avatarUrl)) {
+        console.log('[Inara Sync][Avatar] Placeholder détecté: ' + avatarUrl);
+        if (!urlMatchesPlaceholderPattern(avatarUrl)) {
+          console.warn('[Inara Sync][Avatar] WARNING: URL ignorée comme placeholder mais ne correspond à aucun pattern connu');
+        }
+        showToast('Avatar par défaut Inara — ignoré');
         return;
       }
       if (!commanderName || isBlockedName(commanderName)) {
@@ -640,35 +811,58 @@
     const doAvatarAutoImport = () => {
       const avatarUrl = extractAvatar();
       const commanderName = extractCommanderName();
-      const payload = avatarUrl && commanderName ? { avatarUrl, commanderName } : null;
-      if (payload) console.log('[Inara Sync] Payload avatar:', JSON.stringify(payload));
+      console.log('[Inara Sync] Avatar extraction:', { avatarUrl: !!avatarUrl, commanderName: commanderName || '(vide)' });
       if (!avatarUrl) {
         const msg = 'Aucune image avatar trouvée sur cette page.';
+        console.log('[Inara Sync] Erreur avatar:', msg);
         showToast(msg, true);
         notifyOpenerError('avatar', msg);
+        return;
+      }
+      if (isPlaceholderAvatarUrl(avatarUrl)) {
+        console.log('[Inara Sync][Avatar] Placeholder détecté: ' + avatarUrl);
+        if (!urlMatchesPlaceholderPattern(avatarUrl)) {
+          console.warn('[Inara Sync][Avatar] WARNING: URL ignorée comme placeholder mais ne correspond à aucun pattern connu — risque confusion avatar réel/placeholder');
+        }
+        showToast('Avatar par défaut Inara — ignoré');
+        notifyOpenerSuccess('avatar', { commanderName: commanderName || '', skippedPlaceholder: true });
+        try { window.close(); } catch (_) {}
         return;
       }
       if (!commanderName || isBlockedName(commanderName)) {
         const msg = 'Nom du CMDR introuvable sur cette page';
+        console.log('[Inara Sync][Avatar] Erreur:', msg, { commanderName, isBlocked: commanderName ? isBlockedName(commanderName) : 'N/A' });
         showToast(msg, true);
         notifyOpenerError('avatar', msg);
         return;
       }
+      const payload = { avatarUrl, commanderName };
+      console.log('[Inara Sync][Avatar] Payload envoyé:', JSON.stringify(payload));
       showToast('Envoi en cours…');
       postAvatar(avatarUrl, commanderName).then((r) => {
-        if (r.ok) {
+        try {
+          if (!r.ok) {
+            showToast(r.message, true);
+            notifyOpenerError('avatar', r.message);
+            return;
+          }
+          console.log('[Inara Sync] Import avatar réussi');
           showToast(r.message);
-          notifyOpenerSuccess('avatar');
+          console.log('[Inara Sync] Avant postMessage:', { hasOpener: !!window.opener, typeofOpener: typeof window.opener, openerOrigin, urlCourante: location.href });
+          notifyOpenerSuccess('avatar', { commanderName });
+          console.log('[Inara Sync] Tentative fermeture');
+          window.close();
+          console.log('[Inara Sync] window.close() appelé');
+        } catch (e) {
+          console.log('[Inara Sync] Erreur fin de flux avatar:', e);
+          try { notifyOpenerSuccess('avatar', { commanderName }); } catch (_) {}
           try { window.close(); } catch (_) {}
-        } else {
-          showToast(r.message, true);
-          notifyOpenerError('avatar', r.message);
         }
       });
     };
     const doAvatarSetup = () => {
       injectAvatarButton();
-      if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import avatar (autoImport=1)'); doAvatarAutoImport(); }, 1200);
+      if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import avatar (autoImport=1)'); notifyOpenerStarted('avatar'); doAvatarAutoImport(); }, 1200);
     };
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', doAvatarSetup);

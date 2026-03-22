@@ -27,6 +27,23 @@ public class SyncController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>Normalise le nom pour la recherche : Trim + suppression préfixes CMD/CMDR/Commander/Commandant.</summary>
+    private static string NormalizeCommanderNameForSearch(string? raw)
+    {
+        var s = (raw ?? "").Trim();
+        if (string.IsNullOrEmpty(s)) return "";
+        var prefixes = new[] { "CMDR ", "Commander ", "Commandant ", "CMD ", "Cmdr " };
+        foreach (var p in prefixes)
+        {
+            if (s.StartsWith(p, StringComparison.OrdinalIgnoreCase))
+            {
+                s = s[p.Length..].Trim();
+                break;
+            }
+        }
+        return s.Trim();
+    }
+
     /// <summary>GET /api/sync/ping — test de connectivité (certificat / CORS). À ouvrir dans un nouvel onglet depuis Inara.</summary>
     [HttpGet("ping")]
     public IActionResult Ping() => Ok(new { ok = true, message = "Backend joignable", timestamp = DateTime.UtcNow.ToString("o") });
@@ -109,17 +126,17 @@ public class SyncController : ControllerBase
             if (payload == null || string.IsNullOrWhiteSpace(payload.AvatarUrl))
                 return BadRequest(new { error = "Payload invalide (avatarUrl requis)" });
 
-            var name = (payload.CommanderName ?? "").Trim();
+            var name = NormalizeCommanderNameForSearch(payload.CommanderName ?? "");
             if (string.IsNullOrWhiteSpace(name))
                 return BadRequest(new { error = "commanderName requis pour identifier le CMDR" });
 
-            // 2. Recherche en base (trim + case-insensitive)
+            // 2. Recherche en base (trim + case-insensitive + normalisation préfixes)
             var members = await _db.SquadronMembers
                 .Where(m => m.GuildId == id)
                 .ToListAsync(ct);
 
             var member = members.FirstOrDefault(m =>
-                string.Equals((m.CommanderName ?? "").Trim(), name, StringComparison.OrdinalIgnoreCase));
+                string.Equals(NormalizeCommanderNameForSearch(m.CommanderName), name, StringComparison.OrdinalIgnoreCase));
 
             // 3. Log résultat recherche
             if (member != null)
@@ -161,7 +178,7 @@ public class SyncController : ControllerBase
             .AsNoTracking()
             .Where(m => m.GuildId == id)
             .OrderBy(m => m.CommanderName)
-            .Select(m => new { m.CommanderName, m.Role, m.AvatarUrl })
+            .Select(m => new { m.CommanderName, m.Role, m.AvatarUrl, m.InaraUrl })
             .ToListAsync(ct);
 
         var guild = await _db.Guilds.AsNoTracking().FirstOrDefaultAsync(g => g.Id == id, ct);
@@ -186,7 +203,7 @@ public class SyncController : ControllerBase
             .AsNoTracking()
             .Where(m => m.GuildId == id)
             .OrderBy(m => m.CommanderName)
-            .Select(m => new { m.Id, m.CommanderName, m.Role, m.AvatarUrl, m.LastSyncedAt, m.GuildId })
+            .Select(m => new { m.Id, m.CommanderName, m.Role, m.AvatarUrl, m.InaraUrl, m.LastSyncedAt, m.GuildId })
             .ToListAsync(ct);
 
         var guild = await _db.Guilds.AsNoTracking().FirstOrDefaultAsync(g => g.Id == id, ct);

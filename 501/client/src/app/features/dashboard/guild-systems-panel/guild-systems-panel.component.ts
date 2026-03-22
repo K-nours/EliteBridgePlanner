@@ -9,6 +9,7 @@ import { GuildSystemsSyncService } from '../../../core/services/guild-systems-sy
 import { GuildSettingsService } from '../../../core/services/guild-settings.service';
 import { InaraSyncBridgeService } from '../../../core/services/inara-sync-bridge.service';
 import { SyncHelpModalService } from '../../../core/services/sync-help-modal.service';
+import { SyncLogService } from '../../../core/services/sync-log.service';
 import type { GuildSystemBgsDto } from '../../../core/models/guild-systems.model';
 
 /** Seuils influence — voir docs/GUILD-SYSTEMS.md */
@@ -29,6 +30,7 @@ export class GuildSystemsPanelComponent implements OnInit {
   protected readonly guildSettings = inject(GuildSettingsService);
   private readonly inaraBridge = inject(InaraSyncBridgeService);
   private readonly syncHelpModal = inject(SyncHelpModalService);
+  private readonly syncLog = inject(SyncLogService);
 
   protected readonly inaraFactionUrl = this.guildSettings.inaraFactionPresenceUrl;
   protected readonly lastSystemsImportAt = this.guildSettings.lastSystemsImportAt;
@@ -57,11 +59,19 @@ export class GuildSystemsPanelComponent implements OnInit {
   }
 
   protected onSyncSystemsClick(): void {
+    this.syncLog.addLog('Clic sync systèmes → lancement');
     const url = this.guildSettings.inaraFactionPresenceUrl();
-    if (!url) return;
-    if (!this.inaraBridge.openWithAutoImport(url)) {
+    if (!url) {
+      this.syncLog.addLog('URL faction non configurée — Paramètres');
       this.syncHelpModal.show();
+      return;
     }
+    if (!this.inaraBridge.openWithAutoImport(url)) {
+      this.syncLog.addLog('Script Inara absent — installez Tampermonkey');
+      this.syncHelpModal.show();
+      return;
+    }
+    this.syncLog.addLog('Ouverture page Inara systems');
   }
 
   onSystemClick(sys: GuildSystemBgsDto): void {

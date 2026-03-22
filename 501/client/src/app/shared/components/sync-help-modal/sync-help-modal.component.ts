@@ -18,7 +18,7 @@ import { Component, input, output } from '@angular/core';
         </p>
         <ol class="modal-steps">
           <li>Installez l'extension <strong>Tampermonkey</strong> dans votre navigateur (Chrome, Firefox, Edge).</li>
-          <li>Ajoutez le script unique fourni par le squadron (fichier <code>inara-sync.user.js</code>) — il gère systèmes et CMDRs selon la page Inara.</li>
+          <li>Ajoutez le script unique fourni par le squadron (fichier <code>inara-sync.user.js</code>) — il gère systèmes, roster et avatar selon la page Inara.</li>
           <li>Vérifiez que le script est activé pour <strong>ce dashboard</strong> et pour <strong>inara.cz</strong>.</li>
         </ol>
         <p class="modal-text">
