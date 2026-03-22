@@ -198,6 +198,7 @@ public class GuildController : ControllerBase
                 g.InaraSquadronUrl,
                 g.InaraCmdrUrl,
                 g.LastSystemsImportAt,
+                g.LastAvatarImportAt,
             })
             .FirstOrDefaultAsync(ct);
         if (guild == null)
@@ -216,6 +217,7 @@ public class GuildController : ControllerBase
             inaraCmdrUrl = guild.InaraCmdrUrl,
             lastSystemsImportAt = guild.LastSystemsImportAt,
             lastCommandersSyncAt,
+            lastAvatarImportAt = guild.LastAvatarImportAt,
         });
     }
 
@@ -310,6 +312,19 @@ public class GuildController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>GET /api/guild/systems/audit?systems=HIP 4332,Reticuli,... — audit ciblé pour comparaison Inara/DB/API.</summary>
+    [HttpGet("systems/audit")]
+    public async Task<IActionResult> GetSystemsAudit([FromQuery] string? systems, [FromQuery] int? guildId)
+    {
+        var names = (systems ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        if (names.Count == 0)
+            return BadRequest(new { error = "Paramètre systems requis (ex: systems=HIP 4332,Reticuli)" });
+        var result = await _service.GetAuditAsync(ResolveGuildId(guildId), names);
+        return Ok(result);
+    }
+
     /// <summary>POST /api/guild/systems/sync — synchronise les données BGS depuis Elite BGS API.</summary>
     [HttpPost("systems/sync")]
     public async Task<IActionResult> SyncBgs([FromQuery] int? guildId, CancellationToken ct = default)
@@ -329,13 +344,14 @@ public class GuildController : ControllerBase
         if (payload == null)
             return BadRequest(new { error = "Payload invalide (JSON requis)" });
 
-        var result = await _importService.ImportAsync(id, payload, ct);
+        var result = await _importService.ImportAsync(id, payload, purgeAbsent: true, ct);
         return Ok(new
         {
             totalReceived = result.TotalReceived,
             inserted = result.Inserted,
             updated = result.Updated,
             skipped = result.Skipped,
+            deleted = result.Deleted,
             totalProcessed = result.Inserted + result.Updated + result.Skipped,
             error = result.Error,
         });

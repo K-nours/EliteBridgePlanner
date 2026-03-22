@@ -4,6 +4,7 @@ export interface GuildSettingsDto {
   inaraCmdrUrl: string | null;
   lastSystemsImportAt: string | null;
   lastCommandersSyncAt: string | null;
+  lastAvatarImportAt: string | null;
 }
 
 export interface GuildSettingsUpdateDto {

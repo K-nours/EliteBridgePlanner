@@ -44,15 +44,19 @@ public class GuildSystemsService
             var dto = ToDto(gs, cs);
             var isOrigin = string.Equals(gs.Category, "Origine", StringComparison.OrdinalIgnoreCase);
             var isHq = cs?.IsHeadquarter == true;
+            var isCritical = cs?.IsThreatened == true || cs?.IsExpansionCandidate == true;
 
             if (cs != null && !cs.IsFromSeed)
                 anyFromSync = true;
 
+            // Une seule catégorie par système : Origine > HQ > Critiques > Autres
             if (isOrigin)
                 origin.Add(dto);
-            if (isHq)
+            else if (isHq)
                 headquarter.Add(dto);
-            if (!isOrigin && !isHq)
+            else if (isCritical)
+                others.Add(dto); // Seront triés en tête des "others"
+            else
                 others.Add(dto);
         }
 
@@ -64,6 +68,79 @@ public class GuildSystemsService
 
         var dataSource = anyFromSync ? "cached" : "seed";
         return new GuildSystemsResponseDto(origin, headquarter, others, dataSource);
+    }
+
+    /// <summary>Audit ciblé : pour chaque système demandé, retourne valeurs brutes, parsées, stockées, DTO, catégorie et statut.</summary>
+    public async Task<IReadOnlyList<GuildSystemAuditEntry>> GetAuditAsync(int guildId, IReadOnlyList<string> systemNames, CancellationToken ct = default)
+    {
+        var result = new List<GuildSystemAuditEntry>();
+        if (systemNames.Count == 0) return result;
+
+        var normalized = systemNames
+            .Select(n => SystemNameNormalizer.Normalize(n?.Trim() ?? ""))
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (normalized.Count == 0) return result;
+
+        var guildSystems = await _db.GuildSystems
+            .Where(s => s.GuildId == guildId)
+            .ToListAsync(ct);
+        var controlled = await _db.ControlledSystems
+            .Where(s => s.GuildId == guildId)
+            .ToListAsync(ct);
+        var controlledByName = controlled.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
+        var guildByName = guildSystems.ToDictionary(s => SystemNameNormalizer.Normalize(s.Name), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var name in normalized)
+        {
+            var gs = guildByName.GetValueOrDefault(name);
+            var cs = gs != null ? controlledByName.GetValueOrDefault(gs.Name) : null;
+            var dto = gs != null ? ToDto(gs, cs) : null;
+
+            var influencePercent = dto?.InfluencePercent ?? 0;
+            var influenceClass = GetInfluenceClass(influencePercent);
+
+            string categoryDisplay;
+            if (gs == null)
+                categoryDisplay = "(absent)";
+            else if (string.Equals(gs.Category, "Origine", StringComparison.OrdinalIgnoreCase))
+                categoryDisplay = "Origine";
+            else if (cs?.IsHeadquarter == true)
+                categoryDisplay = "Quartier général";
+            else if (cs?.IsThreatened == true || cs?.IsExpansionCandidate == true)
+                categoryDisplay = "Systèmes critiques";
+            else
+                categoryDisplay = "Autres";
+
+            result.Add(new GuildSystemAuditEntry(
+                RequestedName: name,
+                Found: gs != null,
+                GuildSystemId: gs?.Id,
+                GuildSystemInfluencePercent: gs?.InfluencePercent,
+                GuildSystemCategory: gs?.Category,
+                ControlledSystemInfluencePercent: cs?.InfluencePercent,
+                ControlledSystemState: cs?.State,
+                ControlledSystemIsThreatened: cs?.IsThreatened,
+                ControlledSystemIsExpansionCandidate: cs?.IsExpansionCandidate,
+                ControlledSystemIsHeadquarter: cs?.IsHeadquarter,
+                DtoInfluencePercent: dto?.InfluencePercent,
+                DtoState: dto?.State,
+                CategoryDisplay: categoryDisplay,
+                InfluenceClass: influenceClass,
+                SourceUsed: "GuildSystem"
+            ));
+        }
+
+        return result;
+    }
+
+    private static string GetInfluenceClass(decimal influencePercent)
+    {
+        if (influencePercent < 10) return "influence-critical";
+        if (influencePercent < 30) return "influence-low";
+        if (influencePercent >= 60) return "influence-high";
+        return "influence-normal";
     }
 
     /// <summary>Toggle HQ : si le système n'est pas HQ, le définit comme HQ (et retire les autres). S'il est déjà HQ, retire le statut.</summary>
@@ -122,13 +199,20 @@ public class GuildSystemsService
         // InfluenceDelta24h : n'afficher que si source réelle (sync). Jamais de valeur seed trompeuse.
         decimal? delta = (cs != null && !cs.IsFromSeed && cs.InfluenceDelta24h != null) ? cs.InfluenceDelta24h : null;
 
+        // Ne pas afficher State = "None" (BGS "aucun état") pour éviter confusion avec "non"
+        var state = cs?.State;
+        if (string.Equals(state, "None", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(state))
+            state = null;
+
+        // Source de vérité pour l'influence : GuildSystem (alimenté par Inara import).
+        // ControlledSystem.InfluencePercent peut être périmé (BgsSync ne le met pas à jour).
         var isFromSeed = cs?.IsFromSeed ?? true;
         return new GuildSystemBgsDto(
             gs.Id,
             gs.Name,
-            cs?.InfluencePercent ?? gs.InfluencePercent,
+            gs.InfluencePercent,
             delta,
-            cs?.State,
+            state,
             cs?.IsThreatened ?? false,
             cs?.IsExpansionCandidate ?? false,
             cs?.IsHeadquarter ?? false,

@@ -21,6 +21,7 @@ export class GuildSettingsService {
   readonly inaraCmdrUrl = computed(() => this._settings()?.inaraCmdrUrl ?? null);
   readonly lastSystemsImportAt = computed(() => this._settings()?.lastSystemsImportAt ?? null);
   readonly lastCommandersSyncAt = computed(() => this._settings()?.lastCommandersSyncAt ?? null);
+  readonly lastAvatarImportAt = computed(() => this._settings()?.lastAvatarImportAt ?? null);
 
   load(): void {
     this.http
@@ -51,5 +52,10 @@ export class GuildSettingsService {
   /** Rafraîchit lastCommandersSyncAt (après sync réussi). */
   refreshLastCommandersSyncAt(isoDate: string | null): void {
     this._settings.update((s) => (s ? { ...s, lastCommandersSyncAt: isoDate } : s));
+  }
+
+  /** Rafraîchit lastAvatarImportAt (après import avatar réussi). */
+  refreshLastAvatarImportAt(isoDate: string | null): void {
+    this._settings.update((s) => (s ? { ...s, lastAvatarImportAt: isoDate } : s));
   }
 }
