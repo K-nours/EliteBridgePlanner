@@ -38,8 +38,8 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
                   [attr.stroke-dashoffset]="strokeDashOffset()" />
               </svg>
             }
-              <button type="button" class="emblem-box" (click)="onSquadronSync()" [disabled]="refreshProgress() > 0"
-                truncateTooltip="Synchroniser les données" [truncateTooltipForce]="true" [truncateTooltipAbove]="true">
+              <button type="button" class="emblem-box" (click)="onSyncSystemsClick()" [disabled]="refreshProgress() > 0"
+                truncateTooltip="Synchroniser les systèmes" [truncateTooltipForce]="true">
                 <img class="emblem-img" src="assets/squadron-emblem.png" alt="Squadron emblem" />
               </button>
             </div>
@@ -107,39 +107,29 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
         </aside>
         <section class="col col-center">
           <div class="map-section">
-            <div class="box map-box"><h3>Carte The 501st Guild</h3></div>
+            <div class="box map-box">
+              <h3>Carte The 501st Guild</h3>
+              <div class="map-counter map-counter--left">
+                <span class="map-counter-label">Total de systèmes</span>
+                <span class="map-counter-value">{{ mapSystemCounts().total }}</span>
+              </div>
+              <div class="map-counter map-counter--right map-counter--healthy">
+                <span class="map-counter-label">Systèmes sains</span>
+                <span class="map-counter-value">{{ mapSystemCounts().healthy }}</span>
+              </div>
+            </div>
           </div>
           <div class="box box-sync-status">
             <div class="sync-status-header">
               <h3>État de la synchronisation</h3>
               <div class="sync-buttons">
-                <button type="button" class="btn-copy" (click)="copyLogsToClipboard()" [disabled]="syncLog.logs().length === 0">Copier</button>
+                <button type="button" class="btn-copy" (click)="copyLogsToClipboard()" [disabled]="!syncLogsWithRecap()">Copier</button>
                 <button type="button" class="btn-clear" (click)="clearLogs()" [disabled]="syncLog.logs().length === 0">Effacer</button>
               </div>
             </div>
-            <div class="sync-status-bgs">
-              <div class="sync-status-row">
-                <span class="sync-status-label">Dernière tentative</span>
-                <span class="sync-status-value">{{ formatSyncDate(guildSystemsSync.lastAttemptAt()) }}</span>
-              </div>
-              <div class="sync-status-row">
-                <span class="sync-status-label">Dernier succès</span>
-                <span class="sync-status-value">{{ formatSyncDate(guildSystemsSync.lastSuccessfulSyncAt()) }}</span>
-              </div>
-              @if (guildSystemsSync.lastSuccessfulSyncAt()) {
-                <div class="sync-status-row">
-                  <span class="sync-status-label">Systèmes mis à jour</span>
-                  <span class="sync-status-value">{{ guildSystemsSync.lastSystemsUpdated() }}</span>
-                </div>
-              }
-              @if (guildSystemsSync.lastErrorMessage()) {
-                <div class="sync-status-row sync-status-row--error">
-                  <span class="sync-status-label">Erreur</span>
-                  <span class="sync-status-value">{{ guildSystemsSync.lastErrorMessage() }}</span>
-                </div>
-              }
+            <div class="sync-logs-container">
+              <pre class="sync-logs">{{ syncLogsWithRecap() || '(aucun log)' }}</pre>
             </div>
-            <pre class="sync-logs">{{ syncLog.logsText() }}</pre>
           </div>
           <div class="center-row">
             <div class="box box-no-title"></div>
@@ -208,7 +198,7 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
               }
             </div>
           } @else {
-            <div class="cmdrs-empty">Aucun CMDR. Cliquez sur l'écusson pour synchroniser.</div>
+            <div class="cmdrs-empty">Aucun CMDR. Cliquez sur Synchronisation pour importer le roster.</div>
           }
           } @else {
             <div class="cmdrs-empty">Chargement...</div>
@@ -568,6 +558,7 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     }
     .col-center {
       width: 100%;
+      min-height: 0;
     }
     .col-center .map-section,
     .col-center .box-sync-status,
@@ -603,7 +594,8 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     .box-sync-status {
       display: flex;
       flex-direction: column;
-      min-height: 120px;
+      flex: 1;
+      min-height: 0;
     }
     .sync-status-header {
       display: flex;
@@ -651,12 +643,18 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     .btn-clear:hover:not(:disabled) {
       background: rgba(255, 100, 100, 0.3);
     }
-    .sync-status-bgs {
+    .sync-logs-container {
+      flex: 1;
+      margin: 0;
       font-family: 'Exo 2', sans-serif;
-      font-size: 0.7rem;
-      margin-bottom: 0.75rem;
-      padding-bottom: 0.75rem;
-      border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+      font-size: 0.65rem;
+      color: rgba(255, 255, 255, 0.8);
+      overflow-y: auto;
+      min-height: 80px;
+      padding: 0.5rem;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(0, 212, 255, 0.14);
+      border-radius: 4px;
     }
     .sync-status-row {
       display: flex;
@@ -679,19 +677,18 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
     .sync-status-row--error .sync-status-value {
       color: #ff6b6b;
     }
+    .sync-status-row--muted .sync-status-value {
+      color: rgba(255, 255, 255, 0.55);
+    }
+    .sync-status-inara {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 0.7rem;
+    }
     .sync-logs {
-      flex: 1;
       margin: 0;
-      font-size: 0.65rem;
-      color: rgba(255, 255, 255, 0.8);
       font-family: monospace;
       white-space: pre-wrap;
       word-break: break-all;
-      overflow-y: auto;
-      max-height: 140px;
-      padding: 0.5rem;
-      background: rgba(0, 0, 0, 0.3);
-      border-radius: 4px;
     }
     .center-row {
       display: grid;
@@ -702,7 +699,53 @@ import type { CommandersResponseDto } from '../../core/models/commanders.model';
       position: relative;
     }
     .map-box {
+      position: relative;
       min-height: 420px;
+    }
+    .map-counter {
+      position: absolute;
+      bottom: 0.75rem;
+      width: 6rem;
+      min-height: 3.5rem;
+      padding: 0.5rem 0.6rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.25rem;
+      background: rgba(6, 20, 35, 0.95);
+      border: 1px solid rgba(0, 212, 255, 0.3);
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+      z-index: 2;
+    }
+    .map-counter--left {
+      left: 0.75rem;
+    }
+    .map-counter--right {
+      right: 0.75rem;
+    }
+    .map-counter-label {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 0.6rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: rgba(255, 255, 255, 0.7);
+      line-height: 1.1;
+      text-align: center;
+    }
+    .map-counter-value {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .map-counter--left .map-counter-value {
+      color: #00d4ff;
+    }
+    .map-counter--healthy .map-counter-value {
+      color: #00ff88;
     }
     .frontier-cmdr-header {
       display: flex;
@@ -836,6 +879,11 @@ export class DashboardComponent implements OnInit {
   protected refreshProgress = signal(0);
   protected strokeDashOffset = computed(() => this.strokeCircumference * (1 - this.refreshProgress() / 100));
 
+  /** Dernières erreurs Inara (postMessage depuis onglet), effacées au succès. */
+  protected lastSystemsSyncError = signal<string | null>(null);
+  protected lastRosterSyncError = signal<string | null>(null);
+  protected lastAvatarSyncError = signal<string | null>(null);
+
   protected dashboard = signal<DashboardResponseDto | null>(null);
   protected commanders = signal<CommandersResponseDto | null>(null);
   protected commandersForList = computed(() => {
@@ -853,6 +901,16 @@ export class DashboardComponent implements OnInit {
     return { ...data, commanders: sorted };
   });
   protected factionName = computed(() => this.dashboard()?.factionName ?? 'The 501st Guild');
+
+  /** Compteurs pour le panneau carte : total unique, sains (influence ≥ 30 %). */
+  protected mapSystemCounts = computed(() => {
+    const s = this.guildSystemsSync.systems();
+    const all = [...s.origin, ...s.headquarter, ...s.others];
+    const byId = new Map(all.map(x => [x.id, x]));
+    const total = byId.size;
+    const healthy = [...byId.values()].filter(x => x.influencePercent >= 30).length;
+    return { total, healthy };
+  });
   protected showCmdrConnected = signal(true);
 
   private addLog(msg: string): void {
@@ -870,7 +928,7 @@ export class DashboardComponent implements OnInit {
   }
 
   protected async copyLogsToClipboard(): Promise<void> {
-    const text = this.syncLog.logsText();
+    const text = this.syncLogsWithRecap();
     try {
       await navigator.clipboard.writeText(text);
       this.addLog('→ Copié dans le presse-papier');
@@ -895,25 +953,33 @@ export class DashboardComponent implements OnInit {
     return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
   }
 
-  protected onSyncCmdrsClick(): void {
-    const url = this.guildSettings.inaraSquadronUrl();
-    if (!url) return;
-    if (!this.inaraBridge.checkNow()) {
-      this.syncHelpModal.show();
-      return;
-    }
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
+  /** Texte des logs avec récap Inara en tête. */
+  protected syncLogsWithRecap = computed(() => {
+    const systems = this.lastSystemsSyncError() ?? (this.guildSettings.lastSystemsImportAt() ? this.formatLastSync(this.guildSettings.lastSystemsImportAt()!) : '—');
+    const cmdrs = this.lastRosterSyncError() ?? (this.guildSettings.lastCommandersSyncAt() ? this.formatLastSync(this.guildSettings.lastCommandersSyncAt()!) : '—');
+    const avatar = this.lastAvatarSyncError() ?? (this.guildSettings.lastAvatarImportAt() ? this.formatLastSync(this.guildSettings.lastAvatarImportAt()!) : '—');
+    const globalTs = this.lastInaraSyncTs() ? this.formatLastSync(this.lastInaraSyncTs()!) : null;
+    const recap = [
+      `Systèmes: ${systems}`,
+      `CMDRs: ${cmdrs}`,
+      `Avatar: ${avatar}`,
+      globalTs ? `Dernière sync globale: ${globalTs}` : null,
+    ].filter(Boolean).join('\n');
+    const logs = this.syncLog.logsText();
+    const logsContent = logs === '(aucun log)' ? '' : logs;
+    return recap + (logsContent ? `\n\n${logsContent}` : '');
+  });
 
-  protected onSyncCmdrAvatarClick(): void {
-    const url = this.guildSettings.inaraCmdrUrl();
-    if (!url) return;
-    if (!this.inaraBridge.checkNow()) {
-      this.syncHelpModal.show();
-      return;
-    }
-    window.open(url, '_blank', 'noopener,noreferrer');
-  }
+  /** Horodatage le plus récent parmi les 3 syncs Inara (systèmes, CMDRs, avatar). */
+  protected lastInaraSyncTs = computed(() => {
+    const arr = [
+      this.guildSettings.lastSystemsImportAt(),
+      this.guildSettings.lastCommandersSyncAt(),
+      this.guildSettings.lastAvatarImportAt(),
+    ].filter((s): s is string => !!s);
+    if (arr.length === 0) return null;
+    return arr.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
+  });
 
   protected onUpdateScriptClick(): void {
     window.open('/assets/scripts/inara-sync.user.js', '_blank', 'noopener,noreferrer');
@@ -923,6 +989,34 @@ export class DashboardComponent implements OnInit {
     this.addLog('Dashboard initialisé');
     this.guildSettings.load();
     this.inaraBridge.check();
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') this.guildSettings.load();
+      });
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('message', (ev: MessageEvent) => {
+        if (ev.origin !== 'https://inara.cz') return;
+        const d = ev.data;
+        if (!d || typeof d !== 'object' || (d.type !== 'inara-sync-success' && d.type !== 'inara-sync-error')) return;
+        const src = d.source as 'systems' | 'roster' | 'avatar';
+        if (d.type === 'inara-sync-success') {
+          if (src === 'systems') this.lastSystemsSyncError.set(null);
+          if (src === 'roster') this.lastRosterSyncError.set(null);
+          if (src === 'avatar') this.lastAvatarSyncError.set(null);
+          this.guildSettings.load();
+          if (src === 'systems') this.guildSystemsSync.loadSystems();
+          if (src === 'roster' || src === 'avatar') this.loadCommanders();
+          this.addLog(`Sync Inara ${src} OK`);
+        } else {
+          const msg = (d.message as string) || 'Erreur inconnue';
+          if (src === 'systems') this.lastSystemsSyncError.set(msg);
+          if (src === 'roster') this.lastRosterSyncError.set(msg);
+          if (src === 'avatar') this.lastAvatarSyncError.set(msg);
+          this.addLog(`Erreur sync ${src}: ${msg}`);
+        }
+      });
+    }
     setTimeout(() => this.inaraBridge.checkNow(), 800);
     let skipFrontierCheck = false;
     if (typeof window !== 'undefined') {
@@ -962,10 +1056,49 @@ export class DashboardComponent implements OnInit {
     });
   }
 
-  protected onSquadronSync(): void {
-    this.addLog('Clic sur bouton squadron');
-    this.guildSystemsSync.sync();
-    this.refreshDashboard();
+  protected onSyncSystemsClick(): void {
+    this.addLog('Sync systèmes Inara');
+    const url = this.guildSettings.inaraFactionPresenceUrl();
+    if (!url) {
+      this.addLog('URL faction non configurée — Paramètres');
+      this.syncHelpModal.show();
+      return;
+    }
+    if (!this.inaraBridge.openWithAutoImport(url)) {
+      this.syncHelpModal.show();
+      return;
+    }
+    this.addLog('Ouverture page faction — import auto puis fermeture si succès');
+  }
+
+  protected onSyncCmdrsClick(): void {
+    this.addLog('Sync roster Inara');
+    const url = this.guildSettings.inaraSquadronUrl();
+    if (!url) {
+      this.addLog('URL squadron non configurée — Paramètres');
+      this.syncHelpModal.show();
+      return;
+    }
+    if (!this.inaraBridge.openWithAutoImport(url)) {
+      this.syncHelpModal.show();
+      return;
+    }
+    this.addLog('Ouverture page roster — import auto puis fermeture si succès');
+  }
+
+  protected onSyncCmdrAvatarClick(): void {
+    this.addLog('Sync avatar Inara');
+    const url = this.guildSettings.inaraCmdrUrl();
+    if (!url) {
+      this.addLog('URL CMDR non configurée — Paramètres');
+      this.syncHelpModal.show();
+      return;
+    }
+    if (!this.inaraBridge.openWithAutoImport(url)) {
+      this.syncHelpModal.show();
+      return;
+    }
+    this.addLog('Ouverture page CMDR — import auto puis fermeture si succès');
   }
 
   /** Sync Inara → cache puis recharge les commanders. */

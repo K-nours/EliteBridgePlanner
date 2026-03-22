@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Inara Sync — Guild Dashboard
 // @namespace    https://github.com/elitebridgeplanner
-// @version      2.7.0
+// @version      2.9.0
 // @description  Script unique : bridge sur dashboard, extraction systèmes (faction), extraction CMDRs (squadron)
 // @author       EliteBridgePlanner
 // @match        https://inara.cz/elite/*
@@ -26,6 +26,22 @@
   const isCmdrProfile = isInara && path.includes('/elite/cmdr/');
 
   const BACKEND_URL = 'https://localhost:7294';
+
+  /** Détecte si la page a été ouverte avec autoImport=1 (depuis le bouton sync du dashboard). */
+  const urlParams = new URLSearchParams(location.search || '');
+  const autoImport = urlParams.get('autoImport') === '1';
+  const openerOrigin = urlParams.get('openerOrigin') || '';
+
+  function notifyOpenerSuccess(source) {
+    if (openerOrigin && window.opener) {
+      try { window.opener.postMessage({ type: 'inara-sync-success', source }, openerOrigin); } catch (_) {}
+    }
+  }
+  function notifyOpenerError(source, message) {
+    if (openerOrigin && window.opener) {
+      try { window.opener.postMessage({ type: 'inara-sync-error', source, message }, openerOrigin); } catch (_) {}
+    }
+  }
 
   // ——— Contexte DASHBOARD : exposer le bridge ———
   if (isDashboard) {
@@ -288,6 +304,34 @@
       container.appendChild(menu);
       document.body.appendChild(container);
     }
+    if (autoImport) {
+      setTimeout(() => {
+        console.log('[Inara Sync] Auto-import systèmes (autoImport=1)');
+        const { systems, error } = extractSystems();
+        if (error) {
+          showToast(error, true);
+          notifyOpenerError('systems', error);
+          return;
+        }
+        if (systems.length === 0) {
+          const msg = 'Aucun système extrait. Vérifiez que la page affiche le tableau de présence.';
+          showToast(msg, true);
+          notifyOpenerError('systems', msg);
+          return;
+        }
+        showToast('Envoi en cours…');
+        postSystems({ systems }).then((r) => {
+          if (r.ok) {
+            showToast(r.message);
+            notifyOpenerSuccess('systems');
+            try { window.close(); } catch (_) {}
+          } else {
+            showToast(r.message, true);
+            notifyOpenerError('systems', r.message);
+          }
+        });
+      }, 1200);
+    }
     return;
   }
 
@@ -454,162 +498,98 @@
       document.body.appendChild(container);
     }
 
+    const doRosterAutoImport = () => {
+      const raw = extractCommanders();
+      const commanders = filterAndValidate(raw);
+      if (commanders.length === 0) {
+        const msg = 'Aucun CMDR valide extrait. Vérifiez la page roster.';
+        showToast(msg, true);
+        notifyOpenerError('roster', msg);
+        return;
+      }
+      showToast('Envoi en cours…');
+      postCommanders({ commanders }).then((r) => {
+        if (r.ok) {
+          showToast(r.message);
+          notifyOpenerSuccess('roster');
+          try { window.close(); } catch (_) {}
+        } else {
+          showToast('Erreur : ' + r.message, true);
+          notifyOpenerError('roster', r.message);
+        }
+      });
+    };
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', injectRosterButton);
+      document.addEventListener('DOMContentLoaded', () => {
+        injectRosterButton();
+        if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import CMDRs (autoImport=1)'); doRosterAutoImport(); }, 1200);
+      });
     } else {
       injectRosterButton();
+      if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import CMDRs (autoImport=1)'); doRosterAutoImport(); }, 1200);
     }
     return;
   }
 
   // ——— Contexte CMDR PROFILE : extraction avatar ———
   if (isCmdrProfile) {
-    const DEBUG_AVATAR = true;
+    const CMDR_NAME_BLOCKLIST = ['commandant', 'commander', 'profil', 'aperçu', 'preview', 'cmdr', 'rôle', 'role', 'inara'];
 
-    function extractAvatar() {
-      const allImgs = [...document.querySelectorAll('img')];
-      const allSrc = allImgs.map((i) => i.src || i.getAttribute('src') || '(no src)');
-      if (DEBUG_AVATAR) {
-        console.log('[Inara Sync] Avatar candidates (all img):', allSrc);
-      }
-
-      function isVisible(el) {
-        if (!el) return false;
-        const s = window.getComputedStyle(el);
-        return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0' && (el.offsetWidth > 0 || el.offsetHeight > 0);
-      }
-
-      function getSrc(el) {
-        const s = el?.src || el?.getAttribute('src') || '';
-        return s.trim();
-      }
-
-      let picked = null;
-      let reason = '';
-
-      const header = document.querySelector('header') || document.querySelector('[class*="header"]') || document.querySelector('.mainheader');
-      const profileArea = document.querySelector('[class*="profile"]') || document.querySelector('[class*="commander"]');
-      const firstTable = document.querySelector('table');
-      const firstTableFirstCell = firstTable?.querySelector('td, th');
-
-      const searchOrder = [firstTableFirstCell, firstTable, profileArea, header].filter(Boolean);
-
-      for (const root of searchOrder.length > 0 ? searchOrder : [document.body]) {
-        for (const img of (root || document.body).querySelectorAll?.('img') || []) {
-          const src = getSrc(img);
-          if (!src) continue;
-          if (!src.includes('/data/') && !src.includes('inara.cz') && !src.includes('gallery')) continue;
-          if (isVisible(img)) {
-            picked = src;
-            reason = 'img visible dans zone profil (table/header)';
-            break;
-          }
-        }
-        if (picked) break;
-      }
-
-      if (!picked) {
-        for (const img of allImgs) {
-          const src = getSrc(img);
-          if (!src || (!src.includes('/data/') && !src.includes('gallery') && !src.includes('inara.cz'))) continue;
-          if (isVisible(img)) {
-            picked = src;
-            reason = 'première img visible (toute la page)';
-            break;
-          }
-        }
-      }
-
-      if (!picked) {
-        const dataImgs = document.querySelectorAll('img[src*="/data/"], img[src*="inara.cz/data"]');
-        if (dataImgs.length > 0) {
-          picked = getSrc(dataImgs[0]);
-          reason = 'fallback: première img avec /data/ (sans vérifier visibilité)';
-        }
-      }
-
-      if (!picked) {
-        const bg = document.querySelector('[style*="background-image"]') || document.querySelector('[class*="avatar"]');
-        if (bg) {
-          const style = window.getComputedStyle(bg).backgroundImage;
-          const m = style && style.match(/url\(["']?([^"')]+)["']?\)/);
-          if (m) {
-            picked = m[1].trim();
-            reason = 'background-image';
-          }
-        }
-      }
-
-      if (DEBUG_AVATAR) {
-        if (picked) {
-          console.log('[Inara Sync] Avatar trouvé:', picked, '—', reason);
-        } else {
-          console.log('[Inara Sync] Avatar NON trouvé. Raison: aucun img avec /data/ ou inara.cz, pas de background-image. Total img sur la page:', allImgs.length);
-        }
-      }
-
-      return picked || null;
-    }
-
-    const CMDR_NAME_BLOCKLIST = ['commandant', 'commander', 'profil', 'aperçu', 'preview', 'cmdr', 'rôle', 'role'];
-    // Exclut les liens dans nav/sidebar/header qui peuvent afficher "Commandant" comme libellé
-    const NAV_SELECTORS = 'nav, [class*="sidebar"], [class*="navbar"], [class*="navigation"], [role="navigation"]';
     function isBlockedName(name) {
       if (!name || typeof name !== 'string') return true;
       const n = name.trim().toLowerCase();
       if (n.length < 2) return true;
       return CMDR_NAME_BLOCKLIST.includes(n);
     }
-    function extractCommanderName() {
-      // 1. document.title — "CMDR Name | ..." (EN) ou "Commandant Name | ..." (FR)
-      const title = document.title || '';
-      const m = title.match(/(?:CMDR|Commandant)\s+(.+?)(?:\s*[|–\-]|$)/i);
-      if (m) {
-        const name = m[1].trim();
-        if (name && !isBlockedName(name)) return name;
-      }
-      // 2. Header principal du profil (h1 ou zone titre)
-      const h1 = document.querySelector('h1');
-      if (h1) {
-        const t = (h1.textContent || '').trim();
-        const m2 = t.match(/(?:CMDR|Commandant)\s+(.+)/i) || (t.length > 2 && !isBlockedName(t) ? [null, t] : null);
-        if (m2 && m2[1] && !isBlockedName(m2[1])) return m2[1].trim();
-      }
-      const mainHeader = document.querySelector('[class*="mainheader"] h1, [class*="profile"] h1, .mainheader, [class*="cmdr"] h1');
-      if (mainHeader) {
-        const t = (mainHeader.textContent || '').trim();
-        const m2 = t.match(/(?:CMDR|Commandant)\s+(.+)/i) || (t.length > 2 && !isBlockedName(t) ? [null, t] : null);
-        if (m2 && m2[1] && !isBlockedName(m2[1])) return m2[1].trim();
-      }
-      // 3. Première cellule du tableau profil — contient souvent "Cmdr" + nom
-      const firstTable = document.querySelector('table');
-      const firstCell = firstTable?.querySelector('td, th');
-      if (firstCell) {
-        const full = (firstCell.textContent || '').trim();
-        // Enlever les libellés en début (Cmdr, Commandant, etc.)
-        let name = full.replace(/^(?:cmdr\.?|commandant|commander)\s+/i, '').trim();
-        if (name && !isBlockedName(name) && name.length >= 2) return name;
-      }
-      // 4. Deuxième cellule du premier tableau (format: "Commandant" | "Bib0xKn0x")
-      const firstRow = firstTable?.querySelector('tr');
-      if (firstRow) {
-        const cells = firstRow.querySelectorAll('td, th');
-        if (cells.length >= 2) {
-          const secondCell = (cells[1].textContent || '').trim();
-          if (secondCell && !isBlockedName(secondCell) && secondCell.length >= 2) return secondCell;
+
+    /** Extrait l'URL de l'image de profil depuis a[href*="/elite/cmdr/"] img[src*="/data/"] */
+    function extractAvatar() {
+      const link = document.querySelector('a[href*="/elite/cmdr/"] img[src*="/data/"]');
+      if (link) {
+        const src = link.src || link.getAttribute('src') || '';
+        const url = src.startsWith('http') ? src : new URL(src, location.origin).href;
+        if (url) {
+          console.log('[Inara Sync] avatarUrl extrait:', url);
+          return url.trim();
         }
       }
-      // 5. Liens /elite/cmdr/ dans la zone principale uniquement (pas nav/sidebar)
-      const main = document.querySelector('main, [class*="content"]:not([class*="sidebar"]), [class*="maincontent"]') || document.body;
-      const navElements = main.querySelectorAll(NAV_SELECTORS);
-      const links = main.querySelectorAll('a[href*="/elite/cmdr/"]');
-      for (const link of links) {
-        if (navElements.some((nav) => nav.contains(link))) continue;
-        const href = (link.getAttribute('href') || '').trim();
-        if (!href.match(/\/elite\/cmdr\/\d+/)) continue;
-        const text = (link.textContent || '').trim();
-        if (text && !isBlockedName(text) && text.length >= 2) return text;
+      const fallback = document.querySelector('img[src*="/data/"]');
+      if (fallback) {
+        const src = fallback.src || fallback.getAttribute('src') || '';
+        const url = src.startsWith('http') ? src : new URL(src, location.origin).href;
+        if (url) {
+          console.log('[Inara Sync] avatarUrl extrait (fallback):', url);
+          return url.trim();
+        }
       }
+      console.log('[Inara Sync] avatarUrl extrait: (aucun)');
+      return null;
+    }
+
+    /** Extrait le nom du CMDR via document.title puis header précis. Ne jamais mélanger avec le contenu des cellules. */
+    function extractCommanderName() {
+      const title = document.title || '';
+      const titleMatch = title.match(/(?:CMDR|Commandant)\s+(.+?)(?:\s*[|–\-]|$)/i);
+      if (titleMatch) {
+        const name = titleMatch[1].trim();
+        if (name && !isBlockedName(name) && name.length >= 2) {
+          console.log('[Inara Sync] commanderName extrait (title):', name);
+          return name;
+        }
+      }
+      const headerH1 = document.querySelector('[class*="mainheader"] h1, [class*="profile"] h1, header h1, .mainheader');
+      if (headerH1) {
+        const t = headerH1.textContent?.trim() || '';
+        const h1Match = t.match(/(?:CMDR|Commandant)\s+(.+?)(?:\s|$)/i) || (t.length >= 2 && t.length < 50 && !isBlockedName(t) ? [null, t] : null);
+        if (h1Match && h1Match[1]) {
+          const name = h1Match[1].trim();
+          if (name && !isBlockedName(name) && name.length >= 2) {
+            console.log('[Inara Sync] commanderName extrait (header):', name);
+            return name;
+          }
+        }
+      }
+      console.log('[Inara Sync] commanderName extrait: (aucun)');
       return null;
     }
 
@@ -623,7 +603,6 @@
     function runAvatar() {
       const avatarUrl = extractAvatar();
       const commanderName = extractCommanderName();
-      console.log('[Inara Sync] commanderName extrait =', JSON.stringify(commanderName));
       if (!avatarUrl) {
         showToast('Aucune image avatar trouvée sur cette page.', true);
         return;
@@ -632,11 +611,8 @@
         showToast('Nom du CMDR introuvable sur cette page', true);
         return;
       }
-      // Double vérification : ne jamais envoyer un libellé d'interface
-      if (CMDR_NAME_BLOCKLIST.includes(commanderName.trim().toLowerCase())) {
-        showToast('Nom du CMDR introuvable sur cette page', true);
-        return;
-      }
+      const payload = { avatarUrl, commanderName };
+      console.log('[Inara Sync] Payload avatar:', JSON.stringify(payload));
       showToast('Envoi en cours…');
       postAvatar(avatarUrl, commanderName).then((r) => showToast(r.message, !r.ok));
     }
@@ -661,10 +637,43 @@
       document.body.appendChild(container);
     }
 
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', injectAvatarButton);
-    } else {
+    const doAvatarAutoImport = () => {
+      const avatarUrl = extractAvatar();
+      const commanderName = extractCommanderName();
+      const payload = avatarUrl && commanderName ? { avatarUrl, commanderName } : null;
+      if (payload) console.log('[Inara Sync] Payload avatar:', JSON.stringify(payload));
+      if (!avatarUrl) {
+        const msg = 'Aucune image avatar trouvée sur cette page.';
+        showToast(msg, true);
+        notifyOpenerError('avatar', msg);
+        return;
+      }
+      if (!commanderName || isBlockedName(commanderName)) {
+        const msg = 'Nom du CMDR introuvable sur cette page';
+        showToast(msg, true);
+        notifyOpenerError('avatar', msg);
+        return;
+      }
+      showToast('Envoi en cours…');
+      postAvatar(avatarUrl, commanderName).then((r) => {
+        if (r.ok) {
+          showToast(r.message);
+          notifyOpenerSuccess('avatar');
+          try { window.close(); } catch (_) {}
+        } else {
+          showToast(r.message, true);
+          notifyOpenerError('avatar', r.message);
+        }
+      });
+    };
+    const doAvatarSetup = () => {
       injectAvatarButton();
+      if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import avatar (autoImport=1)'); doAvatarAutoImport(); }, 1200);
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', doAvatarSetup);
+    } else {
+      doAvatarSetup();
     }
     return;
   }

@@ -133,6 +133,13 @@ public class SyncController : ControllerBase
 
             member.AvatarUrl = payload.AvatarUrl.Trim();
             member.LastSyncedAt = DateTime.UtcNow;
+
+            var guildEntity = await _db.Guilds.FindAsync(new object[] { id }, ct);
+            if (guildEntity != null)
+            {
+                guildEntity.LastAvatarImportAt = DateTime.UtcNow;
+            }
+
             await _db.SaveChangesAsync(ct);
 
             return Ok(new { updated = true, commanderName = member.CommanderName });

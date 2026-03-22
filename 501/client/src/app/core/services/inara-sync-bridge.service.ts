@@ -47,4 +47,27 @@ export class InaraSyncBridgeService {
   isAvailable(): boolean {
     return this.checkNow();
   }
+
+  /**
+   * Construit l'URL Inara avec autoImport=1 et openerOrigin pour postMessage.
+   * Retourne null si le script n'est pas détecté (afficher la modale d'aide).
+   * Même logique pour tous les boutons dashboard (écusson, systèmes, roster, avatar).
+   */
+  buildAutoImportUrl(url: string | null): string | null {
+    if (!url) return null;
+    if (!this.checkNow()) return null;
+    const openerOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    const [base, hash] = url.split('#');
+    const sep = base.includes('?') ? '&' : '?';
+    const withParam = base + sep + `autoImport=1&openerOrigin=${encodeURIComponent(openerOrigin)}`;
+    return hash ? `${withParam}#${hash}` : withParam;
+  }
+
+  /** Ouvre une page Inara en mode autoImport. Retourne l'URL ouverte si OK, null si modal d'aide à afficher. */
+  openWithAutoImport(url: string | null): string | null {
+    const fullUrl = this.buildAutoImportUrl(url);
+    if (!fullUrl) return null;
+    window.open(fullUrl, '_blank', 'noopener,noreferrer');
+    return fullUrl;
+  }
 }

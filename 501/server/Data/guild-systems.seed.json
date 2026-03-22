@@ -65,19 +65,6 @@
       "lastUpdatedText": "il y a 6 jours",
       "category": "Guild",
       "isClean": false
-    },
-    {
-      "name": "Reticuli",
-      "government": "Corporate",
-      "allegiance": "Independent",
-      "power": null,
-      "population": 45231,
-      "factionCount": 4,
-      "stationCount": 2,
-      "influencePercent": 2.2,
-      "lastUpdatedText": "il y a 6 jours",
-      "category": "Guild",
-      "isClean": false
     }
   ]
 }

@@ -19,6 +19,8 @@ public class Guild
     public string? InaraCmdrUrl { get; set; }
     /// <summary>Dernier import systèmes réussi (userscript Inara).</summary>
     public DateTime? LastSystemsImportAt { get; set; }
+    /// <summary>Dernier import avatar réussi (userscript Inara, page CMDR).</summary>
+    public DateTime? LastAvatarImportAt { get; set; }
 
     public ICollection<SquadronMember> SquadronMembers { get; set; } = new List<SquadronMember>();
     public ICollection<SquadronSnapshot> SquadronSnapshots { get; set; } = new List<SquadronSnapshot>();

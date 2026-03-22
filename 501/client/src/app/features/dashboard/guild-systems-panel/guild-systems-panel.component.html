@@ -13,113 +13,65 @@
     <p class="error-message">{{ lastError() }}</p>
   }
   <div class="systems-list">
-    <div class="category">
-      <span class="category-label">Origine</span>
-      @if (displayableOrigin.length > 0) {
-        @for (sys of displayableOrigin; track sys.id) {
-          <div class="system-row" [class]="getInfluenceClass(sys)" [class.system-row--hq]="sys.isHeadquarter" (click)="onSystemClick(sys)" (keydown.enter)="onSystemClick(sys)" (keydown.space)="onSystemClick(sys); $event.preventDefault()" role="button" tabindex="0" title="Cliquer pour définir ou retirer le HQ">
-            <span class="system-name">{{ sys.name }}@if (sys.isHeadquarter) { <span class="hq-mark">★</span> }</span>
-            <span class="system-meta">
-              @if (sys.isThreatened || sys.isExpansionCandidate) {
-                <span class="indicators">
-                  @if (sys.isThreatened) { <span class="ind-threatened" title="Système menacé">⚠</span> }
-                  @if (sys.isExpansionCandidate) { <span class="ind-expansion" title="Candidat expansion">🚀</span> }
-                </span>
-              }
-              @if (sys.influenceDelta24h != null) {
-                <span class="delta" [class.delta-up]="sys.influenceDelta24h > 0" [class.delta-down]="sys.influenceDelta24h < 0">{{ getDeltaDisplay(sys.influenceDelta24h) }}</span>
-              }
-              @if (sys.state) {
-                <span class="state-badge">{{ sys.state }}</span>
-              }
-              <span class="influence" [class]="getInfluenceClass(sys)">{{ sys.influencePercent }}%</span>
-            </span>
-          </div>
+    @for (cat of categoryConfig; track cat.key) {
+      <div class="category">
+        <span class="category-label">{{ cat.label }}</span>
+        @if (cat.systems.length > 0) {
+          @for (sys of cat.systems; track sys.id) {
+            <ng-container
+              *ngTemplateOutlet="systemRowTpl; context: { $implicit: sys }" />
+          }
+        } @else {
+          <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
         }
-      } @else {
-        <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
-      }
-    </div>
-    <div class="category">
-      <span class="category-label">Quartier général</span>
-      @if (displayableHeadquarter.length > 0) {
-        @for (sys of displayableHeadquarter; track sys.id) {
-          <div class="system-row" [class]="getInfluenceClass(sys)" [class.system-row--hq]="sys.isHeadquarter" (click)="onSystemClick(sys)" (keydown.enter)="onSystemClick(sys)" (keydown.space)="onSystemClick(sys); $event.preventDefault()" role="button" tabindex="0" title="Cliquer pour définir ou retirer le HQ">
-            <span class="system-name">{{ sys.name }}@if (sys.isHeadquarter) { <span class="hq-mark">★</span> }</span>
-            <span class="system-meta">
-              @if (sys.isThreatened || sys.isExpansionCandidate) {
-                <span class="indicators">
-                  @if (sys.isThreatened) { <span class="ind-threatened" title="Système menacé">⚠</span> }
-                  @if (sys.isExpansionCandidate) { <span class="ind-expansion" title="Candidat expansion">🚀</span> }
-                </span>
-              }
-              @if (sys.influenceDelta24h != null) {
-                <span class="delta" [class.delta-up]="sys.influenceDelta24h > 0" [class.delta-down]="sys.influenceDelta24h < 0">{{ getDeltaDisplay(sys.influenceDelta24h) }}</span>
-              }
-              @if (sys.state) {
-                <span class="state-badge">{{ sys.state }}</span>
-              }
-              <span class="influence" [class]="getInfluenceClass(sys)">{{ sys.influencePercent }}%</span>
-            </span>
-          </div>
-        }
-      } @else {
-        <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
-      }
-    </div>
-    <div class="category">
-      <span class="category-label">Systèmes critiques</span>
-      @if (displayableCriticalSystems.length > 0) {
-        @for (sys of displayableCriticalSystems; track sys.id) {
-          <div class="system-row" [class]="getInfluenceClass(sys)" [class.system-row--hq]="sys.isHeadquarter" (click)="onSystemClick(sys)" (keydown.enter)="onSystemClick(sys)" (keydown.space)="onSystemClick(sys); $event.preventDefault()" role="button" tabindex="0" title="Cliquer pour définir ou retirer le HQ">
-            <span class="system-name">{{ sys.name }}@if (sys.isHeadquarter) { <span class="hq-mark">★</span> }</span>
-            <span class="system-meta">
-              @if (sys.isThreatened || sys.isExpansionCandidate) {
-                <span class="indicators">
-                  @if (sys.isThreatened) { <span class="ind-threatened" title="Système menacé">⚠</span> }
-                  @if (sys.isExpansionCandidate) { <span class="ind-expansion" title="Candidat expansion">🚀</span> }
-                </span>
-              }
-              @if (sys.influenceDelta24h != null) {
-                <span class="delta" [class.delta-up]="sys.influenceDelta24h > 0" [class.delta-down]="sys.influenceDelta24h < 0">{{ getDeltaDisplay(sys.influenceDelta24h) }}</span>
-              }
-              @if (sys.state) {
-                <span class="state-badge">{{ sys.state }}</span>
-              }
-              <span class="influence" [class]="getInfluenceClass(sys)">{{ sys.influencePercent }}%</span>
-            </span>
-          </div>
-        }
-      } @else {
-        <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
-      }
-    </div>
-    <div class="category">
-      <span class="category-label">Autres</span>
-      @if (displayableOtherSystems.length > 0) {
-        @for (sys of displayableOtherSystems; track sys.id) {
-          <div class="system-row" [class]="getInfluenceClass(sys)" [class.system-row--hq]="sys.isHeadquarter" (click)="onSystemClick(sys)" (keydown.enter)="onSystemClick(sys)" (keydown.space)="onSystemClick(sys); $event.preventDefault()" role="button" tabindex="0" title="Cliquer pour définir ou retirer le HQ">
-            <span class="system-name">{{ sys.name }}@if (sys.isHeadquarter) { <span class="hq-mark">★</span> }</span>
-            <span class="system-meta">
-              @if (sys.isThreatened || sys.isExpansionCandidate) {
-                <span class="indicators">
-                  @if (sys.isThreatened) { <span class="ind-threatened" title="Système menacé">⚠</span> }
-                  @if (sys.isExpansionCandidate) { <span class="ind-expansion" title="Candidat expansion">🚀</span> }
-                </span>
-              }
-              @if (sys.influenceDelta24h != null) {
-                <span class="delta" [class.delta-up]="sys.influenceDelta24h > 0" [class.delta-down]="sys.influenceDelta24h < 0">{{ getDeltaDisplay(sys.influenceDelta24h) }}</span>
-              }
-              @if (sys.state) {
-                <span class="state-badge">{{ sys.state }}</span>
-              }
-              <span class="influence" [class]="getInfluenceClass(sys)">{{ sys.influencePercent }}%</span>
-            </span>
-          </div>
-        }
-      } @else {
-        <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
-      }
-    </div>
+      </div>
+    }
   </div>
 </section>
+
+<ng-template #systemRowTpl let-sys>
+  <div class="system-row"
+    [class]="getInfluenceClass(sys)"
+    [class.system-row--hq]="sys.isHeadquarter"
+    [class.system-row--copied]="copiedSystemId() === sys.id"
+    (click)="onSystemClick(sys)"
+    (keydown.enter)="onSystemClick(sys)"
+    (keydown.space)="onSystemClick(sys); $event.preventDefault()"
+    role="button"
+    tabindex="0"
+    title="Cliquer pour définir ou retirer le HQ">
+    <span class="system-row-left">
+      <span class="system-name">{{ sys.name }}@if (sys.isHeadquarter) { <span class="hq-mark">★</span> }</span>
+      <button type="button"
+        class="btn-copy"
+        [title]="copyTooltip(sys.id)"
+        [attr.aria-label]="copyTooltip(sys.id)"
+        (click)="copySystemName($event, sys.name, sys.id)">
+        <svg class="icon-copy" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+      </button>
+    </span>
+    <span class="system-row-right">
+      @if (sys.influenceDelta24h != null) {
+        <span class="delta-badge"
+          [class.delta-up]="sys.influenceDelta24h > 0"
+          [class.delta-down]="sys.influenceDelta24h < 0"
+          [class.delta-neutral]="sys.influenceDelta24h === 0">
+          {{ sys.influenceDelta24h > 0 ? '↑' : (sys.influenceDelta24h < 0 ? '↓' : '−') }} {{ getDeltaDisplay(sys.influenceDelta24h) }}
+        </span>
+      }
+      @if (sys.isThreatened || sys.isExpansionCandidate) {
+        <span class="indicators">
+          @if (sys.isThreatened) { <span class="ind-threatened" title="Système menacé">⚠</span> }
+          @if (sys.isExpansionCandidate) { <span class="ind-expansion" title="Candidat expansion">🚀</span> }
+        </span>
+      }
+      @if (sys.state) {
+        <span class="state-badge">{{ sys.state }}</span>
+      }
+      <span class="influence" [class]="getInfluenceClass(sys)">{{ sys.influencePercent }}%</span>
+    </span>
+  </div>
+</ng-template>
