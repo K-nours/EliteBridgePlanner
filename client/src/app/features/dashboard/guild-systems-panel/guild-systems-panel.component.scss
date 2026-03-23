@@ -479,45 +479,25 @@
   color: #00ff88;
 }
 
-/* Tendance 24h (EDSM) : positif vert ↑, négatif rouge ↓. Affiché uniquement si valeur existe. */
+/* Tendance 72h (EDSM) : badge status vert/rouge, texte blanc, typo réduite. */
 .delta {
   font-family: 'Exo 2', sans-serif;
-  font-size: 0.65rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-
-  &.delta--up {
-    color: #00ff88;
-  }
-
-  &.delta--down {
-    color: #ff6b6b;
-  }
-}
-
-.delta-badge {
-  font-family: 'Exo 2', sans-serif;
-  font-size: 0.65rem;
+  font-size: 0.5rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   padding: 0.1rem 0.25rem;
   border-radius: 3px;
   white-space: nowrap;
+  color: #fff;
 
-  &.delta-up {
-    color: #00ff88;
-    background: rgba(0, 255, 136, 0.12);
+  &.delta--up {
+    background: rgba(0, 255, 136, 0.25);
+    border: 1px solid rgba(0, 255, 136, 0.4);
   }
 
-  &.delta-down {
-    color: #ff6b6b;
-    background: rgba(255, 107, 107, 0.12);
-  }
-
-  &.delta-neutral {
-    color: rgba(255, 255, 255, 0.6);
-    background: rgba(255, 255, 255, 0.06);
+  &.delta--down {
+    background: rgba(255, 107, 107, 0.25);
+    border: 1px solid rgba(255, 107, 107, 0.4);
   }
 }
 

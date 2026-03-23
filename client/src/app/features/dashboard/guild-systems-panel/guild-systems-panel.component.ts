@@ -4,7 +4,6 @@
  */
 import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { TruncateTooltipDirective } from '../../../shared/directives/truncate-tooltip.directive';
 import { GuildSystemsApiService } from '../../../core/services/guild-systems-api.service';
 import { GuildSystemsSyncService } from '../../../core/services/guild-systems-sync.service';
 import { GuildSettingsService } from '../../../core/services/guild-settings.service';
@@ -18,7 +17,7 @@ import { hasConflictState } from '../../../core/utils/guild-systems.util';
 @Component({
   selector: 'app-guild-systems-panel',
   standalone: true,
-  imports: [NgTemplateOutlet, TruncateTooltipDirective],
+  imports: [NgTemplateOutlet],
   templateUrl: './guild-systems-panel.component.html',
   styleUrl: './guild-systems-panel.component.scss',
 })
@@ -161,15 +160,15 @@ export class GuildSystemsPanelComponent implements OnInit {
     return rounded !== 0;
   }
 
-  /** Format delta pour UI : ↑ +0,03% (vert) / ↓ -0,12% (rouge). Vide si 0.00 après arrondi. */
+  /** Format delta pour UI : ↑ + 0,03% (vert) / ↓ - 0,12% (rouge). Vide si 0.00 après arrondi. */
   getDeltaDisplay(delta: number | null | undefined): string {
     if (delta == null) return '';
     const rounded = Math.round(delta * 100) / 100;
     if (rounded === 0) return '';
-    const sign = rounded >= 0 ? '+' : '';
+    const sign = rounded >= 0 ? '+' : '-';
     const val = Math.abs(rounded).toFixed(2).replace('.', ',');
     const arrow = rounded >= 0 ? '↑' : '↓';
-    return `${arrow} ${sign}${val}%`;
+    return `${arrow} ${sign} ${val}%`;
   }
 
   /** Classe CSS pour couleur du delta : delta--up (vert) ou delta--down (rouge). */
