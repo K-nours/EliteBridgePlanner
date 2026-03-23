@@ -14,7 +14,8 @@ public record GuildSystemBgsDto(
     bool IsClean,
     string Category,
     DateTime? LastUpdated,
-    bool IsFromSeed
+    bool IsFromSeed,
+    string? InaraUrl = null
 );
 
 /// <summary>Seuils d'influence (source unique backend).</summary>

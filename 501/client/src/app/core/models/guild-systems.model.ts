@@ -15,6 +15,8 @@ export interface GuildSystemBgsDto {
   lastUpdated?: string;
   /** false = données issues d'une sync réelle, affichées. true = seed, jamais affiché. */
   isFromSeed: boolean;
+  /** URL Inara du système (ex: https://inara.cz/elite/starsystem/114520/). Si présente, ouverture directe au clic. */
+  inaraUrl?: string | null;
 }
 
 export type GuildSystemsDataSource = 'seed' | 'cached';

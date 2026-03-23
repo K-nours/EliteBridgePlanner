@@ -366,7 +366,8 @@ public class GuildSystemsService
             cs?.IsClean ?? gs.IsClean,
             gs.Category,
             cs?.LastUpdated,
-            isFromSeed
+            isFromSeed,
+            gs.InaraUrl
         );
     }
 }
