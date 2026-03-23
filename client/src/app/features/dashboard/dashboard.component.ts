@@ -699,7 +699,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .box-sync-status {
       display: flex;
       flex-direction: column;
-      flex: 1;
+      flex: 0 1 33.333%;
+      max-height: 33.333%;
       min-height: 0;
     }
     .sync-status-header {
@@ -877,9 +878,14 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .map-section {
       position: relative;
+      flex: 1 1 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
     }
     .map-box {
       position: relative;
+      flex: 1;
       min-height: 420px;
     }
     .map-filter-counters {
