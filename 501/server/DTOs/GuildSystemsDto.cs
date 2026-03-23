@@ -10,6 +10,7 @@ public record GuildSystemBgsDto(
     bool IsThreatened,
     bool IsExpansionCandidate,
     bool IsHeadquarter,
+    bool IsUnderSurveillance,
     bool IsClean,
     string Category,
     DateTime? LastUpdated,
@@ -25,6 +26,7 @@ public record TacticalThresholdsDto(decimal Critical, decimal Low, decimal High)
 public record GuildSystemsResponseDto(
     IReadOnlyList<GuildSystemBgsDto> Origin,
     IReadOnlyList<GuildSystemBgsDto> Headquarter,
+    IReadOnlyList<GuildSystemBgsDto> Surveillance,
     IReadOnlyList<GuildSystemBgsDto> Conflicts,
     IReadOnlyList<GuildSystemBgsDto> Critical,
     IReadOnlyList<GuildSystemBgsDto> Low,

@@ -24,6 +24,8 @@ public class ControlledSystem
     /// <summary>Vrai si la faction a la plus forte influence (contrôle le système).</summary>
     public bool IsControlled { get; set; }
     public bool IsHeadquarter { get; set; }
+    /// <summary>Vrai si le système est dans la section "Systèmes sous surveillance" (surveillance manuelle).</summary>
+    public bool IsUnderSurveillance { get; set; }
     /// <summary>True = données du seed/démo. False = données issues d'une sync (EDSM, etc.).</summary>
     public bool IsFromSeed { get; set; } = true;
     public bool IsClean { get; set; }

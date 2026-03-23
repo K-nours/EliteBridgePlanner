@@ -80,6 +80,48 @@
   z-index: 9997;
 }
 
+.context-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9997;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 9998;
+  min-width: 180px;
+  padding: 0.35rem;
+  background: rgba(6, 20, 35, 0.98);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.context-menu-item {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.65rem;
+  font-family: 'Orbitron', sans-serif;
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  color: #00d4ff;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+
+  &:hover:not(:disabled) {
+    background: rgba(0, 212, 255, 0.25);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
 .systems-menu {
   position: absolute;
   right: 0;
@@ -147,6 +189,73 @@
   color: #00d4ff;
 }
 
+.systems-filter-wrap {
+  margin-bottom: 0.75rem;
+}
+
+.systems-filter-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.6rem;
+  font-style: italic;
+  color: rgba(0, 212, 255, 0.75);
+  font-family: 'Exo 2', sans-serif;
+}
+
+.systems-filter-input-wrap {
+  position: relative;
+}
+
+.systems-filter-input {
+  width: 100%;
+  padding: 0.35rem 1.75rem 0.35rem 0.6rem;
+  font-size: 0.65rem;
+  font-family: 'Orbitron', sans-serif;
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  color: #00d4ff;
+  border-radius: 4px;
+  box-sizing: border-box;
+
+  &::placeholder {
+    color: rgba(0, 212, 255, 0.5);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: rgba(0, 212, 255, 0.5);
+    background: rgba(0, 212, 255, 0.15);
+  }
+}
+
+.systems-filter-clear {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(0, 212, 255, 0.6);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    color: #00d4ff;
+    background: rgba(0, 212, 255, 0.15);
+  }
+
+  &:focus-visible {
+    outline: 1px solid rgba(0, 212, 255, 0.5);
+    outline-offset: 1px;
+  }
+}
+
 .systems-list {
   display: flex;
   flex-direction: column;
@@ -208,6 +317,12 @@
     &:focus-visible {
       outline: 1px solid rgba(0, 212, 255, 0.5);
       outline-offset: 2px;
+    }
+
+    /* Chevron à droite, dans l'espace entre titre et bordure */
+    .category-chevron {
+      margin-left: auto;
+      flex-shrink: 0;
     }
   }
 }
@@ -356,6 +471,23 @@
 
 .icon-check {
   color: #00ff88;
+}
+
+/* Tendance 24h (EDSM) : positif vert ↑, négatif rouge ↓. Affiché uniquement si valeur existe. */
+.delta {
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  &.delta--up {
+    color: #00ff88;
+  }
+
+  &.delta--down {
+    color: #ff6b6b;
+  }
 }
 
 .delta-badge {

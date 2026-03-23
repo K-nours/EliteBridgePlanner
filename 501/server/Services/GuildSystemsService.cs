@@ -42,6 +42,7 @@ public class GuildSystemsService
 
         var origin = new List<GuildSystemBgsDto>();
         var headquarter = new List<GuildSystemBgsDto>();
+        var surveillance = new List<GuildSystemBgsDto>();
         var conflicts = new List<GuildSystemBgsDto>();
         var critical = new List<GuildSystemBgsDto>();
         var low = new List<GuildSystemBgsDto>();
@@ -59,6 +60,7 @@ public class GuildSystemsService
             var dto = ToDto(gs, cs);
             var isOrigin = string.Equals(gs.Category, "Origine", StringComparison.OrdinalIgnoreCase);
             var isHq = cs?.IsHeadquarter == true;
+            var isSurveillance = cs?.IsUnderSurveillance == true;
             var isConflict = IsConflictState(dto.State);
             var influence = dto.InfluencePercent;
             var isCritical = influence < TacticalCritical;
@@ -68,14 +70,16 @@ public class GuildSystemsService
             if (cs != null && !cs.IsFromSeed)
                 anyFromSync = true;
 
-            // Priorité unique : Origine > HQ > Conflits > Critiques > Bas > Sains > Autres
+            // Surveillance et Conflits : additifs (n'excluent pas des autres catégories). Toutes les catégories peuvent se chevaucher.
             if (isOrigin)
                 origin.Add(dto);
-            else if (isHq)
+            if (isHq)
                 headquarter.Add(dto);
-            else if (isConflict)
+            if (isSurveillance)
+                surveillance.Add(dto);
+            if (isConflict)
                 conflicts.Add(dto);
-            else if (isCritical)
+            if (isCritical)
                 critical.Add(dto);
             else if (isLow)
                 low.Add(dto);
@@ -85,6 +89,7 @@ public class GuildSystemsService
                 others.Add(dto);
         }
 
+        surveillance = surveillance.OrderByDescending(s => s.InfluencePercent).ThenBy(s => s.Name).ToList();
         conflicts = conflicts.OrderByDescending(s => s.InfluencePercent).ThenBy(s => s.Name).ToList();
         critical = critical.OrderByDescending(s => s.InfluencePercent).ThenBy(s => s.Name).ToList();
         low = low.OrderByDescending(s => s.InfluencePercent).ThenBy(s => s.Name).ToList();
@@ -95,7 +100,7 @@ public class GuildSystemsService
         var thresholds = new InfluenceThresholdsDto(
             InfluenceThresholds.Critical, InfluenceThresholds.Low, InfluenceThresholds.High);
         var tactical = new TacticalThresholdsDto(TacticalCritical, TacticalLow, TacticalHigh);
-        var result = new GuildSystemsResponseDto(origin, headquarter, conflicts, critical, low, healthy, others, dataSource, thresholds, tactical);
+        var result = new GuildSystemsResponseDto(origin, headquarter, surveillance, conflicts, critical, low, healthy, others, dataSource, thresholds, tactical);
         return result;
     }
 
@@ -121,7 +126,7 @@ public class GuildSystemsService
     {
         var th = new InfluenceThresholdsDto(InfluenceThresholds.Critical, InfluenceThresholds.Low, InfluenceThresholds.High);
         var tactical = new TacticalThresholdsDto(5, 15, 60);
-        return new GuildSystemsResponseDto([], [], [], [], [], [], [], "seed", th, tactical);
+        return new GuildSystemsResponseDto([], [], [], [], [], [], [], [], "seed", th, tactical);
     }
 
     /// <summary>Audit ciblé : pour chaque système demandé, retourne valeurs brutes, parsées, stockées, DTO, catégorie et statut.</summary>
@@ -232,6 +237,14 @@ public class GuildSystemsService
         var gs = await _db.GuildSystems
             .FirstOrDefaultAsync(s => s.Id == guildSystemId && s.GuildId == guildId, ct);
         if (gs == null)
+        {
+            var csById = await _db.ControlledSystems
+                .FirstOrDefaultAsync(c => c.Id == guildSystemId && c.GuildId == guildId, ct);
+            if (csById != null)
+                gs = await _db.GuildSystems
+                    .FirstOrDefaultAsync(s => s.GuildId == guildId && s.Name == csById.Name, ct);
+        }
+        if (gs == null)
             return false;
 
         var cs = await _db.ControlledSystems
@@ -249,6 +262,7 @@ public class GuildSystemsService
                 IsControlled = false,
                 IsHeadquarter = true,
                 IsFromSeed = true,
+                IsUnderSurveillance = false,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
             };
@@ -271,6 +285,53 @@ public class GuildSystemsService
                     o.UpdatedAt = DateTime.UtcNow;
                 }
             }
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>Toggle Surveillance : ajoute ou retire le système de la section "Systèmes sous surveillance". Même logique que HQ (plusieurs autorisés).</summary>
+    public async Task<bool> ToggleSurveillanceAsync(int guildSystemId, int guildId, CancellationToken ct = default)
+    {
+        var gs = await _db.GuildSystems
+            .FirstOrDefaultAsync(s => s.Id == guildSystemId && s.GuildId == guildId, ct);
+        if (gs == null)
+        {
+            var csById = await _db.ControlledSystems
+                .FirstOrDefaultAsync(c => c.Id == guildSystemId && c.GuildId == guildId, ct);
+            if (csById != null)
+                gs = await _db.GuildSystems
+                    .FirstOrDefaultAsync(s => s.GuildId == guildId && s.Name == csById.Name, ct);
+        }
+        if (gs == null)
+            return false;
+
+        var cs = await _db.ControlledSystems
+            .FirstOrDefaultAsync(c => c.GuildId == guildId && c.Name == gs.Name, ct);
+
+        if (cs == null)
+        {
+            cs = new ControlledSystem
+            {
+                GuildId = guildId,
+                Name = gs.Name,
+                InfluencePercent = gs.InfluencePercent,
+                IsClean = gs.IsClean,
+                Category = gs.Category,
+                IsControlled = false,
+                IsHeadquarter = false,
+                IsFromSeed = true,
+                IsUnderSurveillance = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            };
+            _db.ControlledSystems.Add(cs);
+        }
+        else
+        {
+            cs.IsUnderSurveillance = !cs.IsUnderSurveillance;
+            cs.UpdatedAt = DateTime.UtcNow;
         }
 
         await _db.SaveChangesAsync(ct);
@@ -301,6 +362,7 @@ public class GuildSystemsService
             cs?.IsThreatened ?? false,
             cs?.IsExpansionCandidate ?? false,
             cs?.IsHeadquarter ?? false,
+            cs?.IsUnderSurveillance ?? false,
             cs?.IsClean ?? gs.IsClean,
             gs.Category,
             cs?.LastUpdated,

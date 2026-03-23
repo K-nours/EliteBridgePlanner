@@ -124,6 +124,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                     [class.map-counter--healthy]="fb.value === 'healthy'"
                     [class.map-counter--critical]="fb.value === 'critical'"
                     [class.map-counter--conflicts]="fb.value === 'conflicts'"
+                    [class.map-counter--surveillance-ok]="fb.value === 'surveillance' && !fb.surveillanceHasCritical"
+                    [class.map-counter--surveillance-critical]="fb.value === 'surveillance' && fb.surveillanceHasCritical"
                     [disabled]="fb.count === 0 && fb.value !== 'all'"
                     (click)="setSystemsFilter(fb.value)">
                     <span class="map-counter-label">{{ fb.label }}</span>
@@ -931,7 +933,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       font-variant-numeric: tabular-nums;
       color: #00d4ff;
     }
-    .map-counter--active:not(.map-counter--healthy):not(.map-counter--critical):not(.map-counter--conflicts) .map-counter-value {
+    .map-counter--active:not(.map-counter--healthy):not(.map-counter--critical):not(.map-counter--conflicts):not(.map-counter--surveillance-ok):not(.map-counter--surveillance-critical) .map-counter-value {
       color: #00eaff;
     }
     .map-counter--healthy .map-counter-value {
@@ -939,6 +941,12 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .map-counter--critical .map-counter-value,
     .map-counter--conflicts .map-counter-value {
+      color: #ff6b6b;
+    }
+    .map-counter--surveillance-ok .map-counter-value {
+      color: #00ff88;
+    }
+    .map-counter--surveillance-critical .map-counter-value {
       color: #ff6b6b;
     }
     .map-counter:disabled {
@@ -1290,23 +1298,35 @@ export class DashboardComponent implements OnInit {
     return cmdr?.avatarUrl ?? null;
   });
 
-  /** Compteurs filtres : design carré (compteur + texte), cliquables. */
-  protected mapFilterCounts = computed((): { value: SystemsFilterValue; label: string; count: number }[] => {
+  /** Compteurs filtres : design carré (compteur + texte), cliquables. Surveillance : vert si rien à signaler, rouge si au moins un critique. Total = systèmes uniques (surveillance/conflits n'augmentent pas le total). */
+  protected mapFilterCounts = computed((): { value: SystemsFilterValue; label: string; count: number; surveillanceHasCritical?: boolean }[] => {
     const s = this.guildSystemsSync.systems();
     const allList = [
       ...(s.origin ?? []),
       ...(s.headquarter ?? []),
+      ...(s.surveillance ?? []),
       ...(s.conflicts ?? []),
       ...(s.critical ?? []),
       ...(s.low ?? []),
       ...(s.healthy ?? []),
       ...(s.others ?? []),
     ];
-    const conflictsCount = allList.filter((sys) => hasConflictState(sys)).length;
+    const uniqueById = new Map<number, typeof allList[0]>();
+    for (const sys of allList) {
+      if (!uniqueById.has(sys.id)) uniqueById.set(sys.id, sys);
+    }
+    const totalCount = uniqueById.size;
+    const conflictIds = new Set<number>();
+    for (const sys of allList) {
+      if (hasConflictState(sys)) conflictIds.add(sys.id);
+    }
+    const conflictsCount = conflictIds.size;
+    const surveillanceHasCritical = (s.surveillance ?? []).some((sys) => sys.influencePercent < 5);
     return [
-      { value: 'all', label: 'Total', count: allList.length },
+      { value: 'all', label: 'Total', count: totalCount },
       { value: 'critical', label: 'Critiques', count: s.critical?.length ?? 0 },
       { value: 'conflicts', label: 'Conflits', count: conflictsCount },
+      { value: 'surveillance', label: 'Surveillance', count: s.surveillance?.length ?? 0, surveillanceHasCritical },
       { value: 'healthy', label: 'Sains', count: s.healthy?.length ?? 0 },
     ];
   });

@@ -37,9 +37,16 @@ export class GuildSystemsPanelComponent implements OnInit {
   systemsMenuOpen = signal(false);
   /** ID du système dont le nom vient d'être copié (feedback tooltip "Copié") */
   copiedSystemId = signal<number | null>(null);
+  /** Menu contextuel (clic droit) sur une ligne système */
+  contextMenuOpen = signal(false);
+  contextMenuSys = signal<GuildSystemBgsDto | null>(null);
+  contextMenuPos = signal({ x: 0, y: 0 });
+  /** Filtre textuel sur les noms de systèmes */
+  systemFilterQuery = signal('');
 
-  /** Sections collapseables : low et others. true = section visible (expanded). Collapsed par défaut. */
+  /** Sections collapseables : low, healthy, others. true = section visible (expanded). Collapsed par défaut. */
   lowExpanded = signal(false);
+  healthyExpanded = signal(false);
   othersExpanded = signal(false);
 
   panelState = this.guildSync.panelState;
@@ -95,14 +102,52 @@ export class GuildSystemsPanelComponent implements OnInit {
     this.syncLog.addLog('Ouverture page Inara systems');
   }
 
-  onSystemClick(sys: GuildSystemBgsDto): void {
+  onSystemContextMenu(event: MouseEvent, sys: GuildSystemBgsDto): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.contextMenuSys.set(sys);
+    this.contextMenuPos.set({ x: event.clientX, y: event.clientY });
+    this.contextMenuOpen.set(true);
+  }
+
+  onContextMenuHq(sys: GuildSystemBgsDto): void {
+    this.contextMenuOpen.set(false);
     if (this.toggling() || this.panelState() === 'loading') return;
     this.toggling.set(true);
     this.api.toggleHeadquarter(sys.id).subscribe({
-      next: () => this.guildSync.loadSystems(),
-      error: () => this.toggling.set(false),
+      next: () => {
+        this.syncLog.addLog(`HQ: ${sys.name} mis à jour`);
+        this.guildSync.loadSystems();
+      },
+      error: (err) => {
+        const msg = err?.error?.error ?? err?.error?.message ?? err?.message ?? 'Erreur';
+        this.syncLog.addLog('HQ échec: ' + msg);
+        this.toggling.set(false);
+      },
       complete: () => this.toggling.set(false),
     });
+  }
+
+  onContextMenuSurveillance(sys: GuildSystemBgsDto): void {
+    this.contextMenuOpen.set(false);
+    if (this.toggling() || this.panelState() === 'loading') return;
+    this.toggling.set(true);
+    this.api.toggleSurveillance(sys.id).subscribe({
+      next: () => {
+        this.syncLog.addLog(`Surveillance: ${sys.name} mis à jour`);
+        this.guildSync.loadSystems();
+      },
+      error: (err) => {
+        const msg = err?.error?.error ?? err?.error?.message ?? err?.message ?? 'Erreur';
+        this.syncLog.addLog('Surveillance échec: ' + msg);
+        this.toggling.set(false);
+      },
+      complete: () => this.toggling.set(false),
+    });
+  }
+
+  closeContextMenu(): void {
+    this.contextMenuOpen.set(false);
   }
 
   /** Classe couleur d'influence — seuils métier (5%, 15%, 60%). */
@@ -110,16 +155,28 @@ export class GuildSystemsPanelComponent implements OnInit {
     return getInfluenceClass(sys.influencePercent);
   }
 
-  /** Vrai si delta exploitable (non null, différent de 0). */
+  /** Vrai si delta affichable (existe et arrondi 2 déc ≠ 0). Pas de placeholder si absent. */
   hasDelta(delta: number | null | undefined): boolean {
-    return delta != null && delta !== 0;
+    if (delta == null) return false;
+    const rounded = Math.round(delta * 100) / 100;
+    return rounded !== 0;
   }
 
-  /** Format delta influence : +1,2% / -0,8% / — si inconnu ou nul. */
+  /** Format delta pour UI : ↑ +0,03% (vert) / ↓ -0,12% (rouge). Vide si 0.00 après arrondi. */
   getDeltaDisplay(delta: number | null | undefined): string {
-    if (delta == null || delta === 0) return '—';
-    const sign = delta >= 0 ? '+' : '';
-    return `${sign}${Math.abs(delta).toFixed(1)}%`;
+    if (delta == null) return '';
+    const rounded = Math.round(delta * 100) / 100;
+    if (rounded === 0) return '';
+    const sign = rounded >= 0 ? '+' : '';
+    const val = Math.abs(rounded).toFixed(2).replace('.', ',');
+    const arrow = rounded >= 0 ? '↑' : '↓';
+    return `${arrow} ${sign}${val}%`;
+  }
+
+  /** Classe CSS pour couleur du delta : delta--up (vert) ou delta--down (rouge). */
+  getDeltaClass(delta: number | null | undefined): 'delta--up' | 'delta--down' | null {
+    if (!this.hasDelta(delta) || delta == null) return null;
+    return delta >= 0 ? 'delta--up' : 'delta--down';
   }
 
   /** Badges d'état affichables sur une ligne système. */
@@ -164,44 +221,78 @@ export class GuildSystemsPanelComponent implements OnInit {
     return this.copiedSystemId() === sysId ? 'Copié' : 'Copier';
   }
 
+  /** Ouvre le système sur Inara dans un nouvel onglet. */
+  openSystemInara(systemName: string): void {
+    const url = `https://inara.cz/elite/search/?search=${encodeURIComponent(systemName)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
   protected toggleLow = (): void => this.lowExpanded.update((v) => !v);
+  protected toggleHealthy = (): void => this.healthyExpanded.update((v) => !v);
   protected toggleOthers = (): void => this.othersExpanded.update((v) => !v);
 
+  protected toggleSection(catKey: string): void {
+    if (catKey === 'low') this.toggleLow();
+    else if (catKey === 'healthy') this.toggleHealthy();
+    else if (catKey === 'others') this.toggleOthers();
+  }
+
   protected isCollapsible(catKey: string): boolean {
-    return catKey === 'low' || catKey === 'others';
+    return catKey === 'low' || catKey === 'healthy' || catKey === 'others';
   }
 
   protected isSectionExpanded(catKey: string): boolean {
     if (catKey === 'low') return this.lowExpanded();
+    if (catKey === 'healthy') return this.healthyExpanded();
     if (catKey === 'others') return this.othersExpanded();
     return true;
   }
 
-  /** Configuration des catégories pour le template unique. Filtre appliqué via systemsFilter. */
+  private filterSystemsByQuery(systems: GuildSystemBgsDto[], query: string): GuildSystemBgsDto[] {
+    if (!query || !query.trim()) return systems;
+    const q = query.trim().toLowerCase();
+    return systems.filter((sys) => sys.name.toLowerCase().includes(q));
+  }
+
+  /** Configuration des catégories pour le template unique. Filtre appliqué via systemsFilter + systemFilterQuery. */
   protected categoryConfig = computed(() => {
     const s = this.systems();
     const filter = this.guildSync.systemsFilter();
+    const query = this.systemFilterQuery();
     const allList = [
       ...(s.origin ?? []),
       ...(s.headquarter ?? []),
+      ...(s.surveillance ?? []),
       ...(s.conflicts ?? []),
       ...(s.critical ?? []),
       ...(s.low ?? []),
       ...(s.healthy ?? []),
       ...(s.others ?? []),
     ];
-    const systemsWithConflict = allList.filter((sys) => hasConflictState(sys));
-    const raw: { key: SystemsFilterValue; label: string; systems: GuildSystemBgsDto[] }[] = [
+    const conflictSeen = new Set<number>();
+    const systemsWithConflict = allList.filter((sys) => {
+      if (!hasConflictState(sys)) return false;
+      if (conflictSeen.has(sys.id)) return false;
+      conflictSeen.add(sys.id);
+      return true;
+    });
+    let raw: { key: SystemsFilterValue; label: string; systems: GuildSystemBgsDto[] }[] = [
       { key: 'origin', label: 'Origine', systems: s.origin ?? [] },
       { key: 'hq', label: 'Quartier général', systems: s.headquarter ?? [] },
+      { key: 'surveillance', label: 'Systèmes sous surveillance', systems: s.surveillance ?? [] },
       { key: 'conflicts', label: 'Systèmes en conflits', systems: systemsWithConflict },
       { key: 'critical', label: 'Systèmes critiques', systems: s.critical ?? [] },
       { key: 'healthy', label: 'Systèmes sains', systems: s.healthy ?? [] },
       { key: 'low', label: 'Systèmes bas', systems: s.low ?? [] },
       { key: 'others', label: 'Autres', systems: s.others ?? [] },
     ];
+    raw = raw.map((cat) => ({
+      ...cat,
+      systems: this.filterSystemsByQuery(cat.systems, query),
+    }));
     if (filter === 'all') return raw;
-    if (filter === 'conflicts') return [{ key: 'conflicts', label: 'Systèmes en conflits', systems: systemsWithConflict }];
+    if (filter === 'conflicts') return raw.filter((c) => c.key === 'conflicts');
+    if (filter === 'surveillance') return raw.filter((c) => c.key === 'surveillance');
     const match = raw.find((c) => c.key === filter);
     return match ? [match] : raw;
   });
