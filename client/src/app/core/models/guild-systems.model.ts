@@ -9,6 +9,7 @@ export interface GuildSystemBgsDto {
   isThreatened: boolean;
   isExpansionCandidate: boolean;
   isHeadquarter: boolean;
+  isUnderSurveillance: boolean;
   isClean: boolean;
   category: string;
   lastUpdated?: string;
@@ -35,6 +36,7 @@ export interface TacticalThresholdsDto {
 export interface GuildSystemsResponseDto {
   origin: GuildSystemBgsDto[];
   headquarter: GuildSystemBgsDto[];
+  surveillance: GuildSystemBgsDto[];
   conflicts: GuildSystemBgsDto[];
   critical: GuildSystemBgsDto[];
   low: GuildSystemBgsDto[];
@@ -45,4 +47,4 @@ export interface GuildSystemsResponseDto {
   tacticalThresholds?: TacticalThresholdsDto;
 }
 
-export type SystemsFilterValue = 'all' | 'origin' | 'hq' | 'healthy' | 'conflicts' | 'low' | 'critical' | 'others';
+export type SystemsFilterValue = 'all' | 'origin' | 'hq' | 'surveillance' | 'healthy' | 'conflicts' | 'low' | 'critical' | 'others';

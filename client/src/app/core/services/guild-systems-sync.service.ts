@@ -23,6 +23,7 @@ export class GuildSystemsSyncService {
   readonly systems = signal<GuildSystemsResponseDto>({
     origin: [],
     headquarter: [],
+    surveillance: [],
     conflicts: [],
     critical: [],
     low: [],
@@ -56,6 +57,7 @@ export class GuildSystemsSyncService {
         this.systems.set({
           origin: data?.origin ?? [],
           headquarter: data?.headquarter ?? [],
+          surveillance: data?.surveillance ?? [],
           conflicts: data?.conflicts ?? [],
           critical: data?.critical ?? [],
           low: data?.low ?? [],

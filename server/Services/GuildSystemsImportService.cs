@@ -11,15 +11,17 @@ namespace GuildDashboard.Server.Services;
 public class GuildSystemsImportService
 {
     private readonly GuildDashboardDbContext _db;
+    private readonly EdsmDeltaEnrichmentService _edsmDelta;
     private readonly ILogger<GuildSystemsImportService> _log;
 
     private static readonly string[] AuditSystemNames = ["Mayang", "HIP 4332", "Sabines", "Nanapan"];
 
     private static readonly Regex SpecialCharsRegex = new(@"[^\p{L}\p{N}\s\.\-']", RegexOptions.Compiled);
 
-    public GuildSystemsImportService(GuildDashboardDbContext db, ILogger<GuildSystemsImportService> log)
+    public GuildSystemsImportService(GuildDashboardDbContext db, EdsmDeltaEnrichmentService edsmDelta, ILogger<GuildSystemsImportService> log)
     {
         _db = db;
+        _edsmDelta = edsmDelta;
         _log = log;
     }
 
@@ -178,6 +180,17 @@ public class GuildSystemsImportService
             await _db.Guilds
                 .Where(g => g.Id == guildId)
                 .ExecuteUpdateAsync(s => s.SetProperty(g => g.LastSystemsImportAt, DateTime.UtcNow), ct);
+
+            // Enrichissement EDSM (tendance 24h). Ne bloque pas l'import si EDSM échoue.
+            var namesToEnrich = guildSystems.Select(s => s.Name).Distinct().ToList();
+            try
+            {
+                await _edsmDelta.EnrichAfterImportAsync(guildId, namesToEnrich, ct);
+            }
+            catch (Exception ex)
+            {
+                _log.LogWarning(ex, "[GuildSystemsImport] Enrichissement EDSM échoué (import Inara reste valide)");
+            }
         }
 
         var guildName = await _db.Guilds
@@ -436,6 +449,9 @@ public class GuildSystemImportItem
     public string? LastUpdatedText { get; set; }
     public string? Category { get; set; }
     public bool? IsClean { get; set; }
+    /// <summary>URL Inara du système (ex: https://inara.cz/elite/starsystem/123/).</summary>
+    [JsonPropertyName("inaraUrl")]
+    public string? InaraUrl { get; set; }
 }
 
 public record GuildSystemsImportResult(int TotalReceived, int Inserted, int Updated, int Skipped, int Deleted, string? Error);

@@ -406,6 +406,14 @@ public class GuildController : ControllerBase
         return ok ? Ok() : NotFound();
     }
 
+    /// <summary>POST /api/guild/systems/{systemId}/toggle-surveillance — toggle surveillance.</summary>
+    [HttpPost("systems/{systemId:int}/toggle-surveillance")]
+    public async Task<IActionResult> ToggleSurveillance(int systemId, [FromQuery] int? guildId, CancellationToken ct = default)
+    {
+        var ok = await _service.ToggleSurveillanceAsync(systemId, ResolveGuildId(guildId), ct);
+        return ok ? Ok() : NotFound();
+    }
+
     /// <summary>GET /api/guild/dashboard — commanderName optionnel.</summary>
     [HttpGet("dashboard")]
     public async Task<IActionResult> GetDashboard([FromQuery] string? commanderName, [FromQuery] int? guildId, CancellationToken ct = default)

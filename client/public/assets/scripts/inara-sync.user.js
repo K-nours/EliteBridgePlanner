@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Inara Sync — Guild Dashboard
 // @namespace    https://github.com/elitebridgeplanner
-// @version      2.15.0
+// @version      2.17.0
 // @description  Script unique : bridge sur dashboard, extraction systèmes (faction), extraction CMDRs (squadron)
 // @author       EliteBridgePlanner
 // @match        https://inara.cz/elite/*
@@ -9,13 +9,13 @@
 // @match        https://localhost:4200/*
 // @match        http://127.0.0.1:4200/*
 // @grant        GM_xmlhttpRequest
+// @connect      localhost
+// @connect      127.0.0.1
 // @run-at       document-idle
 // ==/UserScript==
 
 (function () {
   'use strict';
-
-  console.log('Tampermonkey script loaded', location.href);
 
   const host = window.location.hostname || '';
   const path = window.location.pathname || '';
@@ -138,25 +138,29 @@
   // GM_xmlhttpRequest (bypass CORS) — renvoie une Promise<{ok, message?, json}>
   function gmPost(url, data) {
     return new Promise((resolve) => {
+      let settled = false;
+      function finish(result) {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      }
       GM_xmlhttpRequest({
         method: 'POST',
         url,
         headers: { 'Content-Type': 'application/json' },
         data: typeof data === 'string' ? data : JSON.stringify(data),
+        timeout: 60000,
+        ontimeout: () => finish({ ok: false, message: 'Délai d’attente dépassé (60s). Vérifiez que le backend répond.', json: {} }),
         onload: (res) => {
           let json = null;
           try { json = JSON.parse(res.responseText || '{}'); } catch (e) { json = {}; }
           if (json === null || typeof json !== 'object') json = {};
           const ok = res.status >= 200 && res.status < 300;
           const msg = json.error || json.message || res.statusText || (ok ? 'OK' : `Erreur ${res.status}`);
-          if (typeof console !== 'undefined' && console.log) {
-            console.log('[Inara Sync] Réponse HTTP:', { status: res.status, responseText: (res.responseText || '').slice(0, 500), json });
-          }
-          resolve({ ok, message: msg, json });
+          finish({ ok, message: msg, json });
         },
         onerror: (err) => {
-          const json = {};
-          resolve({ ok: false, message: (err && err.message) || 'Erreur réseau. Vérifiez que le backend est démarré.', json });
+          finish({ ok: false, message: (err && err.message) || 'Erreur réseau. Vérifiez que le backend est démarré.', json: {} });
         }
       });
     });
@@ -164,8 +168,6 @@
 
   // ——— Contexte FACTION PRESENCE : extraction systèmes ———
   if (isFactionPresence) {
-    const plog = typeof console !== 'undefined' && console.log
-      ? (...a) => console.log('[Inara Sync][Systems][Pagination]', ...a) : () => {};
     const SPECIAL_CHARS = /[^\p{L}\p{N}\s.\-']/gu;
     const PERCENT_REGEX = /(\d+(?:[.,]\d+)?)\s*%?/;
     const UPDATED_REGEX = /(\d+\s*(?:day|hour|minute|week)s?\s*(?:ago)?|il y a \d+\s*(?:jour|heure|minute)s?)/i;
@@ -328,10 +330,7 @@
           }
         } catch (_) {}
       }
-      if (!nextBtn) {
-        plog('nextSelector=(none) nextFound=false nextDisabled=(n/a) totalPages=1 currentPage=1');
-        return { nextBtn: null, totalPages: 1, disabled: true, currentPage: 1, nextText: null };
-      }
+      if (!nextBtn) return { nextBtn: null, totalPages: 1, disabled: true, currentPage: 1, nextText: null };
       const cls = (nextBtn.className || '').toLowerCase();
       const disabled = cls.includes('disabled') ||
         nextBtn.getAttribute('aria-disabled') === 'true' ||
@@ -368,24 +367,15 @@
         }
         return 1;
       })() : 1;
-      plog('nextSelector=' + JSON.stringify(usedSelector) + ' nextFound=true nextDisabled=' + disabled + ' totalPages=' + totalPages + ' currentPage=' + currentPage);
       return { nextBtn, totalPages, disabled, currentPage, nextText: usedSelector };
     }
 
     /** Retourne à la page 1 si nécessaire. Attend le changement du tableau. Retourne { ok, reason }. */
     async function goToPage1IfNeeded(table) {
-      const { currentPage, totalPages } = findPaginationControls(table);
-      plog('currentPage detected=' + currentPage);
-      if (currentPage <= 1) {
-        plog('déjà sur page 1, pas de retour');
-        return { ok: true, reason: null };
-      }
-      plog('retour à la page 1');
+      const { currentPage } = findPaginationControls(table);
+      if (currentPage <= 1) return { ok: true, reason: null };
       const pager = table.closest('.dataTables_wrapper')?.querySelector('.dataTables_paginate');
-      if (!pager) {
-        plog('STOP reason="pager not found"');
-        return { ok: false, reason: 'pager not found' };
-      }
+      if (!pager) return { ok: false, reason: 'pager not found' };
       const prev = getFirstSystemName(table);
       const page1Btn = pager.querySelector('.paginate_button[data-dt-idx="0"]')
         || Array.from(pager.querySelectorAll('.paginate_button')).find((b) => (b.textContent || '').trim() === '1');
@@ -393,23 +383,15 @@
         page1Btn.click();
       } else {
         const prevBtn = pager.querySelector('.paginate_button.previous, .paginate_button[data-dt-idx="previous"]');
-        if (!prevBtn) {
-          plog('STOP reason="no page1 or previous button"');
-          return { ok: false, reason: 'no page1 or previous button' };
-        }
+        if (!prevBtn) return { ok: false, reason: 'no page1 or previous button' };
         for (let i = 0; i < currentPage - 1; i++) {
           prevBtn.click();
           await new Promise((r) => setTimeout(r, 150));
         }
       }
-      const { changed, newFirst } = await waitForTableChange(table, prev);
-      plog('changed=' + changed + ' before=' + JSON.stringify(prev ?? '(vide)') + ' after=' + JSON.stringify(newFirst ?? '(vide)'));
-      if (!changed) {
-        plog('STOP reason="table did not change after goToPage1"');
-        return { ok: false, reason: 'table did not change' };
-      }
+      const { changed } = await waitForTableChange(table, prev);
+      if (!changed) return { ok: false, reason: 'table did not change' };
       await new Promise((r) => setTimeout(r, 75));
-      plog('scan démarré depuis page 1');
       return { ok: true, reason: null };
     }
 
@@ -435,29 +417,15 @@
     /** Clique sur Next et attend le changement du contenu. Retourne { ok, reason }. */
     async function goToNextPage(table, pageNum) {
       const prev = getFirstSystemName(table);
-      plog('tentative page suivante page=' + pageNum + ' premierSysteme=' + JSON.stringify(prev ?? '(vide)'));
       const { nextBtn, disabled } = findPaginationControls(table);
-      if (!nextBtn) {
-        plog('STOP reason="next not found"');
-        return { ok: false, reason: 'next not found' };
-      }
-      if (disabled) {
-        plog('STOP reason="next disabled"');
-        return { ok: false, reason: 'next disabled' };
-      }
-      plog('click next page=' + (pageNum + 1));
+      if (!nextBtn) return { ok: false, reason: 'next not found' };
+      if (disabled) return { ok: false, reason: 'next disabled' };
       nextBtn.click();
-      const { changed, newFirst } = await waitForTableChange(table, prev);
-      plog('changed=' + changed + ' before=' + JSON.stringify(prev ?? '(vide)') + ' after=' + JSON.stringify(newFirst ?? '(vide)'));
-      if (!changed) {
-        plog('STOP reason="table did not change"');
-        return { ok: false, reason: 'table did not change' };
-      }
+      const { changed } = await waitForTableChange(table, prev);
+      if (!changed) return { ok: false, reason: 'table did not change' };
       await new Promise((r) => setTimeout(r, 75));
       return { ok: true, reason: null };
     }
-
-    const AUDIT_SYSTEM_NAMES = ['HIP 4332', 'Mayang', 'Sabines', 'Nanapan', 'Khwarakan', 'NGC 6357'];
 
     function parseDataRowsFromTable(table, indices, seen) {
       const allRows = Array.from(table.querySelectorAll('tr'));
@@ -477,9 +445,6 @@
         const tags = extractTagsFromRow(row);
         const influencePercent = parsePercent(get(iI));
         const { tooltips: rawTooltips, states: extractedStates } = extractStatesFromInfluenceCellTooltips(infCellEl);
-        if (AUDIT_SYSTEM_NAMES.some((a) => name.toLowerCase().includes(a.toLowerCase())) && typeof console !== 'undefined' && console.log) {
-          console.log('[Inara Sync][Systems][States]', name, '| tooltips=', JSON.stringify(rawTooltips), '| states=', JSON.stringify(extractedStates));
-        }
         const system = {
           name,
           government: get(iG),
@@ -502,13 +467,10 @@
     }
 
     async function extractSystems() {
-      const log = typeof console !== 'undefined' && console.log ? (...a) => console.log('[Inara Sync][Systems]', ...a) : () => {};
       const targetTable = getSystemsTable();
       if (!targetTable) return { systems: [], error: 'Table de présence introuvable' };
 
       const linesPerPage = Array.from(targetTable.querySelectorAll('tbody tr')).filter((r) => r.querySelector('a[href*="/elite/starsystem/"]')).length;
-      log('Lignes visibles sur la page courante:', linesPerPage);
-
       const allRows = Array.from(targetTable.querySelectorAll('tr'));
       const headerRow = targetTable.querySelector('thead tr') || allRows[0];
       const headerCells = headerRow ? Array.from(headerRow.querySelectorAll('th, td')).map((c) => (c.textContent || '').trim()) : [];
@@ -533,16 +495,12 @@
 
       const systems = [];
       const seen = new Set();
-
-      plog('START');
       const { nextBtn, totalPages: detectedPages } = findPaginationControls(targetTable);
       const totalPages = Math.max(1, detectedPages);
 
-      log('Nombre total de pages:', totalPages, '| Lignes par page:', linesPerPage);
       const usePagination = nextBtn && totalPages > 1;
 
       if (usePagination) {
-        log('Pagination dynamique détectée');
         const goTo1 = await goToPage1IfNeeded(targetTable);
         if (!goTo1.ok) {
           return { systems: [], error: 'Impossible de revenir à la page 1 (extraction incomplète évitée)' };
@@ -550,39 +508,23 @@
         let pagesTraversed = 0;
         const maxPages = Math.min(totalPages, 20);
         for (let p = 1; p <= maxPages; p++) {
-          const firstBefore = getFirstSystemName(targetTable);
-          log('Page', p + '/' + totalPages, '→ premier système:', firstBefore ?? '(vide)');
           const pageSystems = parseDataRowsFromTable(targetTable, indices, seen);
           systems.push(...pageSystems);
           pagesTraversed = p;
-          log('Systèmes extraits sur la page:', pageSystems.length, '| Total cumulé:', systems.length);
           if (p < maxPages) {
             const result = await goToNextPage(targetTable, p);
             if (!result.ok) break;
-          } else if (maxPages >= 20) {
-            plog('STOP reason="maxPages reached"');
           }
         }
-        plog('pagesTraversed=' + pagesTraversed + ' totalExtrait=' + systems.length);
       } else {
-        if (!nextBtn) log('Pagination non détectée (bouton Next absent)');
-        else if (totalPages <= 1) log('Page unique détectée');
-        log('Extraction directe (sans pagination)');
         systems.push(...parseDataRowsFromTable(targetTable, indices, seen));
       }
 
-      plog('END totalExtraitFinal=' + systems.length);
-      log('Total extrait final:', systems.length);
       return { systems, error: null };
     }
 
     async function postSystems(payload) {
       const url = `${BACKEND_URL.replace(/\/$/, '')}/api/guild/systems/import`;
-      if (typeof console !== 'undefined' && console.log) {
-        const val = payload?.originSystemName;
-        const present = val != null && val !== '';
-        console.log('[Inara Sync][Systems] 3. postSystems: originSystemName present=', present, 'value=', val ?? '(absent)');
-      }
       const r = await gmPost(url, payload);
       if (!r.ok) return { ok: false, message: r.message, json: {} };
       const j = r.json ?? {};
@@ -605,19 +547,6 @@
       }
       const originSystemName = extractOriginFromHeader();
       const payload = { originSystemName: originSystemName || undefined, systems };
-      if (typeof console !== 'undefined' && console.log) {
-        const extracted = !!originSystemName;
-        const inPayload = payload.originSystemName != null && payload.originSystemName !== '';
-        console.log('[Inara Sync][Systems] 1. Origin detected:', extracted ? originSystemName : 'NON');
-        console.log('[Inara Sync][Systems] 2. Payload envoyé:', JSON.stringify({ originSystemName: payload.originSystemName ?? '(absent)', systemsCount: systems.length }));
-        console.log('[Inara Sync][Systems] DIAG: extracted=' + extracted + ' inPayload=' + inPayload + ' → ' + (extracted && inPayload ? 'OK (backend devrait recevoir)' : extracted ? 'PERDU?' : 'non extrait (DOM)'));
-        AUDIT_SYSTEM_NAMES.forEach((auditName) => {
-          const sys = systems.find((s) => s.name.toLowerCase().includes(auditName.toLowerCase()));
-          if (sys) {
-            console.log('[Inara Sync][Systems][Payload]', sys.name, '| influence=', sys.influencePercent ?? 'null', 'states=', JSON.stringify(sys.states ?? []));
-          }
-        });
-      }
       if (mode === 'download') {
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
@@ -628,7 +557,12 @@
         showToast(`${systems.length} système(s) téléchargé(s)`);
       } else {
         showToast('Envoi en cours…');
-        postSystems(payload).then((r) => showToast(r.message, !r.ok));
+        postSystems(payload)
+          .then((r) => showToast(r.message, !r.ok))
+          .catch((err) => {
+            const msg = (err && err.message) || String(err) || 'Erreur inattendue';
+            showToast('Erreur : ' + msg, true);
+          });
       }
     }
 
@@ -672,7 +606,6 @@
     }
     if (autoImport) {
       setTimeout(async () => {
-        console.log('[Inara Sync] Auto-import systèmes (autoImport=1)');
         notifyOpenerStarted('systems');
         showToast('Extraction en cours (chargement de toutes les pages)…');
         const { systems, error } = await extractSystems();
@@ -688,40 +621,24 @@
           return;
         }
         const originSystemName = extractOriginFromHeader();
-        const payload = { originSystemName: originSystemName || undefined, systems };
-        if (typeof console !== 'undefined' && console.log) {
-          const extracted = !!originSystemName;
-          const inPayload = payload.originSystemName != null && payload.originSystemName !== '';
-          console.log('[Inara Sync][Systems] 1. Origin detected:', extracted ? originSystemName : 'NON');
-          console.log('[Inara Sync][Systems] 2. Payload envoyé:', JSON.stringify({ originSystemName: payload.originSystemName ?? '(absent)', systemsCount: systems.length }));
-          console.log('[Inara Sync][Systems] DIAG: extracted=' + extracted + ' inPayload=' + inPayload + ' → ' + (extracted && inPayload ? 'OK (backend devrait recevoir)' : extracted ? 'PERDU?' : 'non extrait (DOM)'));
-        }
         showToast('Envoi en cours…');
-        postSystems({ originSystemName: originSystemName || undefined, systems }).then((r) => {
-          try {
+        postSystems({ originSystemName: originSystemName || undefined, systems })
+          .then((r) => {
             if (!r.ok) {
               showToast(r.message, true);
               notifyOpenerError('systems', r.message);
               return;
             }
-            console.log('[Inara Sync] Import systèmes réussi');
             showToast(r.message);
             const j = r.json ?? {};
-            const inserted = j.inserted ?? 0;
-            const updated = j.updated ?? 0;
-            const totalReceived = j.totalReceived ?? systems.length;
-            const detail = { inserted, updated, total: totalReceived };
-            console.log('[Inara Sync] Avant postMessage:', { hasOpener: !!window.opener, typeofOpener: typeof window.opener, openerOrigin, urlCourante: location.href });
-            notifyOpenerSuccess('systems', detail);
-            console.log('[Inara Sync] Tentative fermeture');
+            notifyOpenerSuccess('systems', { inserted: j.inserted ?? 0, updated: j.updated ?? 0, total: j.totalReceived ?? systems.length });
             window.close();
-            console.log('[Inara Sync] window.close() appelé');
-          } catch (e) {
-            console.log('[Inara Sync] Erreur fin de flux (postMessage/close):', e);
-            try { notifyOpenerSuccess('systems', { inserted: 0, updated: 0, total: systems.length }); } catch (_) {}
-            try { window.close(); } catch (_) {}
-          }
-        });
+          })
+          .catch((err) => {
+            const msg = (err && err.message) || String(err) || 'Erreur inattendue';
+            showToast('Erreur : ' + msg, true);
+            notifyOpenerError('systems', msg);
+          });
       }, 1200);
     }
     return;

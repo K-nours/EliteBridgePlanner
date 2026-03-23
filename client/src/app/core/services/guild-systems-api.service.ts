@@ -40,6 +40,10 @@ export class GuildSystemsApiService {
     return this.http.post<void>(`${this.base}/guild/systems/${systemId}/toggle-headquarter`, {});
   }
 
+  toggleSurveillance(systemId: number): Observable<void> {
+    return this.http.post<void>(`${this.base}/guild/systems/${systemId}/toggle-surveillance`, {});
+  }
+
   syncBgs(): Observable<{ updated: number }> {
     return this.http.post<{ updated: number }>(`${this.base}/guild/systems/sync`, {});
   }
