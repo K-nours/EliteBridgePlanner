@@ -111,7 +111,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
           <div class="col-left-systems-fill">
             <app-guild-systems-panel />
           </div>
-          <div class="box box-reunion"><h3>Prochaine réunion galactique</h3></div>
+          <div class="box box-pipeline-dipo"><h3>Pipeline diplomatique</h3></div>
         </aside>
         <section class="col col-center">
           <div class="map-section">
@@ -218,7 +218,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
           </div>
           }
 <div class="box"><h3>Missions en cours</h3></div>
-            <div class="box"><h3>Pipeline diplomatique</h3></div>
+            <div class="box box-reunion"><h3>Prochaine réunion galactique</h3></div>
           <div class="box box-cmdrs">
             <div class="box-cmdrs-header">
               <h3 class="box-cmdrs-title">CMDRs</h3>
@@ -671,6 +671,9 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       flex-direction: column;
     }
     .col-left .box-reunion {
+      max-height: 80px;
+    }
+    .col-left .box-pipeline-dipo {
       max-height: 80px;
     }
     .box {
