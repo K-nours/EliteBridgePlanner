@@ -106,29 +106,48 @@
 
 <ng-template #systemRowTpl let-sys>
   <div class="system-row"
+    [attr.data-system-id]="sys.id"
     [class]="getInfluenceClass(sys)"
     [class.system-row--hq]="sys.isHeadquarter"
     [class.system-row--copied]="copiedSystemId() === sys.id"
+    [class.system-row--highlighted]="guildSync.highlightedSystemIdInList() === sys.id"
     (click)="openSystemInara(sys)"
     (contextmenu)="onSystemContextMenu($event, sys)">
     <span class="system-row-left">
       <span class="system-name">@if (sys.isHeadquarter) { <span class="hq-mark">🏛️</span> }{{ sys.name }}</span>
+      <span class="system-row-actions">
+      @if (sys.coordsX != null && sys.coordsY != null && sys.coordsZ != null) {
+        <button type="button"
+          class="btn-target"
+          title="Centrer la carte sur ce système"
+          aria-label="Centrer la carte"
+          (click)="onFocusMapOnSystem($event, sys.id)">
+          <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="1" fill="currentColor"/>
+            <line x1="12" y1="4" x2="12" y2="8"/>
+            <line x1="12" y1="16" x2="12" y2="20"/>
+            <line x1="4" y1="12" x2="8" y2="12"/>
+            <line x1="16" y1="12" x2="20" y2="12"/>
+          </svg>
+        </button>
+      }
       <button type="button"
         class="btn-copy"
         [title]="copyTooltip(sys.id)"
         [attr.aria-label]="copyTooltip(sys.id)"
         (click)="copySystemName($event, sys.name, sys.id)">
         @if (copiedSystemId() === sys.id) {
-          <svg class="icon-check" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="icon-check" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="20 6 9 17 4 12"/>
           </svg>
         } @else {
-          <svg class="icon-copy" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg class="icon-copy" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
           </svg>
         }
       </button>
+      </span>
     </span>
     <span class="system-row-right">
       @if (hasDelta(sys.influenceDelta72h)) {

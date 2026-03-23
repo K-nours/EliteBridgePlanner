@@ -119,7 +119,9 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             <div class="box map-box">
               <h3>Carte The 501st Guild</h3>
               <div class="map-3d-wrapper">
-                <app-guild-systems-map [systems]="guildSystemsSync.systems()" />
+                <app-guild-systems-map
+                  [systems]="guildSystemsSync.systems()"
+                  [systemsFilter]="guildSystemsSync.systemsFilter()" />
               </div>
               <div class="map-filter-counters">
                 <div class="map-filter-counters-left">
@@ -707,7 +709,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
         0 0 5px rgba(0, 234, 255, 0.03),
         0 0 10px rgba(0, 234, 255, 0.02),
         0 0 20px rgba(0, 234, 255, 0.01);
-      padding: 1rem 1.25rem;
+      padding: calc(1rem + 4px) 1.25rem 1rem 1.25rem;
       min-height: 80px;
     }
     .box h3 {
@@ -718,6 +720,9 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       color: #00d4ff;
       text-transform: uppercase;
       letter-spacing: 0.1em;
+    }
+    .box > h3:first-child {
+      margin-top: 7px;
     }
     .box-sync-status {
       display: flex;
@@ -731,7 +736,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       align-items: center;
       justify-content: space-between;
       gap: 0.5rem;
-      margin-bottom: 0.5rem;
+      margin-bottom: 16px;
+      min-height: 28px;
     }
     .sync-status-header h3 {
       margin: 0;
@@ -848,7 +854,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       padding: 0.5rem;
       background: rgba(0, 0, 0, 0.3);
       border: 1px solid rgba(0, 212, 255, 0.14);
-      border-radius: 4px;
+      border-radius: 0 0 16px 16px;
     }
     .sync-logs-container::-webkit-scrollbar {
       width: 6px;
@@ -926,16 +932,20 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       min-height: 420px;
       display: flex;
       flex-direction: column;
+      gap: 1rem;
     }
     .map-3d-wrapper {
       flex: 1 1 0;
       min-height: 0;
+      border: 1px solid rgba(0, 212, 255, 0.14);
+      border-radius: 0 0 16px 16px;
+      overflow: hidden;
     }
     .map-filter-counters {
       position: absolute;
-      bottom: 0.75rem;
-      left: 0.75rem;
-      right: 0.75rem;
+      bottom: 28px;
+      left: 32px;
+      right: 32px;
       display: flex;
       justify-content: space-between;
       align-items: flex-end;
