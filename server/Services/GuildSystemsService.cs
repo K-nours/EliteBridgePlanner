@@ -101,7 +101,59 @@ public class GuildSystemsService
             InfluenceThresholds.Critical, InfluenceThresholds.Low, InfluenceThresholds.High);
         var tactical = new TacticalThresholdsDto(TacticalCritical, TacticalLow, TacticalHigh);
         var result = new GuildSystemsResponseDto(origin, headquarter, surveillance, conflicts, critical, low, healthy, others, dataSource, thresholds, tactical);
+        LogDeltaDiagnostic(guildSystems, controlledByName);
         return result;
+    }
+
+    /// <summary>Retourne la distribution InfluenceDelta72h pour diagnostic (nonNull, roundedToZero, displayable).</summary>
+    public async Task<(int NonNull, int RoundedToZero, int Displayable)> GetDeltaDistributionAsync(int guildId, CancellationToken ct = default)
+    {
+        var guildSystems = await _db.GuildSystems.Where(s => s.GuildId == guildId).ToListAsync(ct);
+        var controlled = await _db.ControlledSystems.Where(c => c.GuildId == guildId).ToListAsync(ct);
+        var controlledByName = controlled.ToDictionary(c => c.Name, StringComparer.OrdinalIgnoreCase);
+        int nonNull = 0, roundedToZero = 0, displayable = 0;
+        foreach (var gs in guildSystems)
+        {
+            var cs = controlledByName.GetValueOrDefault(gs.Name);
+            var dto = ToDto(gs, cs);
+            var delta = dto.InfluenceDelta72h;
+            if (delta == null) continue;
+            nonNull++;
+            var rounded = Math.Round((double)delta.Value, 2);
+            if (Math.Abs(rounded) < 0.005)
+                roundedToZero++;
+            else
+                displayable++;
+        }
+        return (nonNull, roundedToZero, displayable);
+    }
+
+    /// <summary>Diagnostic InfluenceDelta72h : distribution globale + échantillon DTO.</summary>
+    private void LogDeltaDiagnostic(List<GuildSystem> guildSystems, Dictionary<string, ControlledSystem> controlledByName)
+    {
+        int nonNull = 0, roundedToZero = 0, displayable = 0;
+        var sampleLogged = 0;
+        foreach (var gs in guildSystems)
+        {
+            var cs = controlledByName.GetValueOrDefault(gs.Name);
+            var dto = ToDto(gs, cs);
+            var delta = dto.InfluenceDelta72h;
+            if (delta == null) continue;
+            nonNull++;
+            var rounded = Math.Round((double)delta.Value, 2);
+            if (Math.Abs(rounded) < 0.005)
+                roundedToZero++;
+            else
+                displayable++;
+            if (sampleLogged < 5)
+            {
+                _log.LogInformation("[GuildSystems][DIAG] DTO {Name} — InfluenceDelta72h brut={Raw} arrondi2d={Rounded}",
+                    gs.Name, delta.Value.ToString("F6"), rounded.ToString("F2"));
+                sampleLogged++;
+            }
+        }
+        _log.LogWarning("[GuildSystems][DIAG] Distribution delta: nonNull={NonNull} roundedToZero={RoundedToZero} displayable={Displayable}",
+            nonNull, roundedToZero, displayable);
     }
 
     private static bool IsConflictState(string? state)
@@ -340,8 +392,8 @@ public class GuildSystemsService
 
     private static GuildSystemBgsDto ToDto(GuildSystem gs, ControlledSystem? cs)
     {
-        // InfluenceDelta24h : source Inara (import) ou sync BGS. Jamais seed.
-        decimal? delta = (cs != null && !cs.IsFromSeed && cs.InfluenceDelta24h != null) ? cs.InfluenceDelta24h : null;
+        // InfluenceDelta72h : source EDSM (enrichissement). Jamais seed.
+        decimal? delta = (cs != null && !cs.IsFromSeed && cs.InfluenceDelta72h != null) ? cs.InfluenceDelta72h : null;
 
         var state = cs?.State;
         if (string.Equals(state, "None", StringComparison.OrdinalIgnoreCase) || string.IsNullOrWhiteSpace(state))

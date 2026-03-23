@@ -500,7 +500,7 @@
           factionCount: (() => { const v = get(iF); return v ? (parseInt(v.replace(/\D/g, ''), 10) || null) : null; })(),
           stationCount: (() => { const v = get(iS); return v ? (parseInt(v.replace(/\D/g, ''), 10) || null) : null; })(),
           influencePercent,
-          influenceDelta24h: undefined,
+          influenceDelta72h: undefined,
           states: extractedStates.length ? extractedStates : undefined,
           tags: tags.length ? tags : undefined,
           lastUpdatedText: parseUpdated(get(iU)),

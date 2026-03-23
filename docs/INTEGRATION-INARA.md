@@ -31,7 +31,7 @@ Documentation de l'intégration avec Inara.cz pour le Guild Dashboard 501.
 
 - **State BGS** (War, Boom, etc.) : non présent sur la page → `null`
 - **IsControlled / IsThreatened** : non calculables (pas de breakdown par faction) → `false`
-- **InfluenceDelta24h** : non disponible → `null`
+- **InfluenceDelta72h** : non disponible via Inara → `null` (fourni par enrichissement EDSM)
 
 ### Fragilité du scraping
 

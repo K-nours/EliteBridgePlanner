@@ -4,7 +4,7 @@ public record GuildSystemBgsDto(
     int Id,
     string Name,
     decimal InfluencePercent,
-    decimal? InfluenceDelta24h,
+    decimal? InfluenceDelta72h,
     string? State,
     IReadOnlyList<string>? States,
     bool IsThreatened,

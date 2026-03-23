@@ -135,10 +135,10 @@ public class GuildSystemsImportService
                 }
                 var influenceVal = raw.InfluencePercent.HasValue ? InfluenceParse.Sanitize(raw.InfluencePercent.Value) : (decimal?)null;
                 var stateVal = raw.States?.Count > 0 ? string.Join(",", raw.States) : null;
-                SyncControlledSystemFromImport(controlledSystems, name, influenceVal, existing.Category, raw.InfluenceDelta24h, stateVal);
+                SyncControlledSystemFromImport(controlledSystems, name, influenceVal, existing.Category, raw.InfluenceDelta72h, stateVal);
                 LogSystemAudit(auditNames, existing.Name, raw.InfluencePercent, influenceVal, existing.InfluencePercent, existing.Category, controlledSystems);
                 LogCategoryAndInfluenceDiagnostic(auditNames, name, raw.Category, existing.Category, raw.InfluencePercent, influenceVal, existing.InfluencePercent, controlledSystems,
-                    raw.InfluenceDelta24h, stateVal, raw.Tags?.Count > 0 ? string.Join(",", raw.Tags) : null);
+                    raw.InfluenceDelta72h, stateVal, raw.Tags?.Count > 0 ? string.Join(",", raw.Tags) : null);
                 updated++;
             }
             else
@@ -153,7 +153,7 @@ public class GuildSystemsImportService
                     GuildId = guildId,
                     Name = name,
                     InfluencePercent = influenceVal,
-                    InfluenceDelta24h = raw.InfluenceDelta24h,
+                    InfluenceDelta72h = raw.InfluenceDelta72h,
                     State = stateVal,
                     Category = entity.Category,
                     IsClean = entity.IsClean,
@@ -170,7 +170,7 @@ public class GuildSystemsImportService
                 _log.LogDebug("[GuildSystemsImport] ControlledSystem créé: {Name} influence={Inf} category={Cat}", name, influenceVal, entity.Category);
                 LogSystemAudit(auditNames, name, raw.InfluencePercent, influenceVal, entity.InfluencePercent, entity.Category, controlledSystems);
                 LogCategoryAndInfluenceDiagnostic(auditNames, name, raw.Category, entity.Category, raw.InfluencePercent, influenceVal, entity.InfluencePercent, controlledSystems,
-                    raw.InfluenceDelta24h, stateVal, raw.Tags?.Count > 0 ? string.Join(",", raw.Tags) : null);
+                    raw.InfluenceDelta72h, stateVal, raw.Tags?.Count > 0 ? string.Join(",", raw.Tags) : null);
                 inserted++;
             }
         }
@@ -205,9 +205,9 @@ public class GuildSystemsImportService
         return new GuildSystemsImportResult(totalReceived, inserted, updated, skipped, deleted, null, edsmResult);
     }
 
-    /// <summary>Met à jour ControlledSystem avec InfluencePercent, Category, InfluenceDelta24h, State depuis l'import Inara (tooltips cellule Inf, mapping strict).
+    /// <summary>Met à jour ControlledSystem avec InfluencePercent, Category, InfluenceDelta72h, State depuis l'import Inara (tooltips cellule Inf, mapping strict).
     /// State = null quand Inara ne détecte plus d'état : nettoie l'ancien état en base (ex. Expansion résiduel).</summary>
-    private void SyncControlledSystemFromImport(List<ControlledSystem> controlledSystems, string name, decimal? influencePercent, string? category, decimal? influenceDelta24h, string? state)
+    private void SyncControlledSystemFromImport(List<ControlledSystem> controlledSystems, string name, decimal? influencePercent, string? category, decimal? influenceDelta72h, string? state)
     {
         var normalized = SystemNameNormalizer.Normalize(name);
         foreach (var cs in controlledSystems.Where(c => string.Equals(SystemNameNormalizer.Normalize(c.Name), normalized, StringComparison.OrdinalIgnoreCase)))
@@ -216,7 +216,7 @@ public class GuildSystemsImportService
                 cs.InfluencePercent = influencePercent.Value;
             if (!string.IsNullOrWhiteSpace(category))
                 cs.Category = category;
-            cs.InfluenceDelta24h = influenceDelta24h;
+            cs.InfluenceDelta72h = influenceDelta72h;
             cs.State = state; // Toujours écraser : state=null nettoie si Inara ne signale plus d'état
             cs.UpdatedAt = DateTime.UtcNow;
         }
@@ -442,8 +442,8 @@ public class GuildSystemImportItem
     public int? FactionCount { get; set; }
     public int? StationCount { get; set; }
     public decimal? InfluencePercent { get; set; }
-    /// <summary>Variation d'influence 24h extraite du tableau Inara (ex: +1,2 / -0,8).</summary>
-    public decimal? InfluenceDelta24h { get; set; }
+    /// <summary>Variation d'influence 72h (source EDSM enrichissement ; Inara n'envoie pas).</summary>
+    public decimal? InfluenceDelta72h { get; set; }
     /// <summary>États BGS extraits (War, Civil War, Expansion, etc.).</summary>
     public List<string>? States { get; set; }
     /// <summary>Tags de ligne (ctrl, colony, etc.).</summary>

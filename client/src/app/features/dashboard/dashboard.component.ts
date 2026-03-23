@@ -1443,13 +1443,20 @@ export class DashboardComponent implements OnInit {
       this.guildSystemsApi.getImportProgress().subscribe({
         next: (p) => {
           if (!p.active) return;
-          if (p.phase === 'edsm' && p.mode) {
-            const modeLabel = p.mode === 'groupée' ? 'requête groupée' : 'requêtes unitaires';
-            this.systemsImportProgress.set(`EDSM : ${modeLabel} (${p.current}/${p.total})`);
+          if (p.phase === 'edsm') {
+            const statusLabels: Record<string, string> = {
+              préparation: 'Préparation des systèmes',
+              'requête groupée': 'Requête groupée en cours',
+              'réponse reçue': 'Réponse reçue',
+              analyse: 'Analyse des résultats',
+            };
+            const statusLabel = p.status ? statusLabels[p.status] ?? p.status : '';
+            const base = `EDSM : requête groupée (${p.current}/${p.total})`;
+            this.systemsImportProgress.set(statusLabel ? `${base} — ${statusLabel}` : base);
           } else if (p.phase === 'done') {
             this.stopSystemsImportPolling();
             this.systemsImportProgress.set(null);
-            this.addEdsmResultLogs(p.enrichedCount, p.error);
+            this.addEdsmResultLogs(p.enrichedCount, p.displayableCount, p.ignoredCount, p.error);
             this.guildSystemsSync.loadSystems();
           }
         },
@@ -1472,11 +1479,20 @@ export class DashboardComponent implements OnInit {
     this.addLog(`Import Inara : ${total} système${total > 1 ? 's' : ''} reçu${total > 1 ? 's' : ''}, ${changed} mis à jour`);
   }
 
-  private addEdsmResultLogs(enrichedCount?: number, error?: string): void {
+  private addEdsmResultLogs(
+    enrichedCount?: number,
+    displayableCount?: number,
+    ignoredCount?: number,
+    error?: string,
+  ): void {
     if (error) {
       this.addLog(`EDSM : erreur — ${error}`);
     } else if (enrichedCount != null) {
-      this.addLog(enrichedCount > 0 ? `EDSM : ${enrichedCount} tendance${enrichedCount > 1 ? 's' : ''} 24h enrichie${enrichedCount > 1 ? 's' : ''}` : 'EDSM : aucun delta disponible');
+      const disp = displayableCount ?? 0;
+      const ign = ignoredCount ?? 0;
+      this.addLog(
+        `EDSM : ${enrichedCount} système${enrichedCount > 1 ? 's' : ''} enrichi${enrichedCount > 1 ? 's' : ''}, ${disp} tendance${disp > 1 ? 's' : ''} affichable${disp > 1 ? 's' : ''}, ${ign} ignorée${ign > 1 ? 's' : ''} (arrondi à 0,00%)`,
+      );
     }
   }
 

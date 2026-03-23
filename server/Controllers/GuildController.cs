@@ -21,9 +21,10 @@ public class GuildController : ControllerBase
     private readonly GuildSystemsSeedLoader _seedLoader;
     private readonly SystemsImportProgressStore _importProgressStore;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IConfiguration _config;
     private readonly ILogger<GuildController> _log;
 
-    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader, SystemsImportProgressStore importProgressStore, IServiceScopeFactory scopeFactory, ILogger<GuildController> log)
+    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader, SystemsImportProgressStore importProgressStore, IServiceScopeFactory scopeFactory, IConfiguration config, ILogger<GuildController> log)
     {
         _service = service;
         _dashboard = dashboard;
@@ -36,6 +37,7 @@ public class GuildController : ControllerBase
         _seedLoader = seedLoader;
         _importProgressStore = importProgressStore;
         _scopeFactory = scopeFactory;
+        _config = config;
         _log = log;
     }
 
@@ -46,9 +48,9 @@ public class GuildController : ControllerBase
         var id = ResolveGuildId(guildId);
         var progress = _importProgressStore.Get(id);
         if (!progress.HasValue)
-            return Ok(new { phase = (string?)null, mode = (string?)null, current = 0, total = 0, active = false, enrichedCount = (int?)null, error = (string?)null });
-        var (phase, mode, current, total, enrichedCount, error) = progress.Value;
-        return Ok(new { phase, mode, current, total, active = true, enrichedCount, error });
+            return Ok(new { phase = (string?)null, mode = (string?)null, current = 0, total = 0, active = false, enrichedCount = (int?)null, displayableCount = (int?)null, ignoredCount = (int?)null, error = (string?)null, status = (string?)null });
+        var (phase, mode, current, total, enrichedCount, error, status, displayableCount, ignoredCount) = progress.Value;
+        return Ok(new { phase, mode, current, total, active = true, enrichedCount, displayableCount, ignoredCount, error, status });
     }
 
     /// <summary>POST /api/guild/systems/enrich-edsm — lance l'enrichissement EDSM (tendances 24h) en arrière-plan. Retourne immédiatement. Progression via import-progress.</summary>
@@ -67,7 +69,7 @@ public class GuildController : ControllerBase
         var progressStore = _importProgressStore;
         var scopeFactory = _scopeFactory;
         var log = _log;
-        progressStore.Set(id, "edsm", "unitaire", 0, systemNames.Count);
+        progressStore.Set(id, "edsm", "groupé", 0, systemNames.Count);
 
         _ = Task.Run(async () =>
         {
@@ -75,17 +77,17 @@ public class GuildController : ControllerBase
             {
                 using var scope = scopeFactory.CreateScope();
                 var edsmDelta = scope.ServiceProvider.GetRequiredService<EdsmDeltaEnrichmentService>();
-                var result = await edsmDelta.EnrichAfterImportAsync(id, systemNames, (current, total) =>
+                var result = await edsmDelta.EnrichAfterImportAsync(id, systemNames, (current, total, status) =>
                 {
-                    progressStore.Set(id, "edsm", "unitaire", current, total);
+                    progressStore.Set(id, "edsm", "groupé", current, total, status: status);
                 }, CancellationToken.None);
-                progressStore.Set(id, "done", result.Mode, systemNames.Count, systemNames.Count, result.EnrichedCount, result.Error);
-                log.LogInformation("[EnrichEdsm] Terminé: enrichis={Enriched} erreur={Error}", result.EnrichedCount, result.Error ?? "(aucune)");
+                progressStore.Set(id, "done", "groupé", systemNames.Count, systemNames.Count, result.EnrichedCount, result.Error, displayableCount: result.DisplayableCount, ignoredCount: result.IgnoredCount);
+                log.LogInformation("[EnrichEdsm] Terminé: enrichis={Enriched} affichables={Displayable} ignorés={Ignored} erreur={Error}", result.EnrichedCount, result.DisplayableCount, result.IgnoredCount, result.Error ?? "(aucune)");
             }
             catch (Exception ex)
             {
                 log.LogError(ex, "[EnrichEdsm] Erreur: {Message}", ex.Message);
-                progressStore.Set(id, "done", "unitaire", systemNames.Count, systemNames.Count, 0, ex.Message);
+                progressStore.Set(id, "done", "groupé", systemNames.Count, systemNames.Count, 0, ex.Message);
             }
         }, ct);
 
@@ -369,6 +371,15 @@ public class GuildController : ControllerBase
     {
         var result = await _service.GetSystemsAsync(ResolveGuildId(guildId));
         return Ok(result);
+    }
+
+    /// <summary>GET /api/guild/systems/diagnostic-delta — distribution InfluenceDelta72h (nonNull, roundedToZero, displayable).</summary>
+    [HttpGet("systems/diagnostic-delta")]
+    public async Task<IActionResult> GetDiagnosticDelta([FromQuery] int? guildId, CancellationToken ct = default)
+    {
+        var id = ResolveGuildId(guildId);
+        var (nonNull, roundedToZero, displayable) = await _service.GetDeltaDistributionAsync(id, ct);
+        return Ok(new { nonNull, roundedToZero, displayable });
     }
 
     /// <summary>GET /api/guild/systems/diagnostic-inara-urls — vérifie si les InaraUrl sont en base (échantillon).</summary>

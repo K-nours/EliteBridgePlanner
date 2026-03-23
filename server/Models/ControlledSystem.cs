@@ -13,8 +13,8 @@ public class ControlledSystem
     public string Name { get; set; } = string.Empty;
     /// <summary>Influence réelle de la faction dans le système (%).</summary>
     public decimal InfluencePercent { get; set; }
-    /// <summary>Variation d'influence sur 24h.</summary>
-    public decimal? InfluenceDelta24h { get; set; }
+    /// <summary>Variation d'influence sur 72h (aligné EDSM, approximation).</summary>
+    public decimal? InfluenceDelta72h { get; set; }
     /// <summary>État BGS réel : War, Boom, Bust, Civil Unrest, Expansion, etc.</summary>
     public string? State { get; set; }
     /// <summary>Vrai si une autre faction est proche (écart &lt; 10%).</summary>
