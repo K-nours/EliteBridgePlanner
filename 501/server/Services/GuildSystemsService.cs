@@ -419,7 +419,10 @@ public class GuildSystemsService
             gs.Category,
             cs?.LastUpdated,
             isFromSeed,
-            gs.InaraUrl
+            gs.InaraUrl,
+            gs.CoordsX,
+            gs.CoordsY,
+            gs.CoordsZ
         );
     }
 }

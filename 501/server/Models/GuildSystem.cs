@@ -26,4 +26,10 @@ public class GuildSystem
     public string? LastUpdatedText { get; set; }
     /// <summary>URL Inara du système (ex: https://inara.cz/elite/starsystem/114520/). Récupérée à l'import depuis le userscript.</summary>
     public string? InaraUrl { get; set; }
+    /// <summary>Coordonnée X galactique (EDSM). Null si non enrichi.</summary>
+    public double? CoordsX { get; set; }
+    /// <summary>Coordonnée Y galactique (EDSM). Null si non enrichi.</summary>
+    public double? CoordsY { get; set; }
+    /// <summary>Coordonnée Z galactique (EDSM). Null si non enrichi.</summary>
+    public double? CoordsZ { get; set; }
 }

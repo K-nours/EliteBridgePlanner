@@ -17,6 +17,10 @@ export interface GuildSystemBgsDto {
   isFromSeed: boolean;
   /** URL Inara du système (ex: https://inara.cz/elite/starsystem/114520/). Si présente, ouverture directe au clic. */
   inaraUrl?: string | null;
+  /** Coordonnées galactiques EDSM (pour carte 3D). Null si non enrichi. */
+  coordsX?: number | null;
+  coordsY?: number | null;
+  coordsZ?: number | null;
 }
 
 export type GuildSystemsDataSource = 'seed' | 'cached';

@@ -58,6 +58,7 @@ export class GuildSystemsApiService {
     enrichedCount?: number;
     displayableCount?: number;
     ignoredCount?: number;
+    coordsEnrichedCount?: number;
     error?: string;
     status?: string;
   }> {
@@ -70,6 +71,7 @@ export class GuildSystemsApiService {
       enrichedCount?: number;
       displayableCount?: number;
       ignoredCount?: number;
+      coordsEnrichedCount?: number;
       error?: string;
       status?: string;
     }>(`${this.base}/guild/systems/import-progress`);

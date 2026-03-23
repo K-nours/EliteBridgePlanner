@@ -1,0 +1,18 @@
+<div class="guild-systems-map">
+  <div #canvasContainer class="map-canvas"></div>
+  @if (hasNoCoords()) {
+    <div class="map-empty-hint">
+      <span>Aucune coordonnée galactique</span>
+      <span class="map-empty-hint-sub">Importez depuis Inara puis lancez l'enrichissement EDSM</span>
+    </div>
+  }
+  @if (tooltipData; as t) {
+    <div class="map-tooltip" [style.left.px]="t.x" [style.top.px]="t.y">
+      <div class="map-tooltip-name">{{ t.system.name }}</div>
+      <div class="map-tooltip-detail">{{ t.system.influencePercent }}% · {{ t.system.category }}</div>
+      @if (hasSignificantDelta(t.system.influenceDelta72h)) {
+        <div class="map-tooltip-delta">{{ formatDelta(t.system.influenceDelta72h) }}</div>
+      }
+    </div>
+  }
+</div>

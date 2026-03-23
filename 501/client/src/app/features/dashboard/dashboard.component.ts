@@ -3,6 +3,7 @@ import { TruncateTooltipDirective } from '../../shared/directives/truncate-toolt
 import { SettingsModalComponent } from '../../shared/components/settings-modal/settings-modal.component';
 import { SyncHelpModalComponent } from '../../shared/components/sync-help-modal/sync-help-modal.component';
 import { GuildSystemsPanelComponent } from './guild-systems-panel/guild-systems-panel.component';
+import { GuildSystemsMapComponent } from './guild-systems-map/guild-systems-map.component';
 import { DashboardApiService } from '../../core/services/dashboard-api.service';
 import { CommandersApiService } from '../../core/services/commanders-api.service';
 import { SyncLogService } from '../../core/services/sync-log.service';
@@ -21,7 +22,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [TruncateTooltipDirective, SettingsModalComponent, SyncHelpModalComponent, GuildSystemsPanelComponent],
+  imports: [TruncateTooltipDirective, SettingsModalComponent, SyncHelpModalComponent, GuildSystemsPanelComponent, GuildSystemsMapComponent],
   template: `
     <div class="page">
       <div class="page-bg">
@@ -117,6 +118,9 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
           <div class="map-section">
             <div class="box map-box">
               <h3>Carte The 501st Guild</h3>
+              <div class="map-3d-wrapper">
+                <app-guild-systems-map [systems]="guildSystemsSync.systems()" />
+              </div>
               <div class="map-filter-counters">
                 <div class="map-filter-counters-left">
                   @for (fb of mapFilterCountsLeft(); track fb.value) {
@@ -920,6 +924,12 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       position: relative;
       flex: 1;
       min-height: 420px;
+      display: flex;
+      flex-direction: column;
+    }
+    .map-3d-wrapper {
+      flex: 1 1 0;
+      min-height: 0;
     }
     .map-filter-counters {
       position: absolute;
@@ -1471,16 +1481,17 @@ export class DashboardComponent implements OnInit {
     return recap + (logsContent ? `\n\n${logsContent}` : '');
   });
 
-  /** Lignes du journal pour affichage (récap + logs) + progression EDSM en direct. */
+  /** Lignes du journal : logs inversés (plus récent en haut), ---------, récap en bas. */
   protected syncLogLines = computed(() => {
     const text = this.syncLogsWithRecap() || '(aucun log)';
-    const lines = text.split('\n');
+    const all = text.split('\n');
+    const recapEnd = all.findIndex((l) => l.startsWith('['));
+    const recapLines = recapEnd >= 0 ? all.slice(0, recapEnd).filter((l) => l.trim() !== '') : all;
+    const logLines = recapEnd >= 0 ? all.slice(recapEnd) : [];
     const progress = this.systemsImportProgress();
-    if (progress) {
-      const ts = new Date().toISOString().slice(11, 23);
-      return [...lines, `[${ts}] ${progress}`];
-    }
-    return lines;
+    const progressLine = progress ? [`[${new Date().toISOString().slice(11, 23)}] ${progress}`] : [];
+    const logsReversed = [...logLines, ...progressLine].reverse();
+    return [...logsReversed, '---------', ...recapLines];
   });
 
   /** Déclenche l'enrichissement EDSM après un import réussi, puis poll la progression. */
@@ -1513,12 +1524,15 @@ export class DashboardComponent implements OnInit {
               analyse: 'Analyse des résultats',
             };
             const statusLabel = p.status ? statusLabels[p.status] ?? p.status : '';
-            const base = `EDSM : requête groupée (${p.current}/${p.total})`;
+            const base = `EDSM tendances : requête groupée (${p.current}/${p.total})`;
             this.systemsImportProgress.set(statusLabel ? `${base} — ${statusLabel}` : base);
+          } else if (p.phase === 'coords') {
+            const base = `EDSM coords : batch (${p.current}/${p.total})`;
+            this.systemsImportProgress.set(p.status ? `${base} — ${p.status}` : base);
           } else if (p.phase === 'done') {
             this.stopSystemsImportPolling();
             this.systemsImportProgress.set(null);
-            this.addEdsmResultLogs(p.enrichedCount, p.displayableCount, p.ignoredCount, p.error);
+            this.addEdsmResultLogs(p.enrichedCount, p.displayableCount, p.ignoredCount, p.coordsEnrichedCount, p.error);
             this.guildSystemsSync.loadSystems();
           }
         },
@@ -1545,6 +1559,7 @@ export class DashboardComponent implements OnInit {
     enrichedCount?: number,
     displayableCount?: number,
     ignoredCount?: number,
+    coordsEnrichedCount?: number,
     error?: string,
   ): void {
     if (error) {
@@ -1552,8 +1567,9 @@ export class DashboardComponent implements OnInit {
     } else if (enrichedCount != null) {
       const disp = displayableCount ?? 0;
       const ign = ignoredCount ?? 0;
+      const coords = coordsEnrichedCount ?? 0;
       this.addLog(
-        `EDSM : ${enrichedCount} système${enrichedCount > 1 ? 's' : ''} enrichi${enrichedCount > 1 ? 's' : ''}, ${disp} tendance${disp > 1 ? 's' : ''} affichable${disp > 1 ? 's' : ''}, ${ign} ignorée${ign > 1 ? 's' : ''} (arrondi à 0,00%)`,
+        `EDSM : ${enrichedCount} système${enrichedCount > 1 ? 's' : ''} enrichi${enrichedCount > 1 ? 's' : ''}, ${disp} tendance${disp > 1 ? 's' : ''} affichable${disp > 1 ? 's' : ''}, ${ign} ignorée${ign > 1 ? 's' : ''} (arrondi à 0,00%), ${coords} coordonnée${coords > 1 ? 's' : ''}`,
       );
     }
   }

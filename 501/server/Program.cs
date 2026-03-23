@@ -32,6 +32,7 @@ builder.Services.AddScoped<DataSeeder>();
 builder.Services.AddScoped<GuildSystemsSeedLoader>();
 builder.Services.AddScoped<GuildSystemsImportService>();
 builder.Services.AddScoped<EdsmDeltaEnrichmentService>();
+builder.Services.AddScoped<EdsmCoordsEnrichmentService>();
 builder.Services.AddSingleton<SystemsImportProgressStore>();
 builder.Services.AddSingleton<EddnStatusService>();
 builder.Services.AddScoped<EddnMessageStore>();
@@ -101,5 +102,24 @@ else
 var frontierRedirect = app.Configuration["Frontier:RedirectUri"];
 if (!string.IsNullOrEmpty(frontierRedirect))
     app.Logger.LogInformation("Frontier OAuth callback: {RedirectUri} (HTTPS requis)", frontierRedirect);
+
+// --show-db : affiche 10 systèmes en base (Id, Name, CoordsX/Y/Z) puis quitte. Pour vérifier les coordonnées.
+if (args.Contains("--show-db"))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<GuildDashboardDbContext>();
+    var guildId = scope.ServiceProvider.GetRequiredService<CurrentGuildService>().CurrentGuildId;
+    var list = await db.GuildSystems
+        .AsNoTracking()
+        .Where(s => s.GuildId == guildId)
+        .OrderBy(s => s.Name)
+        .Take(15)
+        .Select(s => new { s.Id, s.Name, s.Category, s.InfluencePercent, s.CoordsX, s.CoordsY, s.CoordsZ })
+        .ToListAsync();
+    var withCoords = list.Count(s => s.CoordsX != null && s.CoordsY != null && s.CoordsZ != null);
+    var json = System.Text.Json.JsonSerializer.Serialize(new { total = list.Count, withCoords, systems = list }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+    Console.WriteLine(json);
+    return;
+}
 
 app.Run();

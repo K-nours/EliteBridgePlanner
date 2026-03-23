@@ -48,12 +48,12 @@ public class GuildController : ControllerBase
         var id = ResolveGuildId(guildId);
         var progress = _importProgressStore.Get(id);
         if (!progress.HasValue)
-            return Ok(new { phase = (string?)null, mode = (string?)null, current = 0, total = 0, active = false, enrichedCount = (int?)null, displayableCount = (int?)null, ignoredCount = (int?)null, error = (string?)null, status = (string?)null });
-        var (phase, mode, current, total, enrichedCount, error, status, displayableCount, ignoredCount) = progress.Value;
-        return Ok(new { phase, mode, current, total, active = true, enrichedCount, displayableCount, ignoredCount, error, status });
+            return Ok(new { phase = (string?)null, mode = (string?)null, current = 0, total = 0, active = false, enrichedCount = (int?)null, displayableCount = (int?)null, ignoredCount = (int?)null, coordsEnrichedCount = (int?)null, error = (string?)null, status = (string?)null });
+        var (phase, mode, current, total, enrichedCount, error, status, displayableCount, ignoredCount, coordsEnrichedCount) = progress.Value;
+        return Ok(new { phase, mode, current, total, active = true, enrichedCount, displayableCount, ignoredCount, coordsEnrichedCount, error, status });
     }
 
-    /// <summary>POST /api/guild/systems/enrich-edsm — lance l'enrichissement EDSM (tendances 24h) en arrière-plan. Retourne immédiatement. Progression via import-progress.</summary>
+    /// <summary>POST /api/guild/systems/enrich-edsm — lance l'enrichissement EDSM (tendances + coordonnées) en arrière-plan. Retourne immédiatement. Progression via import-progress.</summary>
     [HttpPost("systems/enrich-edsm")]
     public async Task<IActionResult> EnrichEdsm([FromQuery] int? guildId, CancellationToken ct = default)
     {
@@ -81,8 +81,17 @@ public class GuildController : ControllerBase
                 {
                     progressStore.Set(id, "edsm", "groupé", current, total, status: status);
                 }, CancellationToken.None);
-                progressStore.Set(id, "done", "groupé", systemNames.Count, systemNames.Count, result.EnrichedCount, result.Error, displayableCount: result.DisplayableCount, ignoredCount: result.IgnoredCount);
-                log.LogInformation("[EnrichEdsm] Terminé: enrichis={Enriched} affichables={Displayable} ignorés={Ignored} erreur={Error}", result.EnrichedCount, result.DisplayableCount, result.IgnoredCount, result.Error ?? "(aucune)");
+                log.LogInformation("[EnrichEdsm] Tendances: enrichis={Enriched} affichables={Displayable} ignorés={Ignored}", result.EnrichedCount, result.DisplayableCount, result.IgnoredCount);
+
+                progressStore.Set(id, "coords", "batch", 0, systemNames.Count);
+                var edsmCoords = scope.ServiceProvider.GetRequiredService<EdsmCoordsEnrichmentService>();
+                var coordsResult = await edsmCoords.EnrichAfterImportAsync(id, systemNames, (current, total, status) =>
+                {
+                    progressStore.Set(id, "coords", "batch", current, total, status: status);
+                }, CancellationToken.None);
+                log.LogInformation("[EnrichEdsm] Coords: enrichis={Enriched}/{Total}", coordsResult.EnrichedCount, coordsResult.TotalCount);
+
+                progressStore.Set(id, "done", "groupé", systemNames.Count, systemNames.Count, result.EnrichedCount, coordsResult.Error ?? result.Error, displayableCount: result.DisplayableCount, ignoredCount: result.IgnoredCount, coordsEnrichedCount: coordsResult.EnrichedCount);
             }
             catch (Exception ex)
             {
@@ -92,6 +101,22 @@ public class GuildController : ControllerBase
         }, ct);
 
         return Accepted(new { started = true, total = systemNames.Count, message = "Enrichissement EDSM démarré en arrière-plan" });
+    }
+
+    /// <summary>GET /api/guild/systems/debug-db — aperçu brut des systèmes en base (Id, Name, CoordsX/Y/Z, etc.) pour vérifier les coordonnées.</summary>
+    [HttpGet("systems/debug-db")]
+    public async Task<IActionResult> GetSystemsDebugDb([FromQuery] int? guildId, [FromQuery] int limit = 10, CancellationToken ct = default)
+    {
+        var id = ResolveGuildId(guildId);
+        var list = await _db.GuildSystems
+            .AsNoTracking()
+            .Where(s => s.GuildId == id)
+            .OrderBy(s => s.Name)
+            .Take(Math.Max(1, Math.Min(limit, 50)))
+            .Select(s => new { s.Id, s.Name, s.Category, s.InfluencePercent, s.CoordsX, s.CoordsY, s.CoordsZ, s.InaraUrl })
+            .ToListAsync(ct);
+        var withCoords = list.Count(s => s.CoordsX != null && s.CoordsY != null && s.CoordsZ != null);
+        return Ok(new { total = list.Count, withCoords, systems = list });
     }
 
     /// <summary>GET /api/integrations/elitebgs/test — diagnostic Elite BGS. HTML si Accept:text/html, sinon JSON.</summary>
