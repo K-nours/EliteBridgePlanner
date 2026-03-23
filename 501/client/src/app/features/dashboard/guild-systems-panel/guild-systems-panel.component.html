@@ -131,11 +131,11 @@
       </button>
     </span>
     <span class="system-row-right">
+      @if (hasDelta(sys.influenceDelta72h)) {
+        <span class="delta" [class.delta--up]="getDeltaClass(sys.influenceDelta72h) === 'delta--up'" [class.delta--down]="getDeltaClass(sys.influenceDelta72h) === 'delta--down'" truncateTooltip="Approximation sur les dernières 72h" [truncateTooltipForce]="true">{{ getDeltaDisplay(sys.influenceDelta72h) }}</span>
+      }
       @for (badge of getStateBadges(sys); track badge) {
         <span class="state-badge">{{ badge }}</span>
-      }
-      @if (hasDelta(sys.influenceDelta24h)) {
-        <span class="delta" [class.delta--up]="getDeltaClass(sys.influenceDelta24h) === 'delta--up'" [class.delta--down]="getDeltaClass(sys.influenceDelta24h) === 'delta--down'">{{ getDeltaDisplay(sys.influenceDelta24h) }}</span>
       }
       <span class="influence" [class]="getInfluenceClass(sys)">{{ sys.influencePercent }}%</span>
     </span>

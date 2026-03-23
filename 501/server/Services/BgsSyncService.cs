@@ -13,7 +13,7 @@ namespace GuildDashboard.Server.Services;
 /// </summary>
 /// <remarks>
 /// Source : EDSM API. Données obtenues : faction contrôlante, factionState, IsControlled.
-/// NON fourni par EDSM : InfluencePercent, InfluenceDelta24h, IsThreatened, IsExpansionCandidate, stations.
+/// NON fourni par EDSM : InfluencePercent, InfluenceDelta72h, IsThreatened, IsExpansionCandidate, stations.
 /// Nécessite Guild.FactionName. Voir docs/INTEGRATION-EDSM.md et docs/GUILD-SYSTEMS.md.
 /// </remarks>
 public class BgsSyncService
@@ -114,7 +114,7 @@ public class BgsSyncService
             cs.LastUpdated = now;
             cs.UpdatedAt = now;
 
-            cs.InfluenceDelta24h = null;
+            cs.InfluenceDelta72h = null;
             cs.IsThreatened = false;
             cs.IsExpansionCandidate = false;
 

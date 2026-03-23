@@ -2,7 +2,7 @@ export interface GuildSystemBgsDto {
   id: number;
   name: string;
   influencePercent: number;
-  influenceDelta24h?: number;
+  influenceDelta72h?: number;
   state?: string;
   /** États BGS multiples (War, Civil War, Expansion, etc.). Utilisé pour les badges. */
   states?: string[];

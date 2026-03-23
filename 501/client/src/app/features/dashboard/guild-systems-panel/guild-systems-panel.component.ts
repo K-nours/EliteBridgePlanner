@@ -4,6 +4,7 @@
  */
 import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
+import { TruncateTooltipDirective } from '../../../shared/directives/truncate-tooltip.directive';
 import { GuildSystemsApiService } from '../../../core/services/guild-systems-api.service';
 import { GuildSystemsSyncService } from '../../../core/services/guild-systems-sync.service';
 import { GuildSettingsService } from '../../../core/services/guild-settings.service';
@@ -17,7 +18,7 @@ import { hasConflictState } from '../../../core/utils/guild-systems.util';
 @Component({
   selector: 'app-guild-systems-panel',
   standalone: true,
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, TruncateTooltipDirective],
   templateUrl: './guild-systems-panel.component.html',
   styleUrl: './guild-systems-panel.component.scss',
 })
@@ -58,8 +59,6 @@ export class GuildSystemsPanelComponent implements OnInit {
     if (s === 'loading') return 'Chargement...';
     return 'Aucun système';
   });
-
-  constructor() {}
 
   ngOnInit(): void {
     this.guildSync.loadSystems();
