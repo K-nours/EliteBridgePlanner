@@ -91,4 +91,69 @@ public class EdsmApiService
     }
 
     public record EdsmSystemInfo(string? Faction, string? FactionState);
+
+    /// <summary>Récupère les coordonnées galactiques des systèmes en batch (EDSM showCoordinates=1).</summary>
+    /// <returns>Dictionnaire Name → (X, Y, Z). Systèmes sans coords ou non trouvés absents.</returns>
+    public async Task<IReadOnlyDictionary<string, (double X, double Y, double Z)>> GetSystemsCoordsBatchAsync(
+        IReadOnlyList<string> systemNames,
+        CancellationToken ct = default)
+    {
+        if (systemNames.Count == 0)
+            return new Dictionary<string, (double, double, double)>();
+
+        var query = string.Join("&", systemNames.Select(n => "systemName[]=" + Uri.EscapeDataString(n)));
+        var url = $"{BaseUrl}?{query}&showCoordinates=1";
+
+        try
+        {
+            var response = await _http.GetAsync(url, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _log.LogWarning("[Edsm] Coords HTTP {Code} for {Url}", response.StatusCode, url);
+                return new Dictionary<string, (double, double, double)>();
+            }
+
+            var json = await response.Content.ReadAsStringAsync(ct);
+            var list = JsonSerializer.Deserialize<List<EdsmCoordsResponse>>(json, JsonOptions);
+
+            if (list == null || list.Count == 0)
+                return new Dictionary<string, (double, double, double)>();
+
+            var result = new Dictionary<string, (double X, double Y, double Z)>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in list)
+            {
+                if (string.IsNullOrEmpty(item.Name) || item.Coords == null)
+                    continue;
+                var c = item.Coords;
+                result[item.Name] = (c.X, c.Y, c.Z);
+            }
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "[Edsm] Erreur lors de l'appel coords batch");
+            throw;
+        }
+    }
+
+    private class EdsmCoordsResponse
+    {
+        [JsonPropertyName("name")]
+        public string? Name { get; set; }
+
+        [JsonPropertyName("coords")]
+        public EdsmCoords? Coords { get; set; }
+    }
+
+    private class EdsmCoords
+    {
+        [JsonPropertyName("x")]
+        public double X { get; set; }
+
+        [JsonPropertyName("y")]
+        public double Y { get; set; }
+
+        [JsonPropertyName("z")]
+        public double Z { get; set; }
+    }
 }

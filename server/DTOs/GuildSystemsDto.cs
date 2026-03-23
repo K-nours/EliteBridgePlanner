@@ -15,7 +15,10 @@ public record GuildSystemBgsDto(
     string Category,
     DateTime? LastUpdated,
     bool IsFromSeed,
-    string? InaraUrl = null
+    string? InaraUrl = null,
+    double? CoordsX = null,
+    double? CoordsY = null,
+    double? CoordsZ = null
 );
 
 /// <summary>Seuils d'influence (source unique backend).</summary>

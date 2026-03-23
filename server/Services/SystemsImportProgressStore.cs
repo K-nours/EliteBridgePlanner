@@ -10,23 +10,23 @@ public class SystemsImportProgressStore
     private ProgressData? _data;
     private int? _guildId;
 
-    /// <summary>Met à jour la progression. Phase = "edsm" | "done". Status = "envoi" | "réception" | "analyse" (optionnel).</summary>
-    public void Set(int guildId, string phase, string mode, int current, int total, int? enrichedCount = null, string? error = null, string? status = null, int? displayableCount = null, int? ignoredCount = null)
+    /// <summary>Met à jour la progression. Phase = "edsm" | "coords" | "done". Status = "envoi" | "réception" | "analyse" (optionnel).</summary>
+    public void Set(int guildId, string phase, string mode, int current, int total, int? enrichedCount = null, string? error = null, string? status = null, int? displayableCount = null, int? ignoredCount = null, int? coordsEnrichedCount = null)
     {
         lock (_lock)
         {
             _guildId = guildId;
-            _data = new ProgressData(phase, mode, current, total, enrichedCount, error, status, displayableCount, ignoredCount);
+            _data = new ProgressData(phase, mode, current, total, enrichedCount, error, status, displayableCount, ignoredCount, coordsEnrichedCount);
         }
     }
 
     /// <summary>Récupère la progression. Retourne null si aucun job en cours pour ce guildId.</summary>
-    public (string Phase, string Mode, int Current, int Total, int? EnrichedCount, string? Error, string? Status, int? DisplayableCount, int? IgnoredCount)? Get(int guildId)
+    public (string Phase, string Mode, int Current, int Total, int? EnrichedCount, string? Error, string? Status, int? DisplayableCount, int? IgnoredCount, int? CoordsEnrichedCount)? Get(int guildId)
     {
         lock (_lock)
         {
             if (_guildId != guildId || _data == null) return null;
-            return (_data.Phase, _data.Mode, _data.Current, _data.Total, _data.EnrichedCount, _data.Error, _data.Status, _data.DisplayableCount, _data.IgnoredCount);
+            return (_data.Phase, _data.Mode, _data.Current, _data.Total, _data.EnrichedCount, _data.Error, _data.Status, _data.DisplayableCount, _data.IgnoredCount, _data.CoordsEnrichedCount);
         }
     }
 
@@ -54,8 +54,9 @@ public class SystemsImportProgressStore
         public string? Status { get; }
         public int? DisplayableCount { get; }
         public int? IgnoredCount { get; }
+        public int? CoordsEnrichedCount { get; }
 
-        public ProgressData(string phase, string mode, int current, int total, int? enrichedCount, string? error, string? status, int? displayableCount, int? ignoredCount)
+        public ProgressData(string phase, string mode, int current, int total, int? enrichedCount, string? error, string? status, int? displayableCount, int? ignoredCount, int? coordsEnrichedCount = null)
         {
             Phase = phase;
             Mode = mode;
@@ -66,6 +67,7 @@ public class SystemsImportProgressStore
             Status = status;
             DisplayableCount = displayableCount;
             IgnoredCount = ignoredCount;
+            CoordsEnrichedCount = coordsEnrichedCount;
         }
     }
 }

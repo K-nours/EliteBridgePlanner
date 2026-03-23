@@ -1,0 +1,69 @@
+.guild-systems-map {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+}
+
+.map-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+  display: block;
+}
+
+.map-canvas canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.map-tooltip {
+  position: fixed;
+  transform: translate(12px, 12px);
+  pointer-events: none;
+  z-index: 100;
+  padding: 0.4rem 0.6rem;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.65rem;
+  color: #fff;
+  background: rgba(6, 20, 35, 0.95);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+}
+
+.map-tooltip-name {
+  font-weight: 600;
+  color: #00d4ff;
+}
+
+.map-tooltip-detail {
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 0.15rem;
+}
+
+.map-tooltip-delta {
+  margin-top: 0.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.map-empty-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  pointer-events: none;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.75rem;
+}
+
+.map-empty-hint-sub {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.35);
+}
