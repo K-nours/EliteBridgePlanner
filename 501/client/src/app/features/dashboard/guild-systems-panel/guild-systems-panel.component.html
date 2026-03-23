@@ -65,7 +65,9 @@
   </div>
   <div class="systems-list">
     @for (cat of categoryConfig(); track cat.key) {
-      <div class="category" [class.category--collapsible]="isCollapsible(cat.key)">
+      <div class="category"
+        [class.category--collapsible]="isCollapsible(cat.key)"
+        [class.category--collapsed]="isCollapsible(cat.key) && !isSectionExpanded(cat.key)">
         @if (isCollapsible(cat.key)) {
           <button
             type="button"
@@ -94,7 +96,7 @@
                 *ngTemplateOutlet="systemRowTpl; context: { $implicit: sys }" />
             }
           </div>
-        } @else if (cat.systems.length === 0) {
+        } @else if (cat.systems.length === 0 && (!isCollapsible(cat.key) || isSectionExpanded(cat.key))) {
           <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
         }
       </div>

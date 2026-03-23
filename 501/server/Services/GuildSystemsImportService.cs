@@ -12,16 +12,22 @@ public class GuildSystemsImportService
 {
     private readonly GuildDashboardDbContext _db;
     private readonly EdsmDeltaEnrichmentService _edsmDelta;
+    private readonly SystemsImportProgressStore _progressStore;
     private readonly ILogger<GuildSystemsImportService> _log;
 
     private static readonly string[] AuditSystemNames = ["Mayang", "HIP 4332", "Sabines", "Nanapan"];
 
     private static readonly Regex SpecialCharsRegex = new(@"[^\p{L}\p{N}\s\.\-']", RegexOptions.Compiled);
 
-    public GuildSystemsImportService(GuildDashboardDbContext db, EdsmDeltaEnrichmentService edsmDelta, ILogger<GuildSystemsImportService> log)
+    public GuildSystemsImportService(
+        GuildDashboardDbContext db,
+        EdsmDeltaEnrichmentService edsmDelta,
+        SystemsImportProgressStore progressStore,
+        ILogger<GuildSystemsImportService> log)
     {
         _db = db;
         _edsmDelta = edsmDelta;
+        _progressStore = progressStore;
         _log = log;
     }
 
@@ -33,7 +39,7 @@ public class GuildSystemsImportService
             guildId, totalReceived, payload == null, payload?.OriginSystemName ?? "(null)");
 
         if (totalReceived == 0)
-            return new GuildSystemsImportResult(0, 0, 0, 0, 0, "Aucun système dans le payload");
+            return new GuildSystemsImportResult(0, 0, 0, 0, 0, "Aucun système dans le payload", null);
 
         var firstRaw = payload!.Systems!.FirstOrDefault();
         if (firstRaw != null)
@@ -169,6 +175,7 @@ public class GuildSystemsImportService
             }
         }
 
+        EdsmEnrichmentResult? edsmResult = null;
         if (inserted > 0 || updated > 0 || deleted > 0)
         {
             var originFromPayload = !string.IsNullOrWhiteSpace(payload.OriginSystemName)
@@ -181,16 +188,8 @@ public class GuildSystemsImportService
                 .Where(g => g.Id == guildId)
                 .ExecuteUpdateAsync(s => s.SetProperty(g => g.LastSystemsImportAt, DateTime.UtcNow), ct);
 
-            // Enrichissement EDSM (tendance 24h). Ne bloque pas l'import si EDSM échoue.
-            var namesToEnrich = guildSystems.Select(s => s.Name).Distinct().ToList();
-            try
-            {
-                await _edsmDelta.EnrichAfterImportAsync(guildId, namesToEnrich, ct);
-            }
-            catch (Exception ex)
-            {
-                _log.LogWarning(ex, "[GuildSystemsImport] Enrichissement EDSM échoué (import Inara reste valide)");
-            }
+            // EDSM DÉSACTIVÉ pour diagnostic POST Systems (blocage avant étape EDSM).
+            // Réactiver EnrichAfterImportAsync après résolution.
         }
 
         var guildName = await _db.Guilds
@@ -203,7 +202,7 @@ public class GuildSystemsImportService
             "[GuildSystemsImport] reçus={TotalReceived} insérés={Inserted} mis à jour={Updated} purgés={Deleted} ignorés={Skipped} | cible={GuildName}",
             totalReceived, inserted, updated, deleted, skipped, guildName);
 
-        return new GuildSystemsImportResult(totalReceived, inserted, updated, skipped, deleted, null);
+        return new GuildSystemsImportResult(totalReceived, inserted, updated, skipped, deleted, null, edsmResult);
     }
 
     /// <summary>Met à jour ControlledSystem avec InfluencePercent, Category, InfluenceDelta24h, State depuis l'import Inara (tooltips cellule Inf, mapping strict).
@@ -454,4 +453,11 @@ public class GuildSystemImportItem
     public string? InaraUrl { get; set; }
 }
 
-public record GuildSystemsImportResult(int TotalReceived, int Inserted, int Updated, int Skipped, int Deleted, string? Error);
+public record GuildSystemsImportResult(
+    int TotalReceived,
+    int Inserted,
+    int Updated,
+    int Skipped,
+    int Deleted,
+    string? Error,
+    EdsmEnrichmentResult? Edsm = null);

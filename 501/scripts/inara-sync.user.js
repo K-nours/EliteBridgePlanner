@@ -68,6 +68,20 @@
     }
   }
 
+  /** postMessage Systems uniquement après réponse backend, jamais avant/pendant. Ignore COOP. */
+  function safePostMessageSystems(type, payload) {
+    if (!openerOrigin || !window.opener) {
+      console.log('[Inara Sync][Systems] postMessage skipped (no opener)');
+      return;
+    }
+    try {
+      window.opener.postMessage({ type, source: 'systems', ...payload }, openerOrigin);
+      console.log('[Inara Sync][Systems] postMessage SUCCESS', type);
+    } catch (e) {
+      console.log('[Inara Sync][Systems] postMessage ERROR (ignored)', e?.message || String(e));
+    }
+  }
+
   // ——— Contexte DASHBOARD : exposer le bridge ———
   if (isDashboard) {
     document.documentElement.setAttribute('data-inara-sync-bridge', 'true');
@@ -135,32 +149,57 @@
     setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 4000);
   }
 
-  // GM_xmlhttpRequest (bypass CORS) — renvoie une Promise<{ok, message?, json}>
+  // GM_xmlhttpRequest (bypass CORS). Diagnostic: onload/onerror/ontimeout/onabort — Promise toujours résolue ou rejetée.
   function gmPost(url, data) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       let settled = false;
-      function finish(result) {
+      const startMs = Date.now();
+      const MAX_PREVIEW = 200;
+
+      function finish(result, eventType, status, statusText, respPreview) {
         if (settled) return;
         settled = true;
-        resolve(result);
+        clearTimeout(safetyTimer);
+        const elapsedMs = Date.now() - startMs;
+        const preview = (respPreview || '').slice(0, MAX_PREVIEW);
+        console.log('[Inara Sync][gmPost] event=', eventType, 'status=', status, 'statusText=', statusText, 'elapsedMs=', elapsedMs, 'responsePreview=', preview);
+        if (result) result.gmPostDiag = { event: eventType, status, statusText, elapsedMs, responsePreview: preview };
+        resolve(result || { ok: false, message: statusText || eventType, json: {}, responseText: '' });
       }
+
+      const safetyTimer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(safetyTimer);
+        const elapsedMs = Date.now() - startMs;
+        console.log('[Inara Sync][gmPost] SAFETY: aucun callback après', elapsedMs, 'ms — reject');
+        reject(new Error('gmPost: aucun callback après ' + elapsedMs + ' ms'));
+      }, 65000);
+
       GM_xmlhttpRequest({
         method: 'POST',
         url,
         headers: { 'Content-Type': 'application/json' },
         data: typeof data === 'string' ? data : JSON.stringify(data),
         timeout: 60000,
-        ontimeout: () => finish({ ok: false, message: 'Délai d’attente dépassé (60s). Vérifiez que le backend répond.', json: {} }),
         onload: (res) => {
-          let json = null;
-          try { json = JSON.parse(res.responseText || '{}'); } catch (e) { json = {}; }
-          if (json === null || typeof json !== 'object') json = {};
+          const respText = res.responseText || '';
+          let json = {};
+          try { json = JSON.parse(respText) || {}; } catch (e) { /**/ }
+          if (typeof json !== 'object') json = {};
           const ok = res.status >= 200 && res.status < 300;
           const msg = json.error || json.message || res.statusText || (ok ? 'OK' : `Erreur ${res.status}`);
-          finish({ ok, message: msg, json });
+          finish({ ok, message: msg, json, responseText: respText }, 'onload', res.status, res.statusText || '', respText);
         },
         onerror: (err) => {
-          finish({ ok: false, message: (err && err.message) || 'Erreur réseau. Vérifiez que le backend est démarré.', json: {} });
+          const st = (err && err.message) || 'Network error';
+          finish({ ok: false, message: st, json: {}, responseText: '' }, 'onerror', 0, st, '');
+        },
+        ontimeout: () => {
+          finish({ ok: false, message: 'Délai dépassé (60s).', json: {}, responseText: '' }, 'ontimeout', 0, 'Timeout', '');
+        },
+        onabort: () => {
+          finish({ ok: false, message: 'Requête interrompue (abort).', json: {}, responseText: '' }, 'onabort', 0, 'Aborted', '');
         }
       });
     });
@@ -168,6 +207,10 @@
 
   // ——— Contexte FACTION PRESENCE : extraction systèmes ———
   if (isFactionPresence) {
+    /** Diagnostic Systems : true = envoyer 1 seul système (test volume vs champ). */
+    const DEBUG_SEND_MINIMAL = false;
+    /** Limite de systèmes après extraction. 0 = pas de limite. 10, 25, 50, 100, 173 pour tests volume. */
+    const DEBUG_LIMIT_SYSTEMS = 0;
     const SPECIAL_CHARS = /[^\p{L}\p{N}\s.\-']/gu;
     const PERCENT_REGEX = /(\d+(?:[.,]\d+)?)\s*%?/;
     const UPDATED_REGEX = /(\d+\s*(?:day|hour|minute|week)s?\s*(?:ago)?|il y a \d+\s*(?:jour|heure|minute)s?)/i;
@@ -467,8 +510,12 @@
     }
 
     async function extractSystems() {
+      console.log('[Inara Sync][Systems][DIAG] extraction START');
       const targetTable = getSystemsTable();
-      if (!targetTable) return { systems: [], error: 'Table de présence introuvable' };
+      if (!targetTable) {
+        console.log('[Inara Sync][Systems][DIAG] extraction DONE (error: table absente)');
+        return { systems: [], error: 'Table de présence introuvable' };
+      }
 
       const linesPerPage = Array.from(targetTable.querySelectorAll('tbody tr')).filter((r) => r.querySelector('a[href*="/elite/starsystem/"]')).length;
       const allRows = Array.from(targetTable.querySelectorAll('tr'));
@@ -519,13 +566,28 @@
       } else {
         systems.push(...parseDataRowsFromTable(targetTable, indices, seen));
       }
-
+      console.log('[Inara Sync][Systems][DIAG] extraction DONE', systems.length, 'systèmes');
       return { systems, error: null };
     }
 
-    async function postSystems(payload) {
+    async function postSystems(payload, diag) {
       const url = `${BACKEND_URL.replace(/\/$/, '')}/api/guild/systems/import`;
-      const r = await gmPost(url, payload);
+      const payloadStr = JSON.stringify(payload);
+      console.log('[Inara Sync][Systems][DIAG] payload bytes=', payloadStr.length);
+      console.log('[Inara Sync][Systems][DIAG] firstSystem JSON=', JSON.stringify(payload.systems?.[0], null, 2));
+      if (diag) console.log('[Inara Sync][Systems][DIAG] isSystemsSubmitting avant post=', diag.submitting);
+      console.log('[Inara Sync][Systems][DIAG] postSystems START → gmPost');
+      console.log('[Inara Sync][Systems] postMessage START skipped');
+      let r;
+      try {
+        r = await gmPost(url, payload);
+        console.log('[Inara Sync][Systems][DIAG] gmPost returned');
+      } catch (e) {
+        console.log('[Inara Sync][Systems][DIAG] gmPost threw', e?.message || e);
+        return { ok: false, message: (e && e.message) || 'Erreur gmPost', json: {} };
+      }
+      console.log('[Inara Sync][Systems][DIAG] gmPost ok=', r.ok, 'gmPostDiag=', r.gmPostDiag, 'response raw(200)=', (r.responseText || '').slice(0, 200));
+      if (diag) console.log('[Inara Sync][Systems][DIAG] isSystemsSubmitting après réponse=', diag.submitting);
       if (!r.ok) return { ok: false, message: r.message, json: {} };
       const j = r.json ?? {};
       const inserted = j.inserted ?? 0;
@@ -537,7 +599,9 @@
       return { ok: true, message: msg, json: j };
     }
 
-    async function runSystems(mode) {
+    async function runSystems(mode, limitSystems) {
+      let isSystemsSubmitting = false;
+      console.log('[Inara Sync][Systems][DIAG] isSystemsSubmitting au clic=', isSystemsSubmitting);
       showToast('Extraction en cours (chargement de toutes les pages)…');
       const { systems, error } = await extractSystems();
       if (error) { showToast(error, true); return; }
@@ -545,8 +609,16 @@
         showToast('Aucun système extrait. Vérifiez que la page affiche le tableau de présence.', true);
         return;
       }
-      const originSystemName = extractOriginFromHeader();
-      const payload = { originSystemName: originSystemName || undefined, systems };
+      const forceMinimal = mode === 'post-minimal';
+      const effectiveLimit = limitSystems ?? (DEBUG_LIMIT_SYSTEMS > 0 ? DEBUG_LIMIT_SYSTEMS : 0);
+      let systemsToSend = systems;
+      if (forceMinimal || (DEBUG_SEND_MINIMAL && systems.length > 0)) systemsToSend = systems.slice(0, 1);
+      else if (effectiveLimit > 0) systemsToSend = systems.slice(0, effectiveLimit);
+      const originSystemName = forceMinimal ? 'HIP 4332' : extractOriginFromHeader();
+      const payload = { originSystemName: originSystemName || undefined, systems: systemsToSend };
+      console.log('[Inara Sync][Systems][DIAG] payload BUILD START');
+      console.log('[Inara Sync][Systems][DIAG] payload BUILD DONE', 'extracted=', systems.length, 'sending=', systemsToSend.length, 'limit=', effectiveLimit || 'none');
+      if (forceMinimal) console.log('[Inara Sync][Systems] TEST A: originSystemName=HIP 4332, 1 système');
       if (mode === 'download') {
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
@@ -556,12 +628,24 @@
         URL.revokeObjectURL(a.href);
         showToast(`${systems.length} système(s) téléchargé(s)`);
       } else {
-        showToast('Envoi en cours…');
-        postSystems(payload)
-          .then((r) => showToast(r.message, !r.ok))
+        isSystemsSubmitting = true;
+        console.log('[Inara Sync][Systems][DIAG] isSystemsSubmitting avant post=', isSystemsSubmitting);
+        showToast(forceMinimal ? 'Test A minimal…' : 'Envoi en cours…');
+        const diag = { submitting: true };
+        postSystems(payload, diag)
+          .then((r) => {
+            console.log('[Inara Sync][Systems][DIAG] postSystems SUCCESS ok=', r.ok);
+            showToast(r.message, !r.ok);
+          })
           .catch((err) => {
+            console.log('[Inara Sync][Systems][DIAG] postSystems ERROR', err);
             const msg = (err && err.message) || String(err) || 'Erreur inattendue';
             showToast('Erreur : ' + msg, true);
+          })
+          .finally(() => {
+            isSystemsSubmitting = false;
+            diag.submitting = false;
+            console.log('[Inara Sync][Systems][DIAG] after postSystems (finally) isSystemsSubmitting=', isSystemsSubmitting);
           });
       }
     }
@@ -598,46 +682,69 @@
       post.textContent = 'Envoyer au backend';
       post.onclick = (e) => { e.stopPropagation(); runSystems('post'); menu.classList.remove('inara-sync-menu--open'); };
 
+      const postMin = document.createElement('button');
+      postMin.className = 'inara-sync-menu-item';
+      postMin.textContent = 'Test minimal (1 système)';
+      postMin.title = 'Envoie 1 seul système pour diagnostic (volume vs champ)';
+      postMin.onclick = (e) => { e.stopPropagation(); runSystems('post-minimal'); menu.classList.remove('inara-sync-menu--open'); };
+
       menu.appendChild(dl);
       menu.appendChild(post);
+      menu.appendChild(postMin);
+      [10, 25, 50, 100, 173].forEach((n) => {
+        const b = document.createElement('button');
+        b.className = 'inara-sync-menu-item';
+        b.textContent = `Envoyer (${n} systèmes)`;
+        b.title = `Extraction réelle, payload limité à ${n} pour diagnostic volume`;
+        b.onclick = (e) => { e.stopPropagation(); runSystems('post', n); menu.classList.remove('inara-sync-menu--open'); };
+        menu.appendChild(b);
+      });
       container.appendChild(btn);
       container.appendChild(menu);
       document.body.appendChild(container);
     }
     if (autoImport) {
       setTimeout(async () => {
-        notifyOpenerStarted('systems');
+        console.log('[Inara Sync][Systems] postMessage START skipped');
         showToast('Extraction en cours (chargement de toutes les pages)…');
         const { systems, error } = await extractSystems();
         if (error) {
           showToast(error, true);
-          notifyOpenerError('systems', error);
+          safePostMessageSystems('inara-sync-error', { message: error });
           return;
         }
         if (systems.length === 0) {
           const msg = 'Aucun système extrait. Vérifiez que la page affiche le tableau de présence.';
           showToast(msg, true);
-          notifyOpenerError('systems', msg);
+          safePostMessageSystems('inara-sync-error', { message: msg });
           return;
         }
         const originSystemName = extractOriginFromHeader();
+        const systemsToSend = DEBUG_SEND_MINIMAL && systems.length > 0 ? systems.slice(0, 1) : systems;
         showToast('Envoi en cours…');
-        postSystems({ originSystemName: originSystemName || undefined, systems })
+        postSystems({ originSystemName: originSystemName || undefined, systems: systemsToSend })
           .then((r) => {
             if (!r.ok) {
               showToast(r.message, true);
-              notifyOpenerError('systems', r.message);
+              safePostMessageSystems('inara-sync-error', { message: r.message });
               return;
             }
             showToast(r.message);
             const j = r.json ?? {};
-            notifyOpenerSuccess('systems', { inserted: j.inserted ?? 0, updated: j.updated ?? 0, total: j.totalReceived ?? systems.length });
+            safePostMessageSystems('inara-sync-success', {
+              detail: {
+                inserted: j.inserted ?? 0,
+                updated: j.updated ?? 0,
+                total: j.totalReceived ?? systems.length,
+                edsm: j.edsm,
+              },
+            });
             window.close();
           })
           .catch((err) => {
             const msg = (err && err.message) || String(err) || 'Erreur inattendue';
             showToast('Erreur : ' + msg, true);
-            notifyOpenerError('systems', msg);
+            safePostMessageSystems('inara-sync-error', { message: msg });
           });
       }, 1200);
     }

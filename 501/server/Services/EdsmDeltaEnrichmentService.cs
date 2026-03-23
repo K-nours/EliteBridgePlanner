@@ -30,22 +30,31 @@ public class EdsmDeltaEnrichmentService
 
     /// <summary>
     /// Après un import Inara réussi, enrichit les ControlledSystems avec InfluenceDelta24h depuis EDSM.
+    /// Mode actuel : requêtes unitaires (un appel EDSM par système).
     /// Si EDSM échoue pour un système, l'import Inara reste valide (on continue pour les autres).
     /// </summary>
-    public async Task EnrichAfterImportAsync(int guildId, IReadOnlyList<string> systemNames, CancellationToken ct = default)
+    /// <param name="onProgress">(current, total) appelé après chaque système traité.</param>
+    public async Task<EdsmEnrichmentResult> EnrichAfterImportAsync(
+        int guildId,
+        IReadOnlyList<string> systemNames,
+        Action<int, int>? onProgress = null,
+        CancellationToken ct = default)
     {
-        if (systemNames.Count == 0) return;
+        const string mode = "unitaire";
+        if (systemNames.Count == 0)
+            return new EdsmEnrichmentResult(mode, 0, null);
 
         var guild = await _db.Guilds
             .AsNoTracking()
             .FirstOrDefaultAsync(g => g.Id == guildId, ct);
-        if (guild == null) return;
+        if (guild == null)
+            return new EdsmEnrichmentResult(mode, 0, "Guilde introuvable");
 
         var factionName = guild.FactionName ?? guild.Name;
         if (string.IsNullOrWhiteSpace(factionName))
         {
             _log.LogInformation("[EdsmDelta] FactionName non configuré, enrichissement ignoré");
-            return;
+            return new EdsmEnrichmentResult(mode, 0, null);
         }
 
         var auditSet = new HashSet<string>(AuditSystemNames.Select(Normalize), StringComparer.OrdinalIgnoreCase);
@@ -53,8 +62,15 @@ public class EdsmDeltaEnrichmentService
         client.Timeout = TimeSpan.FromSeconds(15);
         client.DefaultRequestHeaders.Add("User-Agent", "GuildDashboard/1.0");
 
-        foreach (var systemName in systemNames.Distinct())
+        var distinctNames = systemNames.Distinct().ToList();
+        var total = distinctNames.Count;
+        var enriched = 0;
+        var current = 0;
+        Exception? lastEx = null;
+
+        foreach (var systemName in distinctNames)
         {
+            current++;
             try
             {
                 await Task.Delay(DelayBetweenCallsMs, ct);
@@ -64,6 +80,7 @@ public class EdsmDeltaEnrichmentService
                 {
                     if (auditSet.Contains(Normalize(systemName)))
                         _log.LogInformation("[EdsmDelta] {System} — absent: {Reason}", systemName, reason);
+                    onProgress?.Invoke(current, total);
                     continue;
                 }
 
@@ -76,6 +93,7 @@ public class EdsmDeltaEnrichmentService
                     cs.UpdatedAt = DateTime.UtcNow;
                     stored = deltaRaw;
                     await _db.SaveChangesAsync(ct);
+                    enriched++;
                 }
 
                 if (auditSet.Contains(Normalize(systemName)))
@@ -84,13 +102,18 @@ public class EdsmDeltaEnrichmentService
             }
             catch (Exception ex)
             {
+                lastEx = ex;
                 var isAudit = auditSet.Contains(Normalize(systemName));
                 if (isAudit)
                     _log.LogWarning(ex, "[EdsmDelta] {System} — erreur EDSM: {Message}", systemName, ex.Message);
                 else
                     _log.LogDebug(ex, "[EdsmDelta] {System} — erreur (ignorée)", systemName);
             }
+            onProgress?.Invoke(current, total);
         }
+
+        var error = lastEx != null ? $"erreur / {lastEx.Message}" : null;
+        return new EdsmEnrichmentResult(mode, enriched, error);
     }
 
     /// <summary>
@@ -173,3 +196,6 @@ public class EdsmDeltaEnrichmentService
 
     private static string Normalize(string? s) => string.IsNullOrWhiteSpace(s) ? "" : s.Trim();
 }
+
+/// <summary>Résultat de l'enrichissement EDSM (tendances 24h).</summary>
+public record EdsmEnrichmentResult(string Mode, int EnrichedCount, string? Error);
