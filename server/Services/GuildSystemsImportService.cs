@@ -325,6 +325,7 @@ public class GuildSystemsImportService
         if (raw.Allegiance != null) entity.Allegiance = raw.Allegiance;
         if (raw.Power != null) entity.Power = string.IsNullOrWhiteSpace(raw.Power) ? null : raw.Power;
         entity.Population = raw.Population ?? entity.Population;
+        if (raw.InaraUrl != null) entity.InaraUrl = string.IsNullOrWhiteSpace(raw.InaraUrl) ? null : raw.InaraUrl.Trim();
         entity.FactionCount = raw.FactionCount ?? entity.FactionCount;
         entity.StationCount = raw.StationCount ?? entity.StationCount;
         if (raw.InfluencePercent.HasValue)
@@ -342,10 +343,12 @@ public class GuildSystemsImportService
 
     private static GuildSystem ToGuildSystem(int guildId, GuildSystemImportItem raw, string normalizedName)
     {
+        var inaraUrl = !string.IsNullOrWhiteSpace(raw.InaraUrl) ? raw.InaraUrl!.Trim() : null;
         return new GuildSystem
         {
             GuildId = guildId,
             Name = normalizedName,
+            InaraUrl = inaraUrl,
             Government = raw.Government,
             Allegiance = raw.Allegiance,
             Power = string.IsNullOrWhiteSpace(raw.Power) ? null : raw.Power,

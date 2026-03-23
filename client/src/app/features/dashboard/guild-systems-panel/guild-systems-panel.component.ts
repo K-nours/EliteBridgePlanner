@@ -221,9 +221,11 @@ export class GuildSystemsPanelComponent implements OnInit {
     return this.copiedSystemId() === sysId ? 'Copié' : 'Copier';
   }
 
-  /** Ouvre le système sur Inara dans un nouvel onglet. */
-  openSystemInara(systemName: string): void {
-    const url = `https://inara.cz/elite/search/?search=${encodeURIComponent(systemName)}`;
+  /** Ouvre le système sur Inara dans un nouvel onglet. Si inaraUrl est présent, ouvre la page directe, sinon recherche par nom. */
+  openSystemInara(sys: GuildSystemBgsDto): void {
+    const url = sys.inaraUrl && sys.inaraUrl.trim()
+      ? sys.inaraUrl.trim()
+      : `https://inara.cz/elite/search/?search=${encodeURIComponent(sys.name)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
   }
 

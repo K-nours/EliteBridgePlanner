@@ -483,6 +483,8 @@
         const name = cleanName(link.textContent);
         if (!name || seen.has(name.toLowerCase())) continue;
         seen.add(name.toLowerCase());
+        const href = link.getAttribute('href');
+        const inaraUrl = href ? (href.startsWith('http') ? href : 'https://inara.cz' + (href.startsWith('/') ? '' : '/') + href) : undefined;
         const get = (i) => (i >= 0 && cells[i] ? (cells[i].textContent || '').trim() : null);
         const infCellEl = iI >= 0 && cells[iI] ? cells[iI] : null;
         const tags = extractTagsFromRow(row);
@@ -490,6 +492,7 @@
         const { tooltips: rawTooltips, states: extractedStates } = extractStatesFromInfluenceCellTooltips(infCellEl);
         const system = {
           name,
+          inaraUrl,
           government: get(iG),
           allegiance: get(iA),
           power: cells[iP] ? extractPower(cells[iP]) : null,

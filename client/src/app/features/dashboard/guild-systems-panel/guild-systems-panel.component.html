@@ -109,7 +109,7 @@
     [class]="getInfluenceClass(sys)"
     [class.system-row--hq]="sys.isHeadquarter"
     [class.system-row--copied]="copiedSystemId() === sys.id"
-    (click)="openSystemInara(sys.name)"
+    (click)="openSystemInara(sys)"
     (contextmenu)="onSystemContextMenu($event, sys)">
     <span class="system-row-left">
       <span class="system-name">@if (sys.isHeadquarter) { <span class="hq-mark">🏛️</span> }{{ sys.name }}</span>

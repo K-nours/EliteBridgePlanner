@@ -328,6 +328,22 @@ public class GuildController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>GET /api/guild/systems/diagnostic-inara-urls — vérifie si les InaraUrl sont en base (échantillon).</summary>
+    [HttpGet("systems/diagnostic-inara-urls")]
+    public async Task<IActionResult> GetDiagnosticInaraUrls([FromQuery] int? guildId, [FromQuery] int limit = 10, CancellationToken ct = default)
+    {
+        var id = ResolveGuildId(guildId);
+        var sample = await _db.GuildSystems
+            .AsNoTracking()
+            .Where(s => s.GuildId == id)
+            .OrderBy(s => s.Name)
+            .Take(limit)
+            .Select(s => new { s.Name, s.InaraUrl })
+            .ToListAsync(ct);
+        var withUrl = sample.Count(s => !string.IsNullOrEmpty(s.InaraUrl));
+        return Ok(new { total = sample.Count, withInaraUrl = withUrl, sample });
+    }
+
     /// <summary>GET /api/guild/systems/audit?systems=HIP 4332,Reticuli,... — audit ciblé pour comparaison Inara/DB/API.</summary>
     [HttpGet("systems/audit")]
     public async Task<IActionResult> GetSystemsAudit([FromQuery] string? systems, [FromQuery] int? guildId)

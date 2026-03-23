@@ -24,4 +24,6 @@ public class GuildSystem
     public int StationCount { get; set; }
     /// <summary>Texte brut de dernière mise à jour (ex: "il y a 6 jours").</summary>
     public string? LastUpdatedText { get; set; }
+    /// <summary>URL Inara du système (ex: https://inara.cz/elite/starsystem/114520/). Récupérée à l'import depuis le userscript.</summary>
+    public string? InaraUrl { get; set; }
 }
