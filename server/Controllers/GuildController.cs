@@ -20,9 +20,10 @@ public class GuildController : ControllerBase
     private readonly GuildSystemsImportService _importService;
     private readonly GuildSystemsSeedLoader _seedLoader;
     private readonly SystemsImportProgressStore _importProgressStore;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<GuildController> _log;
 
-    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader, SystemsImportProgressStore importProgressStore, ILogger<GuildController> log)
+    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader, SystemsImportProgressStore importProgressStore, IServiceScopeFactory scopeFactory, ILogger<GuildController> log)
     {
         _service = service;
         _dashboard = dashboard;
@@ -34,19 +35,61 @@ public class GuildController : ControllerBase
         _importService = importService;
         _seedLoader = seedLoader;
         _importProgressStore = importProgressStore;
+        _scopeFactory = scopeFactory;
         _log = log;
     }
 
-    /// <summary>GET /api/guild/systems/import-progress — progression EDSM pendant un import en cours. Pour le sync status du dashboard.</summary>
+    /// <summary>GET /api/guild/systems/import-progress — progression du job EDSM enrich-edsm (pour sync status).</summary>
     [HttpGet("systems/import-progress")]
     public IActionResult GetImportProgress([FromQuery] int? guildId)
     {
         var id = ResolveGuildId(guildId);
         var progress = _importProgressStore.Get(id);
         if (!progress.HasValue)
-            return Ok(new { phase = (string?)null, mode = (string?)null, current = 0, total = 0, active = false });
-        var (phase, mode, current, total) = progress.Value;
-        return Ok(new { phase, mode, current, total, active = true });
+            return Ok(new { phase = (string?)null, mode = (string?)null, current = 0, total = 0, active = false, enrichedCount = (int?)null, error = (string?)null });
+        var (phase, mode, current, total, enrichedCount, error) = progress.Value;
+        return Ok(new { phase, mode, current, total, active = true, enrichedCount, error });
+    }
+
+    /// <summary>POST /api/guild/systems/enrich-edsm — lance l'enrichissement EDSM (tendances 24h) en arrière-plan. Retourne immédiatement. Progression via import-progress.</summary>
+    [HttpPost("systems/enrich-edsm")]
+    public async Task<IActionResult> EnrichEdsm([FromQuery] int? guildId, CancellationToken ct = default)
+    {
+        var id = ResolveGuildId(guildId);
+        var systemNames = await _db.GuildSystems
+            .AsNoTracking()
+            .Where(s => s.GuildId == id)
+            .Select(s => s.Name)
+            .ToListAsync(ct);
+        if (systemNames.Count == 0)
+            return Ok(new { started = false, message = "Aucun système à enrichir" });
+
+        var progressStore = _importProgressStore;
+        var scopeFactory = _scopeFactory;
+        var log = _log;
+        progressStore.Set(id, "edsm", "unitaire", 0, systemNames.Count);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var edsmDelta = scope.ServiceProvider.GetRequiredService<EdsmDeltaEnrichmentService>();
+                var result = await edsmDelta.EnrichAfterImportAsync(id, systemNames, (current, total) =>
+                {
+                    progressStore.Set(id, "edsm", "unitaire", current, total);
+                }, CancellationToken.None);
+                progressStore.Set(id, "done", result.Mode, systemNames.Count, systemNames.Count, result.EnrichedCount, result.Error);
+                log.LogInformation("[EnrichEdsm] Terminé: enrichis={Enriched} erreur={Error}", result.EnrichedCount, result.Error ?? "(aucune)");
+            }
+            catch (Exception ex)
+            {
+                log.LogError(ex, "[EnrichEdsm] Erreur: {Message}", ex.Message);
+                progressStore.Set(id, "done", "unitaire", systemNames.Count, systemNames.Count, 0, ex.Message);
+            }
+        }, ct);
+
+        return Accepted(new { started = true, total = systemNames.Count, message = "Enrichissement EDSM démarré en arrière-plan" });
     }
 
     /// <summary>GET /api/integrations/elitebgs/test — diagnostic Elite BGS. HTML si Accept:text/html, sinon JSON.</summary>
@@ -413,7 +456,7 @@ public class GuildController : ControllerBase
 
         try
         {
-            var result = await _importService.ImportAsync(id, payload, purgeAbsent: true, ct);
+            var result = await _importService.ImportAsync(id, payload, purgeAbsent: false, ct);
             if (result.Error != null)
             {
                 var errResponse = new { error = result.Error, totalReceived = result.TotalReceived, inserted = result.Inserted, updated = result.Updated, skipped = result.Skipped, deleted = result.Deleted };
@@ -430,12 +473,6 @@ public class GuildController : ControllerBase
                 deleted = result.Deleted,
                 totalProcessed = result.Inserted + result.Updated + result.Skipped,
                 error = result.Error,
-                edsm = result.Edsm == null ? null : new
-                {
-                    mode = result.Edsm.Mode,
-                    enrichedCount = result.Edsm.EnrichedCount,
-                    error = result.Edsm.Error,
-                },
             };
             var okJson = System.Text.Json.JsonSerializer.Serialize(okResponse);
             _log.LogInformation("[ImportSystems] réponse Ok (300 chars): {Preview}",

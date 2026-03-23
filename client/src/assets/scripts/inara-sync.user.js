@@ -685,23 +685,8 @@
       post.textContent = 'Envoyer au backend';
       post.onclick = (e) => { e.stopPropagation(); runSystems('post'); menu.classList.remove('inara-sync-menu--open'); };
 
-      const postMin = document.createElement('button');
-      postMin.className = 'inara-sync-menu-item';
-      postMin.textContent = 'Test minimal (1 système)';
-      postMin.title = 'Envoie 1 seul système pour diagnostic (volume vs champ)';
-      postMin.onclick = (e) => { e.stopPropagation(); runSystems('post-minimal'); menu.classList.remove('inara-sync-menu--open'); };
-
       menu.appendChild(dl);
       menu.appendChild(post);
-      menu.appendChild(postMin);
-      [10, 25, 50, 100, 173].forEach((n) => {
-        const b = document.createElement('button');
-        b.className = 'inara-sync-menu-item';
-        b.textContent = `Envoyer (${n} systèmes)`;
-        b.title = `Extraction réelle, payload limité à ${n} pour diagnostic volume`;
-        b.onclick = (e) => { e.stopPropagation(); runSystems('post', n); menu.classList.remove('inara-sync-menu--open'); };
-        menu.appendChild(b);
-      });
       container.appendChild(btn);
       container.appendChild(menu);
       document.body.appendChild(container);

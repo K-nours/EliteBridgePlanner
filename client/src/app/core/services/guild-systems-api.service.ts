@@ -48,10 +48,18 @@ export class GuildSystemsApiService {
     return this.http.post<{ updated: number }>(`${this.base}/guild/systems/sync`, {});
   }
 
-  /** Progression EDSM pendant un import (pour sync status). */
-  getImportProgress(): Observable<{ phase?: string; mode?: string; current: number; total: number; active: boolean }> {
-    return this.http.get<{ phase?: string; mode?: string; current: number; total: number; active: boolean }>(
+  /** Progression du job EDSM enrich-edsm (pour sync status). */
+  getImportProgress(): Observable<{ phase?: string; mode?: string; current: number; total: number; active: boolean; enrichedCount?: number; error?: string }> {
+    return this.http.get<{ phase?: string; mode?: string; current: number; total: number; active: boolean; enrichedCount?: number; error?: string }>(
       `${this.base}/guild/systems/import-progress`
+    );
+  }
+
+  /** Déclenche l'enrichissement EDSM (tendances 24h) en arrière-plan. À appeler après un import Inara réussi. */
+  enrichEdsm(): Observable<{ started: boolean; total?: number; message: string }> {
+    return this.http.post<{ started: boolean; total?: number; message: string }>(
+      `${this.base}/guild/systems/enrich-edsm`,
+      {}
     );
   }
 }

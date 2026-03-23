@@ -1421,14 +1421,37 @@ export class DashboardComponent implements OnInit {
     return lines;
   });
 
+  /** Déclenche l'enrichissement EDSM après un import réussi, puis poll la progression. */
+  private triggerEdsmEnrichment(): void {
+    this.guildSystemsApi.enrichEdsm().subscribe({
+      next: (res) => {
+        if (res.started && res.total) {
+          this.addLog(`Enrichissement EDSM démarré (${res.total} système${res.total > 1 ? 's' : ''})`);
+          this.startSystemsImportPolling();
+        }
+      },
+      error: (err) => {
+        const msg = err?.error?.error ?? err?.error?.message ?? err?.message ?? 'Erreur';
+        this.addLog(`EDSM : impossible de démarrer — ${msg}`);
+      },
+    });
+  }
+
   private startSystemsImportPolling(): void {
     this.stopSystemsImportPolling();
     this.systemsImportPollingRef = setInterval(() => {
       this.guildSystemsApi.getImportProgress().subscribe({
         next: (p) => {
-          if (!p.active || !p.mode) return;
-          const modeLabel = p.mode === 'groupée' ? 'requête groupée' : 'requêtes unitaires';
-          this.systemsImportProgress.set(`EDSM : ${modeLabel} (${p.current}/${p.total})`);
+          if (!p.active) return;
+          if (p.phase === 'edsm' && p.mode) {
+            const modeLabel = p.mode === 'groupée' ? 'requête groupée' : 'requêtes unitaires';
+            this.systemsImportProgress.set(`EDSM : ${modeLabel} (${p.current}/${p.total})`);
+          } else if (p.phase === 'done') {
+            this.stopSystemsImportPolling();
+            this.systemsImportProgress.set(null);
+            this.addEdsmResultLogs(p.enrichedCount, p.error);
+            this.guildSystemsSync.loadSystems();
+          }
         },
       });
     }, 400);
@@ -1441,23 +1464,19 @@ export class DashboardComponent implements OnInit {
     }
   }
 
-  private addSystemsSyncSuccessLogs(detail: { inserted?: number; updated?: number; total?: number; edsm?: { mode?: string; enrichedCount?: number; error?: string } }): void {
+  private addImportSuccessLog(detail: { inserted?: number; updated?: number; total?: number }): void {
     const total = detail.total ?? 0;
     const inserted = detail.inserted ?? 0;
     const updated = detail.updated ?? 0;
     const changed = inserted + updated;
     this.addLog(`Import Inara : ${total} système${total > 1 ? 's' : ''} reçu${total > 1 ? 's' : ''}, ${changed} mis à jour`);
-    const edsm = detail.edsm;
-    if (!edsm) return;
-    this.addLog('Contact EDSM…');
-    if (edsm) {
-      const modeLabel = edsm.mode === 'groupée' ? 'requête groupée' : 'requêtes unitaires';
-      this.addLog(`EDSM : ${modeLabel}`);
-      if (edsm.error) {
-        this.addLog(`EDSM : erreur / ${edsm.error}`);
-      } else if (edsm.enrichedCount != null) {
-        this.addLog(edsm.enrichedCount > 0 ? `EDSM : ${edsm.enrichedCount} tendance${edsm.enrichedCount > 1 ? 's' : ''} enrichie${edsm.enrichedCount > 1 ? 's' : ''}` : 'EDSM : aucun delta disponible');
-      }
+  }
+
+  private addEdsmResultLogs(enrichedCount?: number, error?: string): void {
+    if (error) {
+      this.addLog(`EDSM : erreur — ${error}`);
+    } else if (enrichedCount != null) {
+      this.addLog(enrichedCount > 0 ? `EDSM : ${enrichedCount} tendance${enrichedCount > 1 ? 's' : ''} 24h enrichie${enrichedCount > 1 ? 's' : ''}` : 'EDSM : aucun delta disponible');
     }
   }
 
@@ -1505,10 +1524,6 @@ export class DashboardComponent implements OnInit {
           this.addLog(`Import ${labels[src]} démarré`);
           return;
         }
-        if (d.type === 'inara-systems-post-started') {
-          this.startSystemsImportPolling();
-          return;
-        }
         if (d.type === 'inara-sync-success') {
           if (typeof console !== 'undefined' && console.log) {
             console.log('[Dashboard] postMessage inara-sync-success RECU — type:', src, '— refresh démarré');
@@ -1518,10 +1533,9 @@ export class DashboardComponent implements OnInit {
           if (src === 'avatar') this.lastAvatarSyncError.set(null);
           this.guildSettings.load();
           if (src === 'systems') {
-            this.stopSystemsImportPolling();
-            this.systemsImportProgress.set(null);
             this.guildSystemsSync.loadSystems();
-            this.addSystemsSyncSuccessLogs(detail as { inserted?: number; updated?: number; total?: number; edsm?: { mode?: string; enrichedCount?: number; error?: string } });
+            this.addImportSuccessLog(detail as { inserted?: number; updated?: number; total?: number });
+            this.triggerEdsmEnrichment();
           }
           if (src === 'roster' || src === 'avatar') this.loadCommanders();
           if (src === 'roster' && detail) {
