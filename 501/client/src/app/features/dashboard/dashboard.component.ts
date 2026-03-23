@@ -118,21 +118,40 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             <div class="box map-box">
               <h3>Carte The 501st Guild</h3>
               <div class="map-filter-counters">
-                @for (fb of mapFilterCounts(); track fb.value) {
-                  <button type="button"
-                    class="map-counter"
-                    [class.map-counter--active]="guildSystemsSync.systemsFilter() === fb.value"
-                    [class.map-counter--healthy]="fb.value === 'healthy'"
-                    [class.map-counter--critical]="fb.value === 'critical'"
-                    [class.map-counter--conflicts]="fb.value === 'conflicts'"
-                    [class.map-counter--surveillance-ok]="fb.value === 'surveillance' && !fb.surveillanceHasCritical"
-                    [class.map-counter--surveillance-critical]="fb.value === 'surveillance' && fb.surveillanceHasCritical"
-                    [disabled]="fb.count === 0 && fb.value !== 'all'"
-                    (click)="setSystemsFilter(fb.value)">
-                    <span class="map-counter-label">{{ fb.label }}</span>
-                    <span class="map-counter-value">{{ fb.count }}</span>
-                  </button>
-                }
+                <div class="map-filter-counters-left">
+                  @for (fb of mapFilterCountsLeft(); track fb.value) {
+                    <button type="button"
+                      class="map-counter"
+                      [class.map-counter--active]="guildSystemsSync.systemsFilter() === fb.value"
+                      [class.map-counter--healthy]="fb.value === 'healthy'"
+                      [class.map-counter--critical]="fb.value === 'critical'"
+                      [class.map-counter--conflicts]="fb.value === 'conflicts'"
+                      [class.map-counter--surveillance-ok]="fb.value === 'surveillance' && !fb.surveillanceHasCritical"
+                      [class.map-counter--surveillance-critical]="fb.value === 'surveillance' && fb.surveillanceHasCritical"
+                      [disabled]="fb.count === 0 && fb.value !== 'all'"
+                      (click)="setSystemsFilter(fb.value)">
+                      <span class="map-counter-label">{{ fb.label }}</span>
+                      <span class="map-counter-value">{{ fb.count }}</span>
+                    </button>
+                  }
+                </div>
+                <div class="map-filter-counters-right">
+                  @for (fb of mapFilterCountsRight(); track fb.value) {
+                    <button type="button"
+                      class="map-counter"
+                      [class.map-counter--active]="guildSystemsSync.systemsFilter() === fb.value"
+                      [class.map-counter--healthy]="fb.value === 'healthy'"
+                      [class.map-counter--critical]="fb.value === 'critical'"
+                      [class.map-counter--conflicts]="fb.value === 'conflicts'"
+                      [class.map-counter--surveillance-ok]="fb.value === 'surveillance' && !fb.surveillanceHasCritical"
+                      [class.map-counter--surveillance-critical]="fb.value === 'surveillance' && fb.surveillanceHasCritical"
+                      [disabled]="fb.count === 0 && fb.value !== 'all'"
+                      (click)="setSystemsFilter(fb.value)">
+                      <span class="map-counter-label">{{ fb.label }}</span>
+                      <span class="map-counter-value">{{ fb.count }}</span>
+                    </button>
+                  }
+                </div>
               </div>
             </div>
           </div>
@@ -699,8 +718,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .box-sync-status {
       display: flex;
       flex-direction: column;
-      flex: 0 1 33.333%;
-      max-height: 33.333%;
+      flex: 0 1 16.666%;
+      max-height: 16.666%;
       min-height: 0;
     }
     .sync-status-header {
@@ -827,6 +846,20 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       border: 1px solid rgba(0, 212, 255, 0.14);
       border-radius: 4px;
     }
+    .sync-logs-container::-webkit-scrollbar {
+      width: 6px;
+    }
+    .sync-logs-container::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 3px;
+    }
+    .sync-logs-container::-webkit-scrollbar-thumb {
+      background: rgba(0, 212, 255, 0.3);
+      border-radius: 3px;
+    }
+    .sync-logs-container::-webkit-scrollbar-thumb:hover {
+      background: rgba(0, 212, 255, 0.5);
+    }
     .sync-status-row {
       display: flex;
       justify-content: space-between;
@@ -894,12 +927,16 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       left: 0.75rem;
       right: 0.75rem;
       display: flex;
+      justify-content: space-between;
       align-items: flex-end;
       gap: 0.5rem;
       z-index: 2;
     }
-    .map-filter-counters .map-counter:first-child {
-      margin-right: auto;
+    .map-filter-counters-left,
+    .map-filter-counters-right {
+      display: flex;
+      align-items: flex-end;
+      gap: 0.5rem;
     }
     .map-counter {
       width: 5.5rem;
@@ -1337,14 +1374,33 @@ export class DashboardComponent implements OnInit {
     }
     const conflictsCount = conflictIds.size;
     const surveillanceHasCritical = (s.surveillance ?? []).some((sys) => sys.influencePercent < 5);
-    return [
+    const items: { value: SystemsFilterValue; label: string; count: number; surveillanceHasCritical?: boolean }[] = [
       { value: 'all', label: 'Total', count: totalCount },
       { value: 'critical', label: 'Critiques', count: s.critical?.length ?? 0 },
       { value: 'conflicts', label: 'Conflits', count: conflictsCount },
       { value: 'surveillance', label: 'Surveillance', count: s.surveillance?.length ?? 0, surveillanceHasCritical },
       { value: 'healthy', label: 'Sains', count: s.healthy?.length ?? 0 },
     ];
+    return items;
   });
+
+  /** Compteurs à gauche : Total + rouges (critiques, conflits, surveillance critique). */
+  protected mapFilterCountsLeft = computed(() =>
+    this.mapFilterCounts().filter(
+      (fb) =>
+        fb.value === 'all' ||
+        fb.value === 'critical' ||
+        fb.value === 'conflicts' ||
+        (fb.value === 'surveillance' && fb.surveillanceHasCritical)
+    )
+  );
+
+  /** Compteurs à droite : verts (sains, surveillance ok). */
+  protected mapFilterCountsRight = computed(() =>
+    this.mapFilterCounts().filter(
+      (fb) => fb.value === 'healthy' || (fb.value === 'surveillance' && !fb.surveillanceHasCritical)
+    )
+  );
 
   protected setSystemsFilter(value: SystemsFilterValue): void {
     this.guildSystemsSync.systemsFilter.set(value);
