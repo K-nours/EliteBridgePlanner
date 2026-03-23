@@ -2,7 +2,7 @@
  * Feature archived – no reliable external data source for Faction → Systems → Influence %.
  * Panneau conservé avec marquage "Feature en pause". Voir docs/GUILD-SYSTEMS.md.
  */
-import { Component, inject, OnInit, signal, computed } from '@angular/core';
+import { Component, inject, OnInit, signal, computed, effect } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { GuildSystemsApiService } from '../../../core/services/guild-systems-api.service';
 import { GuildSystemsSyncService } from '../../../core/services/guild-systems-sync.service';
@@ -61,6 +61,40 @@ export class GuildSystemsPanelComponent implements OnInit {
 
   ngOnInit(): void {
     this.guildSync.loadSystems();
+  }
+
+  constructor() {
+    effect(() => {
+      const name = this.guildSync.mapSelectedSystemName();
+      if (name === null) this.systemFilterQuery.set('');
+    });
+    effect(() => {
+      const id = this.guildSync.highlightedSystemIdInList();
+      if (!id) return;
+      this.guildSync.systemsFilter.set('all');
+      const s = this.systems();
+      for (const [catKey, arr] of [
+        ['low', s.low],
+        ['healthy', s.healthy],
+        ['others', s.others],
+      ] as const) {
+        if (arr?.some((sys) => sys.id === id)) {
+          if (catKey === 'low') this.lowExpanded.set(true);
+          if (catKey === 'healthy') this.healthyExpanded.set(true);
+          if (catKey === 'others') this.othersExpanded.set(true);
+          break;
+        }
+      }
+      setTimeout(() => {
+        const el = document.querySelector(`[data-system-id="${id}"]`);
+        (el as HTMLElement)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }, 100);
+    });
+  }
+
+  onFocusMapOnSystem(event: Event, systemId: number): void {
+    event.stopPropagation();
+    this.guildSync.requestFocusOnSystem(systemId);
   }
 
   protected formatLastSync(iso: string): string {

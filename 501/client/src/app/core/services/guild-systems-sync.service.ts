@@ -38,6 +38,42 @@ export class GuildSystemsSyncService {
   /** Filtre actif pour la colonne systèmes et la carte. */
   readonly systemsFilter = signal<SystemsFilterValue>('all');
 
+  /** Demande de centrage carte sur un système (id). La carte consomme puis remet à null. */
+  readonly focusOnSystemId = signal<number | null>(null);
+
+  /** Système sélectionné depuis la carte → filtre liste + highlight. */
+  readonly mapSelectedSystemName = signal<string | null>(null);
+  readonly highlightedSystemIdInList = signal<number | null>(null);
+
+  /** Demande de centrage carte sur le système (id). */
+  requestFocusOnSystem(id: number): void {
+    this.focusOnSystemId.set(id);
+  }
+
+  private mapHighlightTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  /** Carte signale un clic sur un système. Highlight temporaire + auto-clear après 1.5s. */
+  onMapSystemClicked(name: string, id: number): void {
+    if (this.mapHighlightTimeout) clearTimeout(this.mapHighlightTimeout);
+    this.mapSelectedSystemName.set(name);
+    this.highlightedSystemIdInList.set(id);
+    this.mapHighlightTimeout = setTimeout(() => {
+      this.mapHighlightTimeout = null;
+      this.highlightedSystemIdInList.set(null);
+      this.mapSelectedSystemName.set(null);
+    }, 1500);
+  }
+
+  /** Vide la sélection carte (clic dans le vide). */
+  clearMapSelection(): void {
+    if (this.mapHighlightTimeout) {
+      clearTimeout(this.mapHighlightTimeout);
+      this.mapHighlightTimeout = null;
+    }
+    this.mapSelectedSystemName.set(null);
+    this.highlightedSystemIdInList.set(null);
+  }
+
   /** Dernière tentative de sync (succès ou échec) */
   readonly lastAttemptAt = signal<Date | null>(null);
   /** Dernière sync réussie */
