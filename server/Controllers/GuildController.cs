@@ -19,9 +19,10 @@ public class GuildController : ControllerBase
     private readonly GuildDashboardDbContext _db;
     private readonly GuildSystemsImportService _importService;
     private readonly GuildSystemsSeedLoader _seedLoader;
+    private readonly SystemsImportProgressStore _importProgressStore;
     private readonly ILogger<GuildController> _log;
 
-    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader, ILogger<GuildController> log)
+    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader, SystemsImportProgressStore importProgressStore, ILogger<GuildController> log)
     {
         _service = service;
         _dashboard = dashboard;
@@ -32,7 +33,20 @@ public class GuildController : ControllerBase
         _db = db;
         _importService = importService;
         _seedLoader = seedLoader;
+        _importProgressStore = importProgressStore;
         _log = log;
+    }
+
+    /// <summary>GET /api/guild/systems/import-progress — progression EDSM pendant un import en cours. Pour le sync status du dashboard.</summary>
+    [HttpGet("systems/import-progress")]
+    public IActionResult GetImportProgress([FromQuery] int? guildId)
+    {
+        var id = ResolveGuildId(guildId);
+        var progress = _importProgressStore.Get(id);
+        if (!progress.HasValue)
+            return Ok(new { phase = (string?)null, mode = (string?)null, current = 0, total = 0, active = false });
+        var (phase, mode, current, total) = progress.Value;
+        return Ok(new { phase, mode, current, total, active = true });
     }
 
     /// <summary>GET /api/integrations/elitebgs/test — diagnostic Elite BGS. HTML si Accept:text/html, sinon JSON.</summary>
@@ -357,8 +371,25 @@ public class GuildController : ControllerBase
     public async Task<IActionResult> ImportSystems([FromBody] GuildSystemsImportPayload? payload, [FromQuery] int? guildId, CancellationToken ct = default)
     {
         var id = ResolveGuildId(guildId);
+        var systemsCount = payload?.Systems?.Count ?? 0;
+        var contentLength = Request.ContentLength;
+        _log.LogInformation("[ImportSystems] ENTRÉE guildId={GuildId} systemsCount={Count} payloadNull={Null} contentLengthBytes={Bytes}",
+            id, systemsCount, payload == null, contentLength ?? -1);
+
         if (payload == null)
             return BadRequest(new { error = "Payload invalide (JSON requis)" });
+
+        var payloadBytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(payload).Length;
+        _log.LogInformation("[ImportSystems] payload reçu: taille sérialisée={Bytes} count={Count}",
+            payloadBytes, systemsCount);
+
+        var first = payload.Systems?.FirstOrDefault();
+        if (first != null)
+        {
+            var firstJson = System.Text.Json.JsonSerializer.Serialize(first);
+            _log.LogInformation("[ImportSystems] premier système JSON (200 chars): {Preview}",
+                firstJson.Length > 200 ? firstJson[..200] + "…" : firstJson);
+        }
 
         var originVal = payload.OriginSystemName;
         var originStatus = originVal == null ? "NULL" : (string.IsNullOrWhiteSpace(originVal) ? "VIDE" : "VALEUR");
@@ -368,9 +399,13 @@ public class GuildController : ControllerBase
         {
             var result = await _importService.ImportAsync(id, payload, purgeAbsent: true, ct);
             if (result.Error != null)
-                return BadRequest(new { error = result.Error, totalReceived = result.TotalReceived, inserted = result.Inserted, updated = result.Updated, skipped = result.Skipped, deleted = result.Deleted });
-            // EDSM désactivé temporairement — flux 100 % Inara pour validation.
-            return Ok(new
+            {
+                var errResponse = new { error = result.Error, totalReceived = result.TotalReceived, inserted = result.Inserted, updated = result.Updated, skipped = result.Skipped, deleted = result.Deleted };
+                var errJson = System.Text.Json.JsonSerializer.Serialize(errResponse);
+                _log.LogInformation("[ImportSystems] réponse BadRequest (300 chars): {Preview}", errJson.Length > 300 ? errJson[..300] + "…" : errJson);
+                return BadRequest(errResponse);
+            }
+            var okResponse = new
             {
                 totalReceived = result.TotalReceived,
                 inserted = result.Inserted,
@@ -379,7 +414,17 @@ public class GuildController : ControllerBase
                 deleted = result.Deleted,
                 totalProcessed = result.Inserted + result.Updated + result.Skipped,
                 error = result.Error,
-            });
+                edsm = result.Edsm == null ? null : new
+                {
+                    mode = result.Edsm.Mode,
+                    enrichedCount = result.Edsm.EnrichedCount,
+                    error = result.Edsm.Error,
+                },
+            };
+            var okJson = System.Text.Json.JsonSerializer.Serialize(okResponse);
+            _log.LogInformation("[ImportSystems] réponse Ok (300 chars): {Preview}",
+                okJson.Length > 300 ? okJson[..300] + "…" : okJson);
+            return Ok(okResponse);
         }
         catch (InvalidOperationException ex)
         {

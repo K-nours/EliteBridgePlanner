@@ -32,6 +32,7 @@ builder.Services.AddScoped<DataSeeder>();
 builder.Services.AddScoped<GuildSystemsSeedLoader>();
 builder.Services.AddScoped<GuildSystemsImportService>();
 builder.Services.AddScoped<EdsmDeltaEnrichmentService>();
+builder.Services.AddSingleton<SystemsImportProgressStore>();
 builder.Services.AddSingleton<EddnStatusService>();
 builder.Services.AddScoped<EddnMessageStore>();
 builder.Services.AddHostedService<EddnListenerService>();

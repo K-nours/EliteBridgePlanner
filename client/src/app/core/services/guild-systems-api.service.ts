@@ -47,4 +47,11 @@ export class GuildSystemsApiService {
   syncBgs(): Observable<{ updated: number }> {
     return this.http.post<{ updated: number }>(`${this.base}/guild/systems/sync`, {});
   }
+
+  /** Progression EDSM pendant un import (pour sync status). */
+  getImportProgress(): Observable<{ phase?: string; mode?: string; current: number; total: number; active: boolean }> {
+    return this.http.get<{ phase?: string; mode?: string; current: number; total: number; active: boolean }>(
+      `${this.base}/guild/systems/import-progress`
+    );
+  }
 }

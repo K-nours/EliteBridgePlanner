@@ -7,6 +7,7 @@ import { DashboardApiService } from '../../core/services/dashboard-api.service';
 import { CommandersApiService } from '../../core/services/commanders-api.service';
 import { SyncLogService } from '../../core/services/sync-log.service';
 import { GuildSystemsSyncService } from '../../core/services/guild-systems-sync.service';
+import { GuildSystemsApiService } from '../../core/services/guild-systems-api.service';
 import { FrontierAuthService } from '../../core/services/frontier-auth.service';
 import { GuildSettingsService } from '../../core/services/guild-settings.service';
 import { InaraSyncBridgeService } from '../../core/services/inara-sync-bridge.service';
@@ -1250,6 +1251,11 @@ export class DashboardComponent implements OnInit {
   protected readonly syncLog = inject(SyncLogService);
   protected readonly AVATAR_DEFAULT_FALLBACK_URL = AVATAR_DEFAULT_FALLBACK_URL;
   protected readonly guildSystemsSync = inject(GuildSystemsSyncService);
+  private readonly guildSystemsApi = inject(GuildSystemsApiService);
+
+  /** Progression EDSM en direct pendant un import (ex: "EDSM : requêtes unitaires (47/173)"). */
+  protected systemsImportProgress = signal<string | null>(null);
+  private systemsImportPollingRef: ReturnType<typeof setInterval> | null = null;
 
   protected readonly strokeCircumference = 2 * Math.PI * 34;
   protected refreshProgress = signal(0);
@@ -1400,11 +1406,57 @@ export class DashboardComponent implements OnInit {
     return recap + (logsContent ? `\n\n${logsContent}` : '');
   });
 
-  /** Lignes du journal pour affichage (récap + logs). */
+  /** Lignes du journal pour affichage (récap + logs) + progression EDSM en direct. */
   protected syncLogLines = computed(() => {
     const text = this.syncLogsWithRecap() || '(aucun log)';
-    return text.split('\n');
+    const lines = text.split('\n');
+    const progress = this.systemsImportProgress();
+    if (progress) {
+      const ts = new Date().toISOString().slice(11, 23);
+      return [...lines, `[${ts}] ${progress}`];
+    }
+    return lines;
   });
+
+  private startSystemsImportPolling(): void {
+    this.stopSystemsImportPolling();
+    this.systemsImportPollingRef = setInterval(() => {
+      this.guildSystemsApi.getImportProgress().subscribe({
+        next: (p) => {
+          if (!p.active || !p.mode) return;
+          const modeLabel = p.mode === 'groupée' ? 'requête groupée' : 'requêtes unitaires';
+          this.systemsImportProgress.set(`EDSM : ${modeLabel} (${p.current}/${p.total})`);
+        },
+      });
+    }, 400);
+  }
+
+  private stopSystemsImportPolling(): void {
+    if (this.systemsImportPollingRef != null) {
+      clearInterval(this.systemsImportPollingRef);
+      this.systemsImportPollingRef = null;
+    }
+  }
+
+  private addSystemsSyncSuccessLogs(detail: { inserted?: number; updated?: number; total?: number; edsm?: { mode?: string; enrichedCount?: number; error?: string } }): void {
+    const total = detail.total ?? 0;
+    const inserted = detail.inserted ?? 0;
+    const updated = detail.updated ?? 0;
+    const changed = inserted + updated;
+    this.addLog(`Import Inara : ${total} système${total > 1 ? 's' : ''} reçu${total > 1 ? 's' : ''}, ${changed} mis à jour`);
+    const edsm = detail.edsm;
+    if (!edsm) return;
+    this.addLog('Contact EDSM…');
+    if (edsm) {
+      const modeLabel = edsm.mode === 'groupée' ? 'requête groupée' : 'requêtes unitaires';
+      this.addLog(`EDSM : ${modeLabel}`);
+      if (edsm.error) {
+        this.addLog(`EDSM : erreur / ${edsm.error}`);
+      } else if (edsm.enrichedCount != null) {
+        this.addLog(edsm.enrichedCount > 0 ? `EDSM : ${edsm.enrichedCount} tendance${edsm.enrichedCount > 1 ? 's' : ''} enrichie${edsm.enrichedCount > 1 ? 's' : ''}` : 'EDSM : aucun delta disponible');
+      }
+    }
+  }
 
   protected isErrorLine(line: string): boolean {
     return line.toLowerCase().includes('erreur');
@@ -1450,6 +1502,10 @@ export class DashboardComponent implements OnInit {
           this.addLog(`Import ${labels[src]} démarré`);
           return;
         }
+        if (d.type === 'inara-systems-post-started') {
+          this.startSystemsImportPolling();
+          return;
+        }
         if (d.type === 'inara-sync-success') {
           if (typeof console !== 'undefined' && console.log) {
             console.log('[Dashboard] postMessage inara-sync-success RECU — type:', src, '— refresh démarré');
@@ -1458,17 +1514,19 @@ export class DashboardComponent implements OnInit {
           if (src === 'roster') this.lastRosterSyncError.set(null);
           if (src === 'avatar') this.lastAvatarSyncError.set(null);
           this.guildSettings.load();
-          if (src === 'systems') this.guildSystemsSync.loadSystems();
+          if (src === 'systems') {
+            this.stopSystemsImportPolling();
+            this.systemsImportProgress.set(null);
+            this.guildSystemsSync.loadSystems();
+            this.addSystemsSyncSuccessLogs(detail as { inserted?: number; updated?: number; total?: number; edsm?: { mode?: string; enrichedCount?: number; error?: string } });
+          }
           if (src === 'roster' || src === 'avatar') this.loadCommanders();
-          if (src === 'systems' && detail) {
-            const total = (detail.inserted ?? 0) + (detail.updated ?? 0);
-            this.addLog(total > 0 ? `${total} système${total > 1 ? 's' : ''} mis à jour` : 'Sync systèmes réussie');
-          } else if (src === 'roster' && detail) {
+          if (src === 'roster' && detail) {
             const n = detail.imported ?? detail.total ?? 0;
             this.addLog(n > 0 ? `${n} CMDR(s) importés` : 'Sync roster réussie');
           } else if (src === 'avatar' && detail?.commanderName) {
             this.addLog(`Avatar mis à jour pour ${detail.commanderName}`);
-          } else {
+          } else if (src !== 'systems') {
             this.addLog(`Sync ${src} réussie`);
           }
           this.addLog('Onglet fermé');
@@ -1481,7 +1539,11 @@ export class DashboardComponent implements OnInit {
         }
         if (d.type === 'inara-sync-error') {
           const msg = (d.message as string) || 'Erreur inconnue';
-          if (src === 'systems') this.lastSystemsSyncError.set(msg);
+          if (src === 'systems') {
+            this.stopSystemsImportPolling();
+            this.systemsImportProgress.set(null);
+            this.lastSystemsSyncError.set(msg);
+          }
           if (src === 'roster') this.lastRosterSyncError.set(msg);
           if (src === 'avatar') this.lastAvatarSyncError.set(msg);
           const labels = { systems: 'Systèmes', roster: 'Roster', avatar: 'Avatar' };
