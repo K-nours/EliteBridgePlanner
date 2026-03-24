@@ -26,6 +26,18 @@
         </button>
       </div>
     </div>
+    <div class="map-controls-landmarks">
+      <button type="button" class="map-btn-landmarks"
+        [class.map-btn-landmarks--active]="landmarksVisible"
+        title="Repères galactiques (Sol, Centre)"
+        aria-label="Afficher repères"
+        (click)="toggleLandmarks()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+        </svg>
+      </button>
+    </div>
     <div class="map-controls-zoom">
       <button type="button" class="map-zoom-btn" title="Zoom avant" (click)="zoomStep(1)" aria-label="Zoom +">+</button>
       <div class="map-zoom-slider-wrap">
@@ -39,6 +51,18 @@
       <span>Aucune coordonnée galactique</span>
       <span class="map-empty-hint-sub">Importez depuis Inara puis lancez l'enrichissement EDSM</span>
     </div>
+  }
+  @if (landmarksVisible && landmarkLabels.length > 0) {
+    @for (lb of landmarkLabels; track lb.id) {
+      @if (lb.visible) {
+        <div class="map-landmark-label" [style.left.px]="lb.x" [style.top.px]="lb.y">
+          <span class="map-landmark-name">{{ lb.name }}</span>
+          @if (lb.region) {
+            <span class="map-landmark-region">{{ lb.region }}</span>
+          }
+        </div>
+      }
+    }
   }
   @if (tooltipData; as t) {
     <div class="map-tooltip" [style.left.px]="t.x" [style.top.px]="t.y">

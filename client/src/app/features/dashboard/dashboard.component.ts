@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal, computed, effect, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, computed, effect, ViewChild } from '@angular/core';
 import { TruncateTooltipDirective } from '../../shared/directives/truncate-tooltip.directive';
 import { SettingsModalComponent } from '../../shared/components/settings-modal/settings-modal.component';
 import { SyncHelpModalComponent } from '../../shared/components/sync-help-modal/sync-help-modal.component';
@@ -13,9 +13,11 @@ import { FrontierAuthService } from '../../core/services/frontier-auth.service';
 import { GuildSettingsService } from '../../core/services/guild-settings.service';
 import { InaraSyncBridgeService } from '../../core/services/inara-sync-bridge.service';
 import { SyncHelpModalService } from '../../core/services/sync-help-modal.service';
+import { FrontierJournalApiService } from '../../core/services/frontier-journal-api.service';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
 import type { SystemsFilterValue } from '../../core/models/guild-systems.model';
+import type { FrontierJournalBackfillStatusDto } from '../../core/services/frontier-journal-api.service';
 import { hasConflictState } from '../../core/utils/guild-systems.util';
 import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constants';
 
@@ -238,6 +240,44 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                 <span class="frontier-cmdr-label">Vaisseau</span>
                 <span class="frontier-cmdr-value">{{ fp.shipName }}</span>
               </div>
+              }
+            </div>
+            <div class="frontier-cmdr-journal-sync">
+              <div class="journal-sync-row">
+                <button type="button" class="btn-journal-sync"
+                  [disabled]="journalBackfillRunning()"
+                  (click)="onSyncJournalClick()">
+                  @if (journalBackfillRunning()) {
+                    <span class="btn-journal-sync-text">Sync journal en cours...</span>
+                    <span class="btn-journal-sync-status">{{ journalBackfillStatus()?.totalDaysProcessed ?? 0 }} jours</span>
+                  } @else {
+                    <span class="btn-journal-sync-text">Sync journal de vol du CMDR</span>
+                    @if (journalBackfillStatus(); as st) {
+                      @if (st.totalDaysProcessed > 0) {
+                        <span class="btn-journal-sync-status">
+                          {{ st.totalDaysProcessed }} jours · {{ st.completed ? 'terminé' : 'en pause' }}
+                        </span>
+                      }
+                    }
+                  }
+                </button>
+                @if (journalBackfillRunning()) {
+                  <button type="button" class="btn-journal-stop-icon"
+                    [disabled]="journalStopRequested()"
+                    [attr.aria-label]="'Arrêter le backfill'"
+                    (click)="onStopJournalClick()">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <rect x="6" y="6" width="12" height="12" rx="1"/>
+                    </svg>
+                    <span class="btn-journal-stop-text">Stop</span>
+                  </button>
+                }
+              </div>
+              @if (journalRetryCount() > 0 && !journalBackfillRunning()) {
+                <button type="button" class="btn-journal-retry"
+                  (click)="onRetryErrorsClick()">
+                  <span class="btn-journal-retry-text">Retry {{ journalRetryCount() }} erreur(s) 401</span>
+                </button>
               }
             </div>
           </div>
@@ -1006,12 +1046,14 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .map-counter--healthy .map-counter-value {
       color: #00ff88;
     }
-    .map-counter--critical .map-counter-value,
-    .map-counter--conflicts .map-counter-value {
+    .map-counter--critical .map-counter-value {
       color: #ff6b6b;
     }
+    .map-counter--conflicts .map-counter-value {
+      color: #cc5500;
+    }
     .map-counter--surveillance-ok .map-counter-value {
-      color: #00ff88;
+      color: #93c5fd;
     }
     .map-counter--surveillance-critical .map-counter-value {
       color: #ff6b6b;
@@ -1023,6 +1065,11 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .map-counter:disabled .map-counter-value {
       color: rgba(255, 255, 255, 0.5);
+    }
+    .box-frontier-cmdr {
+      display: flex;
+      flex-direction: column;
+      padding-bottom: 16px;
     }
     .frontier-cmdr-header {
       display: flex;
@@ -1088,6 +1135,96 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       font-family: 'Exo 2', sans-serif;
       font-size: 0.75rem;
       color: rgba(255, 255, 255, 0.9);
+    }
+    .frontier-cmdr-journal-sync {
+      margin-top: auto;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .journal-sync-row {
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      gap: 0.5rem;
+      width: 100%;
+    }
+    .journal-sync-row .btn-journal-sync {
+      flex: 1;
+      min-width: 0;
+    }
+    .btn-journal-sync {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.2rem;
+      width: 100%;
+      padding: 0.35rem 0.6rem;
+      font-size: 0.65rem;
+      font-family: 'Orbitron', sans-serif;
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.25);
+      color: #00d4ff;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s;
+    }
+    .btn-journal-sync:hover:not(:disabled) {
+      background: rgba(0, 212, 255, 0.25);
+    }
+    .btn-journal-sync:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-journal-sync-text {
+      font-weight: 500;
+    }
+    .btn-journal-sync-status {
+      font-size: 0.6rem;
+      color: rgba(255, 255, 255, 0.7);
+    }
+    .btn-journal-retry {
+      width: 100%;
+      padding: 0.3rem 0.6rem;
+      font-size: 0.6rem;
+      font-family: 'Orbitron', sans-serif;
+      background: rgba(255, 180, 100, 0.12);
+      border: 1px solid rgba(255, 180, 100, 0.35);
+      color: #ffb464;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s;
+    }
+    .btn-journal-retry:hover {
+      background: rgba(255, 180, 100, 0.22);
+    }
+    .btn-journal-stop-icon {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      padding: 0.35rem 0.6rem;
+      font-size: 0.6rem;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 500;
+      background: #e53935;
+      border: 1px solid rgba(229, 57, 53, 0.8);
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-journal-stop-icon:hover:not(:disabled) {
+      background: #c62828;
+    }
+    .btn-journal-stop-icon:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
     .box-cmdrs-header {
       display: flex;
@@ -1296,7 +1433,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
   `],
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent implements OnInit, OnDestroy {
   @ViewChild('settingsModal') settingsModal!: SettingsModalComponent;
 
   private readonly dashboardApi = inject(DashboardApiService);
@@ -1305,7 +1442,15 @@ export class DashboardComponent implements OnInit {
   protected readonly inaraBridge = inject(InaraSyncBridgeService);
   protected readonly syncHelpModal = inject(SyncHelpModalService);
   protected readonly frontierAuth = inject(FrontierAuthService);
+  private readonly frontierJournalApi = inject(FrontierJournalApiService);
   protected readonly frontierMenuOpen = signal(false);
+  protected readonly journalBackfillRunning = signal(false);
+  protected readonly journalBackfillStatus = signal<FrontierJournalBackfillStatusDto | null>(null);
+  protected readonly journalRetryCount = signal(0);
+  /** Progression en temps réel pour l'état de synchronisation. */
+  protected readonly journalBackfillProgress = signal<string | null>(null);
+  /** True pendant l'appel STOP (bouton désactivé, message "Arrêt demandé..."). */
+  protected readonly journalStopRequested = signal(false);
   protected readonly cmdrsMenuOpen = signal(false);
   protected readonly syncStatusMenuOpen = signal(false);
   protected readonly headerAvatarError = signal(false);
@@ -1332,6 +1477,14 @@ export class DashboardComponent implements OnInit {
       if (url) {
         this.headerAvatarError.set(false);
         this.boxAvatarError.set(false);
+      }
+    });
+    effect(() => {
+      const running = this.journalBackfillRunning();
+      const stopReq = this.journalStopRequested();
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[UI] backfill running =', running);
+        console.log('[UI] stop requested =', stopReq);
       }
     });
   }
@@ -1499,8 +1652,10 @@ export class DashboardComponent implements OnInit {
     const recapLines = recapEnd >= 0 ? all.slice(0, recapEnd).filter((l) => l.trim() !== '') : all;
     const logLines = recapEnd >= 0 ? all.slice(recapEnd) : [];
     const progress = this.systemsImportProgress();
+    const journalProgress = this.journalBackfillProgress();
     const progressLine = progress ? [`[${new Date().toISOString().slice(11, 23)}] ${progress}`] : [];
-    const logsReversed = [...logLines, ...progressLine].reverse();
+    const journalLine = journalProgress ? [`[${new Date().toISOString().slice(11, 23)}] ${journalProgress}`] : [];
+    const logsReversed = [...logLines, ...progressLine, ...journalLine].reverse();
     return [...logsReversed, '---------', ...recapLines];
   });
 
@@ -1603,11 +1758,149 @@ export class DashboardComponent implements OnInit {
     window.open('/assets/scripts/inara-sync.user.js', '_blank', 'noopener,noreferrer');
   }
 
+  protected onSyncJournalClick(): void {
+    if (this.journalBackfillRunning()) return;
+    this.frontierJournalApi.startBackfill().subscribe({
+      next: (res) => {
+        this.addLog(res.message);
+        this.journalBackfillRunning.set(true);
+        this.startJournalStatusPolling();
+      },
+      error: (err) => {
+        const msg = err?.error?.message ?? err?.message ?? 'Erreur démarrage sync journal';
+        this.addLog(msg);
+      },
+    });
+  }
+
+  protected onRetryErrorsClick(): void {
+    if (this.journalBackfillRunning()) return;
+    this.frontierJournalApi.startRetryErrors().subscribe({
+      next: (res) => {
+        this.addLog(res.message);
+        this.journalBackfillRunning.set(true);
+        this.startJournalStatusPolling();
+      },
+      error: (err) => {
+        const msg = err?.error?.message ?? err?.message ?? 'Erreur retry';
+        this.addLog(msg);
+      },
+    });
+  }
+
+  protected onStopJournalClick(): void {
+    if (this.journalStopRequested()) return;
+    this.journalStopRequested.set(true);
+    this.stopJournalStatusPolling();
+    this.journalBackfillProgress.set('Arrêt du backfill demandé...');
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('[Backfill] STOP demandé par utilisateur');
+      console.log('[UI] stop requested =', true);
+    }
+    this.frontierJournalApi.stopBackfill().subscribe({
+      next: (res) => {
+        this.addLog(res.message);
+        this.journalStopRequested.set(false);
+        this.journalBackfillProgress.set(null);
+        this.journalBackfillRunning.set(false);
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('[UI] status refresh after stop =', 'applying optimistic stop');
+        }
+        this.frontierJournalApi.getStatus().subscribe(st => {
+          this.journalBackfillStatus.set(st);
+          this.journalBackfillRunning.set(false);
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[UI] status refresh after stop =', { backendIsRunning: st.isRunning, totalDays: st.totalDaysProcessed, forcedRunningFalse: true });
+            console.log('[Backfill] Arrêt propre effectué à date=' + (st.currentDate ?? new Date().toISOString().slice(0, 10)));
+          }
+        });
+      },
+      error: (err) => {
+        this.journalStopRequested.set(false);
+        this.journalBackfillProgress.set(null);
+        this.addLog('Impossible d\'arrêter le backfill');
+        if (typeof console !== 'undefined') {
+          console.error('[Backfill] Erreur STOP', err);
+          console.log('[UI] stop requested =', false, '(after error)');
+        }
+        this.frontierJournalApi.getStatus().subscribe(st => {
+          this.journalBackfillStatus.set(st);
+          this.journalBackfillRunning.set(st.isRunning);
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[UI] status refresh after stop (error path) =', { isRunning: st.isRunning });
+          }
+        });
+      },
+    });
+  }
+
+  private journalStatusPollingRef: ReturnType<typeof setInterval> | null = null;
+
+  private startJournalStatusPolling(): void {
+    this.stopJournalStatusPolling();
+    const poll = () => {
+      this.frontierJournalApi.getStatus().subscribe({
+        next: (st) => {
+          this.journalBackfillStatus.set(st);
+          if (st.isRunning) {
+            const prog = `Journal Frontier : ${st.totalDaysProcessed} jour${st.totalDaysProcessed > 1 ? 's' : ''} · ${st.currentDate ?? '?'} · en cours`;
+            this.journalBackfillProgress.set(prog);
+          } else {
+            this.journalBackfillProgress.set(null);
+            if (st.completed && st.totalDaysProcessed > 0) {
+              this.addLog(`Journal Frontier : backfill terminé — ${st.totalDaysProcessed} jour${st.totalDaysProcessed > 1 ? 's' : ''} (${st.successCount} ok, ${st.emptyCount} vides, ${st.errorCount} erreurs)`);
+            }
+          }
+          if (!st.isRunning) {
+            this.journalBackfillRunning.set(false);
+            this.stopJournalStatusPolling();
+            if (st.errorCount > 0) {
+              this.frontierJournalApi.getRetryErrorsCount().subscribe({
+                next: (r) => this.journalRetryCount.set(r.count),
+              });
+            } else {
+              this.journalRetryCount.set(0);
+            }
+          }
+        },
+      });
+    };
+    poll();
+    this.journalStatusPollingRef = setInterval(poll, 3000);
+  }
+
+  private stopJournalStatusPolling(): void {
+    if (this.journalStatusPollingRef) {
+      clearInterval(this.journalStatusPollingRef);
+      this.journalStatusPollingRef = null;
+    }
+    this.journalBackfillProgress.set(null);
+  }
+
+    private fetchJournalStatus(): void {
+    this.frontierJournalApi.getStatus().subscribe({
+      next: (st) => {
+        this.journalBackfillStatus.set(st);
+        this.journalBackfillRunning.set(st.isRunning);
+        if (st.isRunning) {
+          this.journalBackfillProgress.set(`Journal Frontier : ${st.totalDaysProcessed} jour${st.totalDaysProcessed > 1 ? 's' : ''} · ${st.currentDate ?? '?'} · en cours`);
+          this.startJournalStatusPolling();
+        } else {
+          this.journalBackfillProgress.set(null);
+        }
+      },
+    });
+    this.frontierJournalApi.getRetryErrorsCount().subscribe({
+      next: (r) => this.journalRetryCount.set(r.count),
+    });
+  }
+
   ngOnInit(): void {
     this.addLog('Dashboard initialisé');
     this.addLog('Prêt — utilisez les boutons sync pour importer depuis Inara');
     this.guildSettings.load();
     this.inaraBridge.check();
+    if (this.frontierAuth.isConnected()) this.fetchJournalStatus();
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') this.guildSettings.load();
@@ -1845,5 +2138,9 @@ export class DashboardComponent implements OnInit {
         this.addLog('Erreur rafraîchissement : ' + msg);
       },
     });
+  }
+
+  ngOnDestroy(): void {
+    this.stopJournalStatusPolling();
   }
 }

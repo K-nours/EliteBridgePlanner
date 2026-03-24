@@ -432,15 +432,21 @@
   background: rgba(0, 212, 255, 0.06);
   border-radius: 4px;
   cursor: pointer;
-  opacity: 0.7;
+  opacity: 0;
+  pointer-events: none;
   color: #00d4ff;
   transition: opacity 0.15s, background 0.15s, border-color 0.15s;
 
-  &:hover,
-  .system-row:hover & {
+  .system-row:hover &,
+  .system-row:focus-within & {
     opacity: 1;
+    pointer-events: auto;
     background: rgba(0, 212, 255, 0.12);
     border-color: rgba(0, 212, 255, 0.4);
+  }
+
+  &:hover {
+    opacity: 1;
   }
 
   &:focus-visible {
@@ -493,12 +499,19 @@
   background: rgba(0, 212, 255, 0.06);
   border-radius: 4px;
   cursor: pointer;
-  opacity: 0.7;
+  opacity: 0;
+  pointer-events: none;
   transition: opacity 0.15s, background 0.15s, border-color 0.15s;
 
-  &:hover,
-  .system-row:hover & {
+  .system-row:hover &,
+  .system-row:focus-within &,
+  .system-row--copied & {
     opacity: 1;
+    pointer-events: auto;
+  }
+
+  .system-row:hover &,
+  .system-row:focus-within & {
     background: rgba(0, 212, 255, 0.12);
     border-color: rgba(0, 212, 255, 0.4);
   }
@@ -514,7 +527,8 @@
   color: #00d4ff;
 
   .btn-copy:hover &,
-  .system-row:hover .btn-copy & {
+  .system-row:hover .btn-copy &,
+  .system-row--copied .btn-copy & {
     opacity: 1;
   }
 }
