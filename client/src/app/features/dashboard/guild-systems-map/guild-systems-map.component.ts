@@ -100,7 +100,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   @Input() journalLayerDiscovered = false;
   @Input() journalLayerFullScan = false;
   /** Clé = nom système normalisé (uppercase trim), valeurs depuis GET derived/systems. */
-  @Input() journalByName: Record<string, { isVisited: boolean; isDiscovered: boolean; isFullScanned: boolean }> = {};
+  @Input() journalByName: Record<string, { isVisited: boolean; hasFirstDiscoveryBody: boolean; isFullScanned: boolean }> = {};
 
   private readonly guildSync = inject(GuildSystemsSyncService);
   private readonly cdr = inject(ChangeDetectorRef);
@@ -405,13 +405,13 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     return name.trim().toUpperCase();
   }
 
-  /** Priorité affichage : full scan > découvert FSS > visité. */
+  /** Priorité affichage : full scan > première découverte (corps) > visité. */
   private journalAccentColor(sys: MapSystem): number | null {
     if (!this.journalLayersActive()) return null;
     const j = this.journalByName[this.normalizeJournalKey(sys.name)];
     if (!j) return null;
     if (this.journalLayerFullScan && j.isFullScanned) return JOURNAL_COLOR_FULLSCAN;
-    if (this.journalLayerDiscovered && j.isDiscovered) return JOURNAL_COLOR_DISCOVERED;
+    if (this.journalLayerDiscovered && j.hasFirstDiscoveryBody) return JOURNAL_COLOR_DISCOVERED;
     if (this.journalLayerVisited && j.isVisited) return JOURNAL_COLOR_VISITED;
     return null;
   }
@@ -421,7 +421,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     if (!j) return false;
     return (
       (this.journalLayerVisited && j.isVisited) ||
-      (this.journalLayerDiscovered && j.isDiscovered) ||
+      (this.journalLayerDiscovered && j.hasFirstDiscoveryBody) ||
       (this.journalLayerFullScan && j.isFullScanned)
     );
   }
@@ -430,7 +430,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const j = this.journalByName[this.normalizeJournalKey(sys.name)];
     if (!j) return 0x778899;
     if (j.isFullScanned) return JOURNAL_COLOR_FULLSCAN;
-    if (j.isDiscovered) return JOURNAL_COLOR_DISCOVERED;
+    if (j.hasFirstDiscoveryBody) return JOURNAL_COLOR_DISCOVERED;
     if (j.isVisited) return JOURNAL_COLOR_VISITED;
     return 0x778899;
   }

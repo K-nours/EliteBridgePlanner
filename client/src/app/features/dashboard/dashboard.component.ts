@@ -189,7 +189,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                   <button type="button" class="map-counter map-counter--journal map-counter--journal-visited"
                     [class.map-counter--active]="journalMapLayerVisited()"
                     [attr.aria-pressed]="journalMapLayerVisited()"
-                    title="Visités (FSDJump / Location)"
+                    title="Visités (FSDJump / CarrierJump / Location)"
                     (click)="toggleJournalMapVisited()">
                     <span class="map-counter-label">Visités</span>
                     <span class="map-counter-value map-counter-value--journal">{{ journalMapLayerVisited() ? '●' : '—' }}</span>
@@ -199,7 +199,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                   <button type="button" class="map-counter map-counter--journal map-counter--journal-disc"
                     [class.map-counter--active]="journalMapLayerDiscovered()"
                     [attr.aria-pressed]="journalMapLayerDiscovered()"
-                    title="Découverts FSS (FSSDiscoveryScan)"
+                    title="Découverts (au moins un corps : Scan, wasDiscovered=false)"
                     (click)="toggleJournalMapDiscovered()">
                     <span class="map-counter-label">Découverts</span>
                     <span class="map-counter-value map-counter-value--journal">{{ journalMapLayerDiscovered() ? '●' : '—' }}</span>
@@ -1643,7 +1643,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly journalMapLayerFullScan = signal(false);
   /** Clé = nom système normalisé (uppercase), pour la carte. */
   protected readonly journalDerivedByName = signal<
-    Record<string, { isVisited: boolean; isDiscovered: boolean; isFullScanned: boolean }>
+    Record<string, { isVisited: boolean; hasFirstDiscoveryBody: boolean; isFullScanned: boolean }>
   >({});
   /** Liste complète GET derived/systems (coords CMDR pour la vue Cmdr). */
   protected readonly journalDerivedSystemsList = signal<FrontierJournalSystemDerivedDto[]>([]);
@@ -2129,11 +2129,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.frontierJournalApi.getDerivedSystems().subscribe({
       next: (res) => {
         this.journalDerivedSystemsList.set(res.systems ?? []);
-        const map: Record<string, { isVisited: boolean; isDiscovered: boolean; isFullScanned: boolean }> = {};
+        const map: Record<string, { isVisited: boolean; hasFirstDiscoveryBody: boolean; isFullScanned: boolean }> = {};
         for (const s of res.systems) {
           map[s.systemName.trim().toUpperCase()] = {
             isVisited: s.isVisited,
-            isDiscovered: s.isDiscovered,
+            hasFirstDiscoveryBody: s.hasFirstDiscoveryBody,
             isFullScanned: s.isFullScanned,
           };
         }
