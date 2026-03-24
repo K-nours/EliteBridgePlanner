@@ -8,10 +8,12 @@ namespace GuildDashboard.Server.Controllers;
 public class FrontierJournalController : ControllerBase
 {
     private readonly FrontierJournalBackfillService _backfill;
+    private readonly FrontierJournalParseService _parse;
 
-    public FrontierJournalController(FrontierJournalBackfillService backfill)
+    public FrontierJournalController(FrontierJournalBackfillService backfill, FrontierJournalParseService parse)
     {
         _backfill = backfill;
+        _parse = parse;
     }
 
     /// <summary>POST /api/frontier/journal/backfill/start — démarre ou reprend le backfill journal.</summary>
@@ -56,5 +58,29 @@ public class FrontierJournalController : ControllerBase
         if (!started)
             return BadRequest(new { success = false, message = "Retry impossible : déjà en cours, aucune erreur 401, ou token Frontier absent. Reconnectez-vous puis réessayez." });
         return Ok(new { success = true, message = "Retry des erreurs 401 démarré." });
+    }
+
+    /// <summary>POST /api/frontier/journal/parse/incremental — parse un lot de jours (non bloquant côté client si lot court).</summary>
+    [HttpPost("parse/incremental")]
+    public IActionResult StartIncrementalParse([FromQuery] int batchSize = 40)
+    {
+        var started = _parse.StartIncrementalParse(batchSize);
+        if (!started)
+            return BadRequest(new { success = false, message = "Parsing déjà en cours." });
+        return Ok(new { success = true, message = "Parsing incrémental démarré." });
+    }
+
+    /// <summary>GET /api/frontier/journal/parse/status — état du parsing dérivé.</summary>
+    [HttpGet("parse/status")]
+    public IActionResult GetParseStatus()
+    {
+        return Ok(_parse.GetParseStatus());
+    }
+
+    /// <summary>GET /api/frontier/journal/derived/systems — agrégats par système pour la carte.</summary>
+    [HttpGet("derived/systems")]
+    public IActionResult GetDerivedSystems()
+    {
+        return Ok(_parse.GetDerivedForMap());
     }
 }

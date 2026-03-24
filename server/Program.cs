@@ -36,6 +36,7 @@ builder.Services.AddScoped<EdsmCoordsEnrichmentService>();
 builder.Services.AddSingleton<SystemsImportProgressStore>();
 builder.Services.AddSingleton<EddnStatusService>();
 builder.Services.AddSingleton<FrontierJournalBackfillService>();
+builder.Services.AddSingleton<FrontierJournalParseService>();
 builder.Services.AddScoped<EddnMessageStore>();
 builder.Services.AddHostedService<EddnListenerService>();
 builder.Services.AddHostedService<EddnPurgeService>();

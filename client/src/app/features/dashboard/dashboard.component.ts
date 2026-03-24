@@ -17,7 +17,11 @@ import { FrontierJournalApiService } from '../../core/services/frontier-journal-
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
 import type { SystemsFilterValue } from '../../core/models/guild-systems.model';
-import type { FrontierJournalBackfillStatusDto } from '../../core/services/frontier-journal-api.service';
+import type {
+  FrontierJournalBackfillStatusDto,
+  FrontierJournalParseStatusDto,
+  FrontierJournalSystemDerivedDto,
+} from '../../core/services/frontier-journal-api.service';
 import { hasConflictState } from '../../core/utils/guild-systems.util';
 import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constants';
 
@@ -119,13 +123,30 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
         <section class="col col-center">
           <div class="map-section">
             <div class="box map-box">
-              <h3>Carte The 501st Guild</h3>
+              <div class="map-box-header">
+                <h3>Carte</h3>
+                <div class="map-view-toggle" role="group" aria-label="Vue carte">
+                  <button type="button" class="map-view-toggle-btn"
+                    [class.map-view-toggle-btn--active]="mapViewMode() === 'faction'"
+                    (click)="mapViewMode.set('faction')">Vue Faction</button>
+                  <button type="button" class="map-view-toggle-btn"
+                    [class.map-view-toggle-btn--active]="mapViewMode() === 'cmdr'"
+                    (click)="mapViewMode.set('cmdr')">Vue Cmdr</button>
+                </div>
+              </div>
               <div class="map-3d-wrapper">
                 <app-guild-systems-map
+                  [mapViewMode]="mapViewMode()"
+                  [journalCmdrPoints]="journalCmdrMapPoints()"
                   [systems]="guildSystemsSync.systems()"
-                  [systemsFilter]="guildSystemsSync.systemsFilter()" />
+                  [systemsFilter]="guildSystemsSync.systemsFilter()"
+                  [journalLayerVisited]="journalMapLayerVisited()"
+                  [journalLayerDiscovered]="journalMapLayerDiscovered()"
+                  [journalLayerFullScan]="journalMapLayerFullScan()"
+                  [journalByName]="journalDerivedByName()" />
               </div>
-              <div class="map-filter-counters">
+              @if (mapViewMode() === 'faction') {
+              <div class="map-filter-counters" role="group" aria-label="Filtres BGS carte">
                 <div class="map-filter-counters-left">
                   @for (fb of mapFilterCountsLeft(); track fb.value) {
                     <button type="button"
@@ -161,6 +182,39 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                   }
                 </div>
               </div>
+              }
+              @if (mapViewMode() === 'cmdr') {
+              <div class="map-filter-counters" role="group" aria-label="Calques journal sur la carte">
+                <div class="map-filter-counters-left">
+                  <button type="button" class="map-counter map-counter--journal map-counter--journal-visited"
+                    [class.map-counter--active]="journalMapLayerVisited()"
+                    [attr.aria-pressed]="journalMapLayerVisited()"
+                    title="Visités (FSDJump / Location)"
+                    (click)="toggleJournalMapVisited()">
+                    <span class="map-counter-label">Visités</span>
+                    <span class="map-counter-value map-counter-value--journal">{{ journalMapLayerVisited() ? '●' : '—' }}</span>
+                  </button>
+                </div>
+                <div class="map-filter-counters-right">
+                  <button type="button" class="map-counter map-counter--journal map-counter--journal-disc"
+                    [class.map-counter--active]="journalMapLayerDiscovered()"
+                    [attr.aria-pressed]="journalMapLayerDiscovered()"
+                    title="Découverts FSS (FSSDiscoveryScan)"
+                    (click)="toggleJournalMapDiscovered()">
+                    <span class="map-counter-label">Découverts</span>
+                    <span class="map-counter-value map-counter-value--journal">{{ journalMapLayerDiscovered() ? '●' : '—' }}</span>
+                  </button>
+                  <button type="button" class="map-counter map-counter--journal map-counter--journal-full"
+                    [class.map-counter--active]="journalMapLayerFullScan()"
+                    [attr.aria-pressed]="journalMapLayerFullScan()"
+                    title="Full scan (FSSAllBodiesFound)"
+                    (click)="toggleJournalMapFullScan()">
+                    <span class="map-counter-label">Full scan</span>
+                    <span class="map-counter-value map-counter-value--journal">{{ journalMapLayerFullScan() ? '●' : '—' }}</span>
+                  </button>
+                </div>
+              </div>
+              }
             </div>
           </div>
           <div class="box box-sync-status">
@@ -189,6 +243,11 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
               </div>
             </div>
             <div class="sync-logs-container">
+              @if (mapViewMode() === 'cmdr') {
+                <p class="sync-status-cmdr-hint">
+                  Vue Faction : calques sur les systèmes guilde (coords EDSM). Vue Cmdr : tous les points journal avec StarPos.
+                </p>
+              }
               <div class="sync-logs">
                 @for (line of syncLogLines(); track $index) {
                   <div class="log-line" [class.log-line--error]="isErrorLine(line)">{{ line }}</div>
@@ -204,6 +263,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
         <aside class="col col-right">
           @if (showCmdrConnected() && dashboard()?.frontierProfile; as fp) {
           <div class="box box-frontier-cmdr">
+            <div class="frontier-cmdr-layout">
+            <div class="frontier-cmdr-main">
             <div class="frontier-cmdr-header">
               <h3 class="frontier-cmdr-title">CMDR CONNECTÉ</h3>
             </div>
@@ -279,6 +340,16 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                   <span class="btn-journal-retry-text">Retry {{ journalRetryCount() }} erreur(s) 401</span>
                 </button>
               }
+              <button type="button" class="btn-journal-parse"
+                [disabled]="journalParseRunning()"
+                (click)="onParseJournalClick()">
+                <span class="btn-journal-parse-text">{{ journalParseRunning() ? 'Parsing…' : 'Parser journal → carte' }}</span>
+                @if (journalParseStatus(); as ps) {
+                  <span class="btn-journal-parse-meta">{{ ps.systemsCount }} syst. · {{ ps.pendingDaysEstimate }} j. restants</span>
+                }
+              </button>
+            </div>
+            </div>
             </div>
           </div>
           }
@@ -782,6 +853,15 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .sync-status-header h3 {
       margin: 0;
     }
+    .sync-status-cmdr-hint {
+      margin: 0 0 0.5rem;
+      padding: 0 0 0.45rem;
+      font-size: 0.58rem;
+      line-height: 1.35;
+      color: rgba(255, 255, 255, 0.5);
+      font-family: 'Exo 2', sans-serif;
+      border-bottom: 1px solid rgba(0, 212, 255, 0.14);
+    }
     .btn-copy {
       padding: 0.35rem 0.6rem;
       font-size: 0.65rem;
@@ -974,6 +1054,46 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       flex-direction: column;
       gap: 1rem;
     }
+    .map-box-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem 1rem;
+      flex-shrink: 0;
+    }
+    .map-box-header h3 {
+      margin: 0;
+    }
+    .map-view-toggle {
+      display: inline-flex;
+      align-items: stretch;
+      border-radius: 4px;
+      border: 1px solid rgba(0, 212, 255, 0.25);
+      background: rgba(0, 212, 255, 0.1);
+      overflow: hidden;
+    }
+    .map-view-toggle-btn {
+      padding: 0.35rem 0.65rem;
+      font-size: 0.65rem;
+      font-family: 'Orbitron', sans-serif;
+      font-weight: 500;
+      color: #00d4ff;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.15s;
+    }
+    .map-view-toggle-btn:hover:not(.map-view-toggle-btn--active) {
+      background: rgba(0, 212, 255, 0.12);
+    }
+    .map-view-toggle-btn--active {
+      background: rgba(0, 212, 255, 0.25);
+    }
+    .map-view-toggle-btn + .map-view-toggle-btn {
+      border-left: 1px solid rgba(0, 212, 255, 0.25);
+    }
     .map-3d-wrapper {
       flex: 1 1 0;
       min-height: 0;
@@ -1066,10 +1186,76 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .map-counter:disabled .map-counter-value {
       color: rgba(255, 255, 255, 0.5);
     }
+    .map-counter-value--journal {
+      font-size: 1rem;
+      color: rgba(255, 255, 255, 0.35);
+    }
+    .map-counter--journal-visited.map-counter--active .map-counter-value--journal {
+      color: #26c6da;
+    }
+    .map-counter--journal-disc.map-counter--active .map-counter-value--journal {
+      color: #b388ff;
+    }
+    .map-counter--journal-full.map-counter--active .map-counter-value--journal {
+      color: #ffb300;
+    }
+    .map-counter--journal-visited.map-counter--active {
+      border-color: rgba(38, 198, 218, 0.55);
+    }
+    .map-counter--journal-disc.map-counter--active {
+      border-color: rgba(179, 136, 255, 0.55);
+    }
+    .map-counter--journal-full.map-counter--active {
+      border-color: rgba(255, 179, 0, 0.55);
+    }
     .box-frontier-cmdr {
       display: flex;
       flex-direction: column;
       padding-bottom: 16px;
+    }
+    .frontier-cmdr-layout {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 0.5rem;
+      width: 100%;
+    }
+    .frontier-cmdr-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .btn-journal-parse {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.15rem;
+      width: 100%;
+      margin-top: 0.35rem;
+      padding: 0.3rem 0.5rem;
+      font-size: 0.58rem;
+      font-family: 'Orbitron', sans-serif;
+      background: rgba(0, 255, 136, 0.08);
+      border: 1px solid rgba(0, 255, 136, 0.25);
+      color: #00ff88;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-journal-parse:hover:not(:disabled) {
+      background: rgba(0, 255, 136, 0.15);
+    }
+    .btn-journal-parse:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-journal-parse-text {
+      font-weight: 600;
+    }
+    .btn-journal-parse-meta {
+      font-size: 0.5rem;
+      color: rgba(255, 255, 255, 0.55);
     }
     .frontier-cmdr-header {
       display: flex;
@@ -1451,6 +1637,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly journalBackfillProgress = signal<string | null>(null);
   /** True pendant l'appel STOP (bouton désactivé, message "Arrêt demandé..."). */
   protected readonly journalStopRequested = signal(false);
+  /** Calques carte 3D (journal CMDR). */
+  protected readonly journalMapLayerVisited = signal(false);
+  protected readonly journalMapLayerDiscovered = signal(false);
+  protected readonly journalMapLayerFullScan = signal(false);
+  /** Clé = nom système normalisé (uppercase), pour la carte. */
+  protected readonly journalDerivedByName = signal<
+    Record<string, { isVisited: boolean; isDiscovered: boolean; isFullScanned: boolean }>
+  >({});
+  /** Liste complète GET derived/systems (coords CMDR pour la vue Cmdr). */
+  protected readonly journalDerivedSystemsList = signal<FrontierJournalSystemDerivedDto[]>([]);
+  /** Points journal avec coordonnées StarPos pour la carte vue Cmdr. */
+  protected readonly journalCmdrMapPoints = computed(() =>
+    this.journalDerivedSystemsList().filter(
+      (s) => s.coordsX != null && s.coordsY != null && s.coordsZ != null,
+    ),
+  );
+  /** faction = carte guilde + filtres BGS ; cmdr = points journal avec coords. */
+  protected readonly mapViewMode = signal<'faction' | 'cmdr'>('faction');
+  protected readonly journalParseRunning = signal(false);
+  protected readonly journalParseStatus = signal<FrontierJournalParseStatusDto | null>(null);
+  private journalParsePollingRef: ReturnType<typeof setInterval> | null = null;
   protected readonly cmdrsMenuOpen = signal(false);
   protected readonly syncStatusMenuOpen = signal(false);
   protected readonly headerAvatarError = signal(false);
@@ -1577,6 +1784,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   protected setSystemsFilter(value: SystemsFilterValue): void {
     this.guildSystemsSync.systemsFilter.set(value);
+    this.journalMapLayerVisited.set(false);
+    this.journalMapLayerDiscovered.set(false);
+    this.journalMapLayerFullScan.set(false);
   }
 
   protected showCmdrConnected = signal(true);
@@ -1655,7 +1865,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const journalProgress = this.journalBackfillProgress();
     const progressLine = progress ? [`[${new Date().toISOString().slice(11, 23)}] ${progress}`] : [];
     const journalLine = journalProgress ? [`[${new Date().toISOString().slice(11, 23)}] ${journalProgress}`] : [];
-    const logsReversed = [...logLines, ...progressLine, ...journalLine].reverse();
+    const ps = this.journalParseStatus();
+    const journalParsedTotalLine =
+      ps != null
+        ? [
+            `[${new Date().toISOString().slice(11, 23)}] Journal parsé : ${ps.parsedDaysCount} jour${ps.parsedDaysCount > 1 ? 's' : ''} au total`,
+          ]
+        : [];
+    const logsReversed = [...logLines, ...progressLine, ...journalLine, ...journalParsedTotalLine].reverse();
     return [...logsReversed, '---------', ...recapLines];
   });
 
@@ -1895,12 +2112,98 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
+  private refreshJournalParseAndDerived(): void {
+    this.frontierJournalApi.getParseStatus().subscribe({
+      next: (st) => {
+        this.journalParseStatus.set(st);
+        if (st.isRunning) {
+          this.journalParseRunning.set(true);
+          this.startJournalParsePolling();
+        }
+      },
+    });
+    this.loadJournalDerived();
+  }
+
+  private loadJournalDerived(): void {
+    this.frontierJournalApi.getDerivedSystems().subscribe({
+      next: (res) => {
+        this.journalDerivedSystemsList.set(res.systems ?? []);
+        const map: Record<string, { isVisited: boolean; isDiscovered: boolean; isFullScanned: boolean }> = {};
+        for (const s of res.systems) {
+          map[s.systemName.trim().toUpperCase()] = {
+            isVisited: s.isVisited,
+            isDiscovered: s.isDiscovered,
+            isFullScanned: s.isFullScanned,
+          };
+        }
+        this.journalDerivedByName.set(map);
+      },
+      error: () => {
+        /* silencieux si pas encore de derived */
+      },
+    });
+  }
+
+  protected onParseJournalClick(): void {
+    this.frontierJournalApi.startIncrementalParse(40).subscribe({
+      next: () => {
+        this.addLog('Parsing journal incrémental démarré…');
+        this.journalParseRunning.set(true);
+        this.startJournalParsePolling();
+      },
+      error: (err) => {
+        const msg = err?.error?.message ?? err?.message ?? 'Erreur parsing journal';
+        this.addLog(msg);
+      },
+    });
+  }
+
+  private startJournalParsePolling(): void {
+    this.stopJournalParsePolling();
+    const poll = () => {
+      this.frontierJournalApi.getParseStatus().subscribe({
+        next: (st) => {
+          this.journalParseStatus.set(st);
+          if (!st.isRunning) {
+            this.journalParseRunning.set(false);
+            this.stopJournalParsePolling();
+            this.loadJournalDerived();
+            this.addLog('Parsing journal : lot terminé.');
+          }
+        },
+      });
+    };
+    poll();
+    this.journalParsePollingRef = setInterval(poll, 1500);
+  }
+
+  private stopJournalParsePolling(): void {
+    if (this.journalParsePollingRef) {
+      clearInterval(this.journalParsePollingRef);
+      this.journalParsePollingRef = null;
+    }
+  }
+
+  protected toggleJournalMapVisited(): void {
+    this.journalMapLayerVisited.update((v) => !v);
+  }
+  protected toggleJournalMapDiscovered(): void {
+    this.journalMapLayerDiscovered.update((v) => !v);
+  }
+  protected toggleJournalMapFullScan(): void {
+    this.journalMapLayerFullScan.update((v) => !v);
+  }
+
   ngOnInit(): void {
     this.addLog('Dashboard initialisé');
     this.addLog('Prêt — utilisez les boutons sync pour importer depuis Inara');
     this.guildSettings.load();
     this.inaraBridge.check();
-    if (this.frontierAuth.isConnected()) this.fetchJournalStatus();
+    if (this.frontierAuth.isConnected()) {
+      this.fetchJournalStatus();
+    }
+    this.refreshJournalParseAndDerived();
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') this.guildSettings.load();
@@ -2142,5 +2445,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopJournalStatusPolling();
+    this.stopJournalParsePolling();
   }
 }
