@@ -31,6 +31,7 @@
   color: var(--accent);
   opacity: 1;
   margin: 0;
+  text-transform: uppercase;
 }
 
 .btn-new-route {
@@ -49,7 +50,10 @@
   text-transform: uppercase;
   white-space: nowrap;
 
-  &:hover { background: var(--accent); color: var(--bg); }
+  &:hover {
+    background: var(--accent);
+    color: var(--bg);
+  }
 }
 
 .bridge-meta {

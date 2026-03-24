@@ -136,6 +136,7 @@ using (var scope = app.Services.CreateScope())
 
 // ── Pipeline HTTP ─────────────────────────────────────────────────────────
 app.UseMiddleware<ExceptionMiddleware>();
+app.UseMiddleware<LocalizationMiddleware>();
 
 // Fichiers statiques du build Angular AVANT auth (accès public aux .js, .css)
 if (webRootPath != null)

@@ -16,16 +16,16 @@
       <span class="cmdr-name">
         CMDR <strong>{{ authService.commanderName() }}</strong>
       </span>
-<app-profile-menu />
+      <app-profile-menu />
     </div>
   </header>
 
   <!-- Erreur API -->
   @if (store.error()) {
-    <div class="error-banner">
-      ⚠ {{ store.error() }}
-      <button type="button" class="error-dismiss" (click)="store.clearError()" title="Fermer">×</button>
-    </div>
+  <div class="error-banner">
+    ⚠ {{ store.error() }}
+    <button type="button" class="error-dismiss" (click)="store.clearError()" title="Fermer">×</button>
+  </div>
   }
 
   <!-- STATS BAR -->
@@ -40,36 +40,36 @@
       <div class="stats-legend">
         <div class="stat">
           <span class="stat-dot done"></span>
-          <span class="stat-label">Opérationnels</span>
+          <span class="stat-label">{{'SYSTEM.STATUS.COMPLETES' | translate}}</span>
           <span class="stat-val">{{ store.stats().done }}</span>
         </div>
         <div class="stat-sep"></div>
         <div class="stat">
           <span class="stat-dot build"></span>
-          <span class="stat-label">En cours</span>
+          <span class="stat-label">{{'COMMON.IN_PROGRESS' | translate}}</span>
           <span class="stat-val">{{ store.stats().inProgress }}</span>
         </div>
         <div class="stat-sep"></div>
         <div class="stat">
           <span class="stat-dot plan"></span>
-          <span class="stat-label">Planifiés</span>
+          <span class="stat-label">{{'SYSTEM.STATUS.PLANNED_PLR' | translate}}</span>
           <span class="stat-val">{{ store.stats().planned }}</span>
         </div>
         <div class="stat-sep"></div>
         <div class="stat">
           <span class="stat-dot pile"></span>
-          <span class="stat-label">Piles</span>
+          <span class="stat-label">{{'SYSTEM.TYPE.PIERS' | translate}}</span>
           <span class="stat-val">{{ store.stats().piles }}</span>
         </div>
         <div class="stat-sep"></div>
         <div class="stat">
           <span class="stat-dot tablier"></span>
-          <span class="stat-label">Tabliers</span>
+          <span class="stat-label">{{'SYSTEM.TYPE.DECKS' | translate}}</span>
           <span class="stat-val">{{ store.stats().tabliers }}</span>
         </div>
       </div>
       <div class="stat-progress">
-        <span class="stat-label">Progression</span>
+        <span class="stat-label">{{'COMMON.COMPLETION' | translate}}</span>
         <span class="stat-val accent">{{ store.stats().completion }}%</span>
       </div>
     </div>

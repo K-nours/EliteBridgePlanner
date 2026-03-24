@@ -1,6 +1,6 @@
 <div class="viz-container">
   <div class="viz-header">
-    <div class="viz-title">▸ VISUALISATION DU PONT STELLAIRE</div>
+    <div class="viz-title">▸ {{'BRIDGE.MAP.TITLE' | translate }}</div>
     @if (isDetailView()) {
       <button
         type="button"
@@ -161,7 +161,7 @@
   }
 
   @if (orderedSystems().length === 0) {
-    <span class="empty-viz">Aucun système — ajoutez-en un pour commencer</span>
+    <span class="empty-viz">{{'BRIDGE.MAP.EMPTY' | translate }}</span>
   }
     </div>
 

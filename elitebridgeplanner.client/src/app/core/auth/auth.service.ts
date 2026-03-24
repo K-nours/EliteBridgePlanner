@@ -47,6 +47,8 @@ export class AuthService {
       token: response.token,
       commanderName: response.commanderName,
       email: response.email,
+      preferredLanguage: response.preferredLanguage,
+      preferredTimeZone: response.preferredTimeZone,
       expiresAt: new Date(response.expiresAt)
     };
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));

@@ -1,22 +1,22 @@
 <div class="detail-wrapper">
   <div class="section-header">
-    <span class="section-title">▸ DÉTAIL DU SYSTÈME</span>
+    <span class="section-title">▸ {{'BRIDGE.SYSTEM-DETAIL.TITLE' | translate}}</span>
     @if (isSingleSelection()) {
       <div class="action-btns">
-        <button class="btn btn-critical btn-sm" (click)="onDelete()">SUPPRIMER</button>
-        <button class="btn btn-sm" (click)="onSave()">SAUVEGARDER</button>
+        <button class="btn btn-critical btn-sm" (click)="onDelete()">{{'COMMON.DELETE' | translate}}</button>
+        <button class="btn btn-sm" (click)="onSave()">{{'COMMON.SAVE' | translate}}</button>
       </div>
     }
   </div>
 
   @if (isSingleSelection(); as sys) {
     <div
-        class="detail-panel animate-fadeIn"
-        [class.type-DEBUT]="sys.type === 'DEBUT'"
-        [class.type-FIN]="sys.type === 'FIN'"
-        [class.type-PILE]="sys.type === 'PILE'"
-        [class.type-TABLIER]="sys.type === 'TABLIER'"
-      >
+      class="detail-panel animate-fadeIn"
+      [class.type-DEBUT]="sys.type === 'DEBUT'"
+      [class.type-FIN]="sys.type === 'FIN'"
+      [class.type-PILE]="sys.type === 'PILE'"
+      [class.type-TABLIER]="sys.type === 'TABLIER'"
+    >
       <div class="detail-heading">
         <div class="detail-heading-row">
           <span class="badge" [class]="'badge-type-' + sys.type">{{ typeLabel(sys.type) }}</span>
@@ -27,33 +27,35 @@
 
       <div class="edit-grid">
         <div class="field-group full-width">
-          <label class="field-label">Nom du Système</label>
+          <label class="field-label">{{'BRIDGE.SYSTEM-DETAIL.SYSTEM_NAME' | translate}}</label>
           <input class="field-input" [formControl]="form.controls.name" />
         </div>
 
         <div class="field-group">
-          <label class="field-label" [id]="'edit-type-label'">Type</label>
-          <app-custom-select
-            [options]="typeOptions"
-            [labelId]="'edit-type-label'"
-            [formControl]="form.controls.type"
-          />
+          <label class="field-label" [id]="'edit-type-label'">{{'COMMON.TYPE' | translate}}</label>
+          <app-custom-select [options]="typeOptions" [labelId]="'edit-type-label'" [formControl]="form.controls.type" />
         </div>
 
         <div class="field-group">
-          <label class="field-label">Architecte (ID utilisateur)</label>
+          <label class="field-label">{{'BRIDGE.SYSTEM-DETAIL.ARCHITECT' | translate}}</label>
           <input class="field-input" [formControl]="form.controls.architectId" placeholder="ID ou vide = Inconnu" />
         </div>
 
         <div class="field-group full-width">
-          <label class="field-label">Statut de Construction</label>
+          <label class="field-label">{{'BRIDGE.SYSTEM-DETAIL.CONSTRUCTION_STATE' | translate}}</label>
           <div class="status-row">
             @for (opt of statusOptions; track opt.value) {
               <button
-                [class]="'status-btn status-' + opt.value + (form.controls.status.value === opt.value ? ' active-' + opt.value : '')"
+                [class]="
+                  'status-btn status-' +
+                  opt.value +
+                  (form.controls.status.value === opt.value ? ' active-' + opt.value : '')
+                "
                 type="button"
                 (click)="form.controls.status.setValue(opt.value)"
-              >{{ opt.label }}</button>
+              >
+                {{ opt.label | translate }}
+              </button>
             }
           </div>
         </div>
@@ -62,7 +64,11 @@
   } @else if (isMultiSelection()) {
     <div class="detail-panel bulk-panel animate-fadeIn">
       <div class="detail-heading bulk-heading">
-        <span class="bulk-count">{{ selectedCount() }} système{{ selectedCount() > 1 ? 's' : '' }} sélectionné{{ selectedCount() > 1 ? 's' : '' }}</span>
+        <span class="bulk-count"
+          >{{ selectedCount() }} système{{ selectedCount() > 1 ? 's' : '' }} sélectionné{{
+            selectedCount() > 1 ? 's' : ''
+          }}</span
+        >
       </div>
       <div class="field-group full-width">
         <label class="field-label">Statut (modification en masse)</label>
@@ -72,7 +78,9 @@
               [class]="'status-btn status-' + opt.value"
               type="button"
               (click)="onBulkStatus(opt.value)"
-            >{{ opt.label }}</button>
+            >
+              {{ opt.label | translate }}
+            </button>
           }
         </div>
       </div>
@@ -80,7 +88,9 @@
   } @else {
     <div class="empty-detail">
       <span class="empty-icon">◈</span>
-      <p>Sélectionnez un système dans la liste<br>ou ajoutez-en un nouveau</p>
+      <p>
+        {{'BRIDGE.SYSTEM-DETAIL.EMPTY' | translate}}<br />{{'BRIDGE.SYSTEM-DETAIL.EMPTY_SUB' | translate}}
+      </p>
     </div>
   }
 </div>

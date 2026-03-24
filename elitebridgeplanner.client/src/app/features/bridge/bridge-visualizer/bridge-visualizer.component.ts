@@ -4,6 +4,7 @@ import { BridgeStore } from '../../../core/services/bridge.store';
 import { TruncateMiddlePipe } from '../../../shared/pipes/truncate-middle.pipe';
 import { TruncateTooltipDirective } from '../../../shared/directives/truncate-tooltip.directive';
 import type { StarSystemDto } from '../../../core/models/models';
+import { TranslateModule } from '@ngx-translate/core';
 
 const MACRO_THRESHOLD = 25;
 
@@ -14,7 +15,7 @@ type MacroItem =
 @Component({
   selector: 'app-bridge-visualizer',
   standalone: true,
-  imports: [TruncateMiddlePipe, TruncateTooltipDirective],
+  imports: [TruncateMiddlePipe, TruncateTooltipDirective, TranslateModule],
   templateUrl: './bridge-visualizer.component.html',
   styleUrl: './bridge-visualizer.component.scss'
 })
