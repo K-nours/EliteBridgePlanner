@@ -359,6 +359,12 @@ MigrationBackup/
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
 
+# macOS
+.DS_Store
+
+# Frontier CAPI — journal de vol backfill (données locales, volumineuses)
+501/server/Data/frontier-journal/
+
 # Cursor IDE rules and context (local only)
 .cursor/
 

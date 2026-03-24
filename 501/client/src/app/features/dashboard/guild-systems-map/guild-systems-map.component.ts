@@ -10,6 +10,7 @@ import {
   SimpleChanges,
   inject,
   effect,
+  ChangeDetectorRef,
 } from '@angular/core';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -31,7 +32,7 @@ const CATEGORY_COLORS: Record<MapCategoryKey, number> = {
   origin: 0x00d4ff,
   headquarter: 0xd4af37,
   surveillance: 0x93c5fd,
-  conflicts: 0xff6b6b,
+  conflicts: 0xcc5500,
   critical: 0xff6b6b,
   low: 0xe0e0e0,
   healthy: 0x00ff88,
@@ -39,6 +40,20 @@ const CATEGORY_COLORS: Record<MapCategoryKey, number> = {
 };
 
 const GLOW_CATEGORIES: Set<MapCategoryKey> = new Set(['origin', 'headquarter', 'critical']);
+/** Repères galactiques (coordonnées ED en années-lumière). */
+const GALACTIC_LANDMARKS = [
+  { id: 'sol', name: 'Sol', x: 0, y: 0, z: 0, color: 0xffdd44, region: 'Bulle' },
+  { id: 'ngc6357', name: 'NGC 6357 Sector KC-V c2-47', x: 946.81, y: 122.78, z: 8095.34, color: 0xffdd44, region: 'NGC 6357' },
+  { id: 'sagA', name: 'Centre galactique', x: 25.22, y: -20.91, z: 25899.97, color: 0x9944ff },
+  { id: 'colonia', name: 'Colonia', x: -9530.5, y: -910.28, z: 19808.13, color: 0x00cc99, region: 'Colonia' },
+  { id: 'onoros', name: 'Onoros', x: 389.72, y: -379.94, z: -724.16, color: 0xddbb44, region: 'Witch Head' },
+] as const;
+/** Convention ED : X inversé pour que Colonia soit à gauche du centre galactique vu depuis Sol. */
+const ED_TO_SCENE_X = (x: number) => -x;
+/** Facteur de tolérance pour le raycast (hit area = rayon_visuel * HIT_TOLERANCE). */
+const HIT_TOLERANCE = 2;
+/** Facteur de scale au survol. */
+const HOVER_SCALE = 1.3;
 
 interface MapSystem extends GuildSystemBgsDto {
   mapCategory: MapCategoryKey;
@@ -69,6 +84,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   @Input() systemsFilter: SystemsFilterValue = 'all';
 
   private readonly guildSync = inject(GuildSystemsSyncService);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   private scene: THREE.Scene | null = null;
   private camera: THREE.PerspectiveCamera | null = null;
@@ -77,6 +93,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   private raycaster = new THREE.Raycaster();
   private mouse = new THREE.Vector2();
   private meshMap = new Map<number, THREE.Mesh>();
+  private hitMeshMap = new Map<number, THREE.Mesh>();
+  private glowMeshes: THREE.Mesh[] = [];
   private animationId = 0;
   private hoveredSystem: MapSystem | null = null;
 
@@ -90,7 +108,15 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   /** Zoom 0..100 : 0 = loin, 100 = proche. */
   zoomLevel = 50;
 
+  /** Toggle repères galactiques (Sol, Centre galactique) + labels. */
+  landmarksVisible = true;
+
+  /** Positions 2D des labels pour le rendu (mis à jour dans animate). */
+  landmarkLabels: { id: string; name: string; region?: string; x: number; y: number; visible: boolean }[] = [];
+
   private panInterval: ReturnType<typeof setInterval> | null = null;
+  private landmarkMeshes: THREE.Mesh[] = [];
+  private landmarkPositions: THREE.Vector3[] = [];
 
   constructor() {
     effect(() => {
@@ -154,6 +180,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.renderer?.dispose();
   }
 
+
   private initScene(): void {
     const container = this.canvasContainerRef.nativeElement;
     const width = container.clientWidth;
@@ -179,8 +206,10 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.controls.maxDistance = 2000;
 
     this.addStarfield();
+    this.addLandmarks();
 
     this.renderer.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
+    this.renderer.domElement.addEventListener('mouseleave', () => this.onMouseLeave());
     this.renderer.domElement.addEventListener('click', (e) => this.onClick(e));
 
     window.addEventListener('resize', () => this.onResize());
@@ -189,9 +218,9 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
 
   private addStarfield(): void {
     if (!this.scene) return;
-    const count = 800;
+    const count = 2200;
     const positions = new Float32Array(count * 3);
-    const size = 8000;
+    const size = 12000;
     for (let i = 0; i < count * 3; i += 3) {
       positions[i] = (Math.random() - 0.5) * size;
       positions[i + 1] = (Math.random() - 0.5) * size;
@@ -200,26 +229,67 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(positions, 3));
     const mat = new THREE.PointsMaterial({
       color: 0xffffff,
-      size: 0.8,
+      size: 1.4,
       transparent: true,
-      opacity: 0.4,
+      opacity: 0.6,
+      sizeAttenuation: true,
     });
     const stars = new THREE.Points(geo, mat);
     this.scene.add(stars);
   }
 
+  private addLandmarks(): void {
+    if (!this.scene) return;
+    for (const m of this.landmarkMeshes) this.scene.remove(m);
+    this.landmarkMeshes = [];
+    this.landmarkPositions = [];
+    for (const lm of GALACTIC_LANDMARKS) {
+      const pos = new THREE.Vector3(ED_TO_SCENE_X(lm.x), lm.y, lm.z);
+      this.landmarkPositions.push(pos);
+      const r = 6;
+      const geom = new THREE.SphereGeometry(r, 12, 10);
+      const mat = new THREE.MeshBasicMaterial({
+        color: lm.color,
+        transparent: true,
+        opacity: 0.9,
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.position.copy(pos);
+      mesh.name = `landmark-${lm.id}`;
+      mesh.renderOrder = 5;
+      mesh.visible = this.landmarksVisible;
+      this.scene.add(mesh);
+      this.landmarkMeshes.push(mesh);
+    }
+  }
+
+  private updateLandmarksVisibility(): void {
+    for (const m of this.landmarkMeshes) {
+      m.visible = this.landmarksVisible;
+    }
+  }
+
   private updatePoints(): void {
     if (!this.scene || !this.camera || !this.controls) return;
 
+    this.clearHoverFocus();
+    this.hoveredSystem = null;
+    this.tooltipData = null;
+    if (this.renderer?.domElement?.style) this.renderer.domElement.style.cursor = 'default';
+
     this.meshMap.forEach((m) => this.scene!.remove(m));
     this.meshMap.clear();
+    this.hitMeshMap.forEach((m) => this.scene!.remove(m));
+    this.hitMeshMap.clear();
+    for (const glow of this.glowMeshes) this.scene!.remove(glow);
+    this.glowMeshes = [];
 
     const list = this.systemsWithCoords;
     if (list.length === 0) return;
 
     let sumX = 0, sumY = 0, sumZ = 0;
     for (const sys of list) {
-      sumX += sys.coordsX!;
+      sumX += ED_TO_SCENE_X(sys.coordsX!);
       sumY += sys.coordsY!;
       sumZ += sys.coordsZ!;
     }
@@ -230,30 +300,43 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
 
     for (const sys of list) {
       const r = this.radiusFromInfluence(sys.influencePercent);
-      const geometry = new THREE.SphereGeometry(r, 8, 6);
       const color = CATEGORY_COLORS[sys.mapCategory] ?? 0xffffff;
+
+      const geometry = new THREE.SphereGeometry(r, 10, 8);
       const material = new THREE.MeshBasicMaterial({
         color,
         transparent: true,
-        opacity: 0.9,
+        opacity: 0.85,
       });
       const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(sys.coordsX!, sys.coordsY!, sys.coordsZ!);
+      mesh.position.set(ED_TO_SCENE_X(sys.coordsX!), sys.coordsY!, sys.coordsZ!);
       (mesh as THREE.Mesh & { systemData?: MapSystem }).systemData = sys;
       mesh.name = `sys-${sys.id}`;
+      mesh.renderOrder = 0;
       this.scene.add(mesh);
       this.meshMap.set(sys.id, mesh);
 
+      const hitRadius = r * HIT_TOLERANCE;
+      const hitGeom = new THREE.SphereGeometry(hitRadius, 8, 6);
+      const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+      const hitMesh = new THREE.Mesh(hitGeom, hitMat);
+      hitMesh.position.copy(mesh.position);
+      (hitMesh as THREE.Mesh & { systemData?: MapSystem }).systemData = sys;
+      hitMesh.name = `hit-${sys.id}`;
+      this.scene.add(hitMesh);
+      this.hitMeshMap.set(sys.id, hitMesh);
+
       if (GLOW_CATEGORIES.has(sys.mapCategory)) {
-        const glowGeom = new THREE.SphereGeometry(r * 1.8, 8, 6);
+        const glowGeom = new THREE.SphereGeometry(r * 1.15, 8, 6);
         const glowMat = new THREE.MeshBasicMaterial({
           color,
           transparent: true,
-          opacity: 0.15,
+          opacity: 0.04,
         });
         const glow = new THREE.Mesh(glowGeom, glowMat);
         glow.position.copy(mesh.position);
         this.scene.add(glow);
+        this.glowMeshes.push(glow);
       }
     }
     this.updateFilterHighlight();
@@ -262,7 +345,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.controls.target.copy(this.viewCenter);
     let maxDist = 0;
     for (const sys of list) {
-      const d = Math.hypot(sys.coordsX! - cx, sys.coordsY! - cy, sys.coordsZ! - cz);
+      const d = Math.hypot(ED_TO_SCENE_X(sys.coordsX!) - cx, sys.coordsY! - cy, sys.coordsZ! - cz);
       if (d > maxDist) maxDist = d;
     }
     this.viewDistance = Math.max(200, maxDist * 1.5);
@@ -270,8 +353,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   }
 
   private radiusFromInfluence(pct: number): number {
-    const min = 2;
-    const max = 12;
+    const min = 0.8;
+    const max = 4;
     return min + (pct / 100) * (max - min);
   }
 
@@ -279,12 +362,16 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     if (!this.scene) return;
     const filter = this.systemsFilter;
     const highlightCat = filter === 'all' ? null : (FILTER_TO_CATEGORY[filter] ?? null);
-    for (const [, mesh] of this.meshMap) {
+    for (const [id, mesh] of this.meshMap) {
       const mat = mesh.material as THREE.MeshBasicMaterial;
       const sys = (mesh as THREE.Mesh & { systemData?: MapSystem }).systemData;
       if (!sys) continue;
+      if (this.hoveredSystem?.id === id) {
+        mat.opacity = 1;
+        continue;
+      }
       const match = !highlightCat || sys.mapCategory === highlightCat;
-      mat.opacity = match ? 0.95 : 0.2;
+      mat.opacity = match ? 0.85 : 0.2;
     }
   }
 
@@ -295,8 +382,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
     this.raycaster.setFromCamera(this.mouse, this.camera);
-    const meshes = Array.from(this.meshMap.values());
-    const hits = this.raycaster.intersectObjects(meshes);
+    const hitMeshes = Array.from(this.hitMeshMap.values());
+    const hits = this.raycaster.intersectObjects(hitMeshes);
 
     const hit = hits[0];
     const sys: MapSystem | null = hit?.object
@@ -304,22 +391,54 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
       : null;
 
     if (sys !== this.hoveredSystem) {
+      this.clearHoverFocus();
       this.hoveredSystem = sys;
       if (sys) {
+        this.applyHoverFocus(sys.id);
         this.tooltipData = { system: sys, x: event.clientX, y: event.clientY };
+        this.renderer.domElement.style.cursor = 'pointer';
       } else {
         this.tooltipData = null;
+        this.renderer.domElement.style.cursor = '';
       }
     } else if (sys) {
       this.tooltipData = { system: sys, x: event.clientX, y: event.clientY };
     }
   }
 
+  private clearHoverFocus(): void {
+    if (this.hoveredSystem) {
+      const mesh = this.meshMap.get(this.hoveredSystem.id);
+      if (mesh) {
+        mesh.scale.setScalar(1);
+        mesh.renderOrder = 0;
+        const sys = (mesh as THREE.Mesh & { systemData?: MapSystem }).systemData;
+        if (sys) {
+          const mat = mesh.material as THREE.MeshBasicMaterial;
+          mat.color.setHex(CATEGORY_COLORS[sys.mapCategory] ?? 0xffffff);
+          mat.depthTest = true;
+        }
+      }
+      this.updateFilterHighlight();
+    }
+  }
+
+  private applyHoverFocus(systemId: number): void {
+    const mesh = this.meshMap.get(systemId);
+    if (!mesh) return;
+    mesh.scale.setScalar(HOVER_SCALE);
+    mesh.renderOrder = 10;
+    const mat = mesh.material as THREE.MeshBasicMaterial;
+    mat.opacity = 1;
+    mat.color.setHex(0x00e5ff);
+    mat.depthTest = false;
+  }
+
   private onClick(_event: MouseEvent): void {
     if (!this.raycaster || !this.camera) return;
     this.raycaster.setFromCamera(this.mouse, this.camera);
-    const meshes = Array.from(this.meshMap.values());
-    const hits = this.raycaster.intersectObjects(meshes);
+    const hitMeshes = Array.from(this.hitMeshMap.values());
+    const hits = this.raycaster.intersectObjects(hitMeshes);
     const hit = hits[0];
     const sys: MapSystem | null = hit?.object
       ? ((hit.object as THREE.Mesh & { systemData?: MapSystem }).systemData ?? null)
@@ -330,6 +449,13 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     } else {
       this.guildSync.clearMapSelection();
     }
+  }
+
+  private onMouseLeave(): void {
+    this.clearHoverFocus();
+    this.hoveredSystem = null;
+    this.tooltipData = null;
+    if (this.renderer?.domElement?.style) this.renderer.domElement.style.cursor = 'default';
   }
 
   private focusOnSystemId(id: number): void {
@@ -382,7 +508,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     if (!this.camera || !this.controls) return;
     const dir = new THREE.Vector3().subVectors(this.camera.position, this.controls.target).normalize();
     const minD = 50;
-    const maxD = 800;
+    const maxD = 1600;
     const dist = minD + (1 - this.zoomLevel / 100) * (maxD - minD);
     this.camera.position.copy(this.controls.target).add(dir.multiplyScalar(dist));
   }
@@ -398,9 +524,35 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.renderer?.setSize(w, h);
   }
 
+  toggleLandmarks(): void {
+    this.landmarksVisible = !this.landmarksVisible;
+    this.updateLandmarksVisibility();
+  }
+
   private animate = (): void => {
     this.animationId = requestAnimationFrame(this.animate);
     this.controls?.update();
+    if (this.landmarksVisible && this.camera && this.renderer && this.landmarkPositions.length > 0) {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+      const labels: { id: string; name: string; region?: string; x: number; y: number; visible: boolean }[] = [];
+      const v = new THREE.Vector3();
+      for (let i = 0; i < GALACTIC_LANDMARKS.length; i++) {
+        v.copy(this.landmarkPositions[i]);
+        v.project(this.camera!);
+        const visible = v.z < 1 && v.x >= -1 && v.x <= 1 && v.y >= -1 && v.y <= 1;
+        const x = ((v.x + 1) / 2) * w + rect.left;
+        const y = ((1 - v.y) / 2) * h + rect.top;
+        const lm = GALACTIC_LANDMARKS[i];
+        labels.push({ id: lm.id, name: lm.name, region: 'region' in lm ? lm.region : undefined, x, y, visible });
+      }
+      this.landmarkLabels = labels;
+      this.cdr.markForCheck();
+    } else if (this.landmarkLabels.length > 0) {
+      this.landmarkLabels = [];
+      this.cdr.markForCheck();
+    }
     this.renderer?.render(this.scene!, this.camera!);
   };
 
