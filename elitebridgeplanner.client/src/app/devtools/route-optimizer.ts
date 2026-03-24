@@ -26,6 +26,8 @@ export interface RouteModification {
   adjustedScore: number;
   deviationCost: number;
   inserted: boolean;
+  /** Raison lisible pour l’UI (voir getInsertionDecisionLabel côté démo) */
+  insertionDecision?: string;
   /** true si le candidat a des coordonnées pour le calcul de distance */
   hasCoords: boolean;
   /** Distance prev → candidate (LY) */
@@ -46,6 +48,8 @@ export interface OptimizedRoute {
     depositsRejectedNotInsertable: number;
     depositsRejectedLowerScore: number;
     totalScoreGained: number;
+    /** Sauts intermédiaires ajoutés (V1 : toujours 0) */
+    intermediateJumpsAdded: number;
   };
 }
 
@@ -104,7 +108,8 @@ export function optimizeRoute(input: OptimizeRouteInput): OptimizedRoute {
     depositsReplaced: 0,
     depositsRejectedNotInsertable: 0,
     depositsRejectedLowerScore: 0,
-    totalScoreGained: 0
+    totalScoreGained: 0,
+    intermediateJumpsAdded: 0
   };
 
   if (piles.length === 0) {
@@ -181,6 +186,27 @@ export function optimizeRoute(input: OptimizeRouteInput): OptimizedRoute {
 
     const shouldReplace = insertable && adjustedScore > depositScore;
 
+    let insertionDecision: string;
+    if (!insertable) {
+      insertionDecision =
+        !candidateCoords || !prevCoords || !nextCoords || !depositCoords
+          ? 'rejected_missing_coords'
+          : 'rejected_large_detour';
+      stats.depositsRejectedNotInsertable++;
+    } else if (!shouldReplace) {
+      insertionDecision = 'rejected_score_insufficient';
+      stats.depositsRejectedLowerScore++;
+    } else {
+      insertionDecision = 'accepted_small_detour';
+      stats.depositsReplaced++;
+      stats.totalScoreGained += adjustedScore - depositScore;
+      jumps[depositJumpIndex] = {
+        ...currentDeposit,
+        name: best.candidate.name,
+        replacedSystemName: pile.pileName
+      };
+    }
+
     modifications.push({
       depositIndex: pile.pileIndex,
       originalSystem: pile.pileName,
@@ -190,23 +216,11 @@ export function optimizeRoute(input: OptimizeRouteInput): OptimizedRoute {
       deviationCost,
       adjustedScore,
       inserted: shouldReplace,
+      insertionDecision,
       hasCoords: !!candidateCoords,
       distPrevCandidate,
       distCandidateNext
     });
-
-    if (!insertable) {
-      stats.depositsRejectedNotInsertable++;
-    } else if (!shouldReplace) {
-      stats.depositsRejectedLowerScore++;
-    } else {
-      stats.depositsReplaced++;
-      stats.totalScoreGained += adjustedScore - depositScore;
-      jumps[depositJumpIndex] = {
-        ...currentDeposit,
-        name: best.candidate.name
-      };
-    }
   }
 
   return { jumps, modifications, stats };

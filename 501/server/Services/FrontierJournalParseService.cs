@@ -5,11 +5,13 @@ namespace GuildDashboard.Server.Services;
 
 /// <summary>
 /// Parsing incrémental du journal CAPI (raw.json) vers agrégats par système.
-/// Règles v1 : visité = FSDJump / CarrierJump / Location ; découvert (FSS) = FSSDiscoveryScan ; full scan = FSSAllBodiesFound.
+/// Règles : visité = FSDJump / CarrierJump / Location ; full scan = FSSAllBodiesFound ;
+/// « découvert par moi » = au moins un Scan avec WasDiscovered=false (premier corps).
+/// Le brut journal est du NDJSON (une ligne JSON par événement) ou legacy tableau JSON.
 /// </summary>
 public class FrontierJournalParseService
 {
-    public const int CurrentParseVersion = 2;
+    public const int CurrentParseVersion = 3;
 
     private const string ParseStateFileName = "frontier-journal-parse-state.json";
     private const string DerivedFileName = "frontier-journal-derived.json";
@@ -75,7 +77,7 @@ public class FrontierJournalParseService
                 LastVisitedAt = s.LastVisitedAt,
                 VisitCount = s.VisitCount,
                 IsVisited = s.IsVisited,
-                IsDiscovered = s.IsDiscovered,
+                HasFirstDiscoveryBody = s.HasFirstDiscoveryBody,
                 IsFullScanned = s.IsFullScanned,
                 Provenance = s.LastProvenance,
                 CoordsX = s.CoordsX,
@@ -157,6 +159,8 @@ public class FrontierJournalParseService
             SaveDerived(derived);
             SaveParseState(state);
             _log.LogInformation("[FrontierJournalParse] Lot terminé : {Count} jour(s) traité(s), {Sys} système(s)", datesToProcess.Count, derived.Systems.Count);
+            if (datesToProcess.Count > 0)
+                LogDerivedDiagnostics(derived);
         }
         catch (Exception ex)
         {
@@ -171,6 +175,47 @@ public class FrontierJournalParseService
             {
                 _parseTask = null;
             }
+        }
+    }
+
+    private void LogDerivedDiagnostics(FrontierJournalDerivedFile derived)
+    {
+        IEnumerable<FrontierJournalDerivedSystem> systems = derived.Systems != null
+            ? derived.Systems.Values
+            : Enumerable.Empty<FrontierJournalDerivedSystem>();
+        var visited = systems.Count(s => s.IsVisited);
+        var fullScanned = systems.Count(s => s.IsFullScanned);
+        var hasFirstDiscoveryBody = systems.Count(s => s.HasFirstDiscoveryBody);
+        var withCoords = systems.Count(s => s.CoordsX.HasValue && s.CoordsY.HasValue && s.CoordsZ.HasValue);
+        _log.LogInformation(
+            "[FrontierJournalParse] Résumé agrégats — visited={Visited}, fullScanned={FullScanned}, hasFirstDiscoveryBody={First}, withCoords={Coords}, systèmesDistincts={Total}",
+            visited,
+            fullScanned,
+            hasFirstDiscoveryBody,
+            withCoords,
+            derived.Systems?.Count ?? 0);
+
+        var examples = systems
+            .Where(s => s.IsVisited || s.IsFullScanned || s.HasFirstDiscoveryBody)
+            .OrderByDescending(s => s.HasFirstDiscoveryBody)
+            .ThenByDescending(s => s.IsFullScanned)
+            .ThenBy(s => s.SystemName, StringComparer.OrdinalIgnoreCase)
+            .Take(5)
+            .ToList();
+        foreach (var ex in examples)
+        {
+            var cx = ex.CoordsX.HasValue ? ex.CoordsX.Value.ToString("F2", CultureInfo.InvariantCulture) : "—";
+            var cy = ex.CoordsY.HasValue ? ex.CoordsY.Value.ToString("F2", CultureInfo.InvariantCulture) : "—";
+            var cz = ex.CoordsZ.HasValue ? ex.CoordsZ.Value.ToString("F2", CultureInfo.InvariantCulture) : "—";
+            _log.LogInformation(
+                "[FrontierJournalParse] Exemple — {Name} | coords=({Cx},{Cy},{Cz}) | visited={V} fullScan={F} firstDiscoveryBody={D}",
+                ex.SystemName,
+                cx,
+                cy,
+                cz,
+                ex.IsVisited,
+                ex.IsFullScanned,
+                ex.HasFirstDiscoveryBody);
         }
     }
 
@@ -202,60 +247,106 @@ public class FrontierJournalParseService
 
     private void ParseDayPayload(string dateStr, string payload, FrontierJournalDerivedFile derived)
     {
-        using var doc = JsonDocument.Parse(payload);
-        if (doc.RootElement.ValueKind != JsonValueKind.Array)
+        var trimmed = payload.TrimStart();
+        if (trimmed.Length == 0)
             return;
 
-        foreach (var el in doc.RootElement.EnumerateArray())
+        if (trimmed[0] == '[')
         {
-            if (el.ValueKind != JsonValueKind.Object)
-                continue;
-            if (!el.TryGetProperty("event", out var evProp))
-                continue;
-            var eventName = evProp.GetString();
-            if (string.IsNullOrEmpty(eventName))
-                continue;
-            if (!el.TryGetProperty("timestamp", out var tsProp))
-                continue;
-            var ts = ParseTimestamp(tsProp.GetString());
-            var starSystem = GetStarSystem(el);
-            if (string.IsNullOrWhiteSpace(starSystem))
-                continue;
-
-            var key = NormalizeSystemKey(starSystem);
-            if (!derived.Systems!.TryGetValue(key, out var sys))
+            using var doc = JsonDocument.Parse(payload);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                return;
+            foreach (var el in doc.RootElement.EnumerateArray())
             {
-                sys = new FrontierJournalDerivedSystem
-                {
-                    SystemName = starSystem.Trim(),
-                };
-                derived.Systems[key] = sys;
+                if (el.ValueKind == JsonValueKind.Object)
+                    ProcessJournalEvent(dateStr, el, derived);
             }
+            return;
+        }
 
-            switch (eventName)
+        foreach (var rawLine in payload.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var line = rawLine.Trim();
+            if (line.Length == 0)
+                continue;
+            try
             {
-                case "FSDJump":
-                case "CarrierJump":
-                case "Location":
+                using var doc = JsonDocument.Parse(line);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                    ProcessJournalEvent(dateStr, doc.RootElement, derived);
+            }
+            catch (JsonException)
+            {
+                /* ligne non JSON — ignorée */
+            }
+        }
+    }
+
+    private void ProcessJournalEvent(string dateStr, JsonElement el, FrontierJournalDerivedFile derived)
+    {
+        if (!el.TryGetProperty("event", out var evProp))
+            return;
+        var eventName = evProp.GetString();
+        if (string.IsNullOrEmpty(eventName))
+            return;
+        if (!el.TryGetProperty("timestamp", out var tsProp))
+            return;
+        var ts = ParseTimestamp(tsProp.GetString());
+
+        switch (eventName)
+        {
+            case "FSDJump":
+            case "CarrierJump":
+            case "Location":
+                {
+                    var starSystem = GetStarSystem(el);
+                    if (string.IsNullOrWhiteSpace(starSystem))
+                        return;
+                    var sys = GetOrCreateSystem(derived, starSystem);
                     ApplyVisit(sys, ts, $"{eventName}:{dateStr}");
                     TryApplyStarPos(el, sys);
                     break;
-                case "FSSDiscoveryScan":
-                    sys.IsDiscovered = true;
-                    sys.LastProvenance = $"FSSDiscoveryScan:{dateStr}";
-                    sys.LastVisitedAt = MaxTime(sys.LastVisitedAt, ts);
-                    TryApplyStarPos(el, sys);
-                    break;
-                case "FSSAllBodiesFound":
+                }
+            case "FSSAllBodiesFound":
+                {
+                    var name = GetStarSystem(el);
+                    if (string.IsNullOrWhiteSpace(name))
+                        return;
+                    var sys = GetOrCreateSystem(derived, name);
                     sys.IsFullScanned = true;
                     sys.LastProvenance = $"FSSAllBodiesFound:{dateStr}";
-                    sys.LastVisitedAt = MaxTime(sys.LastVisitedAt, ts);
                     TryApplyStarPos(el, sys);
                     break;
-                default:
+                }
+            case "Scan":
+                {
+                    if (!el.TryGetProperty("WasDiscovered", out var wd) || wd.ValueKind != JsonValueKind.False)
+                        return;
+                    var scanSys = GetStarSystem(el);
+                    if (string.IsNullOrWhiteSpace(scanSys))
+                        return;
+                    var sys = GetOrCreateSystem(derived, scanSys);
+                    sys.HasFirstDiscoveryBody = true;
+                    sys.LastProvenance = $"Scan:FirstDiscovery:{dateStr}";
                     break;
-            }
+                }
+            default:
+                break;
         }
+    }
+
+    private static FrontierJournalDerivedSystem GetOrCreateSystem(FrontierJournalDerivedFile derived, string starSystem)
+    {
+        var key = NormalizeSystemKey(starSystem);
+        if (!derived.Systems!.TryGetValue(key, out var sys))
+        {
+            sys = new FrontierJournalDerivedSystem
+            {
+                SystemName = starSystem.Trim(),
+            };
+            derived.Systems[key] = sys;
+        }
+        return sys;
     }
 
     private static void ApplyVisit(FrontierJournalDerivedSystem sys, DateTime ts, string provenance)
@@ -269,40 +360,6 @@ public class FrontierJournalParseService
         sys.LastProvenance = provenance;
     }
 
-    private static DateTime? MaxTime(DateTime? field, DateTime ts)
-    {
-        if (field == null || ts > field.Value)
-            return ts;
-        return field;
-    }
-
-    private static string? GetStarSystem(JsonElement el)
-    {
-        if (el.TryGetProperty("StarSystem", out var ss) && ss.ValueKind == JsonValueKind.String)
-            return ss.GetString();
-        return null;
-    }
-
-    /// <summary>Coordonnées galactiques (Ly) depuis le journal Elite (StarPos = [x,y,z]).</summary>
-    private static void TryApplyStarPos(JsonElement el, FrontierJournalDerivedSystem sys)
-    {
-        if (!el.TryGetProperty("StarPos", out var sp) || sp.ValueKind != JsonValueKind.Array)
-            return;
-        using var en = sp.EnumerateArray();
-        if (!en.MoveNext()) return;
-        var ex = en.Current;
-        if (!en.MoveNext()) return;
-        var ey = en.Current;
-        if (!en.MoveNext()) return;
-        var ez = en.Current;
-        if (ex.TryGetDouble(out var x) && ey.TryGetDouble(out var y) && ez.TryGetDouble(out var z))
-        {
-            sys.CoordsX = x;
-            sys.CoordsY = y;
-            sys.CoordsZ = z;
-        }
-    }
-
     private static DateTime ParseTimestamp(string? iso)
     {
         if (string.IsNullOrEmpty(iso))
@@ -310,6 +367,43 @@ public class FrontierJournalParseService
         if (DateTime.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
             return dt.Kind == DateTimeKind.Utc ? dt : dt.ToUniversalTime();
         return DateTime.UtcNow;
+    }
+
+    /// <summary>StarSystem (sauts, Location, Scan) ou SystemName (ex. FSSAllBodiesFound).</summary>
+    private static string? GetStarSystem(JsonElement el)
+    {
+        if (el.TryGetProperty("StarSystem", out var ss) && ss.ValueKind == JsonValueKind.String)
+            return ss.GetString();
+        if (el.TryGetProperty("SystemName", out var sn) && sn.ValueKind == JsonValueKind.String)
+            return sn.GetString();
+        return null;
+    }
+
+    /// <summary>Coordonnées galactiques (Ly) : StarPos ou Position [x,y,z] depuis le journal.</summary>
+    private static void TryApplyStarPos(JsonElement el, FrontierJournalDerivedSystem sys)
+    {
+        if (TryReadVec3(el, "StarPos", out var x, out var y, out var z) ||
+            TryReadVec3(el, "Position", out x, out y, out z))
+        {
+            sys.CoordsX = x;
+            sys.CoordsY = y;
+            sys.CoordsZ = z;
+        }
+    }
+
+    private static bool TryReadVec3(JsonElement el, string propertyName, out double x, out double y, out double z)
+    {
+        x = y = z = 0;
+        if (!el.TryGetProperty(propertyName, out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return false;
+        using var en = arr.EnumerateArray();
+        if (!en.MoveNext()) return false;
+        var ex = en.Current;
+        if (!en.MoveNext()) return false;
+        var ey = en.Current;
+        if (!en.MoveNext()) return false;
+        var ez = en.Current;
+        return ex.TryGetDouble(out x) && ey.TryGetDouble(out y) && ez.TryGetDouble(out z);
     }
 
     private static string NormalizeSystemKey(string name) => name.Trim().ToUpperInvariant();
@@ -445,7 +539,8 @@ public class FrontierJournalDerivedSystem
     public DateTime? LastVisitedAt { get; set; }
     public int VisitCount { get; set; }
     public bool IsVisited { get; set; }
-    public bool IsDiscovered { get; set; }
+    /// <summary>Au moins un corps du système avec Scan et WasDiscovered=false (première découverte).</summary>
+    public bool HasFirstDiscoveryBody { get; set; }
     public bool IsFullScanned { get; set; }
     public string? LastProvenance { get; set; }
     public double? CoordsX { get; set; }
@@ -479,7 +574,7 @@ public class FrontierJournalSystemDerivedDto
     public DateTime? LastVisitedAt { get; set; }
     public int VisitCount { get; set; }
     public bool IsVisited { get; set; }
-    public bool IsDiscovered { get; set; }
+    public bool HasFirstDiscoveryBody { get; set; }
     public bool IsFullScanned { get; set; }
     public string? Provenance { get; set; }
     public double? CoordsX { get; set; }

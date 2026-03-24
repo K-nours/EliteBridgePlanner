@@ -26,6 +26,10 @@ export interface AnalyzedJump {
   /** Index du PILE (1, 2, 3...) — uniquement pour type PILE */
   pileIndex?: number;
   type: 'START' | 'TABLIER' | 'PILE' | 'END';
+  /** Nom du dépôt géométrique d’origine si remplacé par un meilleur candidat */
+  replacedSystemName?: string;
+  /** Saut intermédiaire inséré (réservé / futur — pas encore produit par l’optimiseur) */
+  isIntermediate?: boolean;
 }
 
 export interface LocalPileCandidate {

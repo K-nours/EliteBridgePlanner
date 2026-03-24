@@ -80,10 +80,11 @@ export interface FrontierJournalSystemDerivedDto {
   lastVisitedAt: string | null;
   visitCount: number;
   isVisited: boolean;
-  isDiscovered: boolean;
+  /** Au moins un corps avec Scan et wasDiscovered=false (première découverte). */
+  hasFirstDiscoveryBody: boolean;
   isFullScanned: boolean;
   provenance: string | null;
-  /** Coordonnées galactiques (Ly) depuis StarPos du journal si présentes. */
+  /** Coordonnées galactiques (Ly) depuis StarPos / Position du journal si présentes. */
   coordsX?: number | null;
   coordsY?: number | null;
   coordsZ?: number | null;
