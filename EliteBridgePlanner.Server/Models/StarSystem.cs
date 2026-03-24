@@ -20,9 +20,8 @@ public class StarSystem
     public string? ArchitectId { get; set; }
     public AppUser? Architect { get; set; }
 
-    // FK Pont parent
-    public int BridgeId { get; set; }
-    public Bridge Bridge { get; set; } = null!;
+    // FK Pont parent    
+    public  List<Bridge> Bridge { get; set; } = null!;
 
     // Liste chaînée
     public int? PreviousSystemId { get; set; }
@@ -30,6 +29,10 @@ public class StarSystem
 
     // Calculé dynamiquement — jamais stocké
     public bool IsStart => PreviousSystemId is null;    
+    // Coordonnées pour affichage sur le frontend - herité de spansh ou EDSM - mis a jour lors de la création de système ou lors d'un refresh forcé
+    public float x { get; set; }
+    public float y { get; set; }
+    public float z { get; set; }
 }
 
 public enum SystemType

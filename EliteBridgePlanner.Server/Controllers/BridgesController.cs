@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using EliteBridgePlanner.Server.DTOs;
-using EliteBridgePlanner.Server.Services;
+using EliteBridgePlanner.Server.Services.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

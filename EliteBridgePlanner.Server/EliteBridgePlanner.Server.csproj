@@ -92,4 +92,8 @@
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Repositories\Contracts\" />
+  </ItemGroup>
 </Project>

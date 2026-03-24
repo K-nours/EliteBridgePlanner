@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using EliteBridgePlanner.Server.Controllers;
 using EliteBridgePlanner.Server.DTOs;
-using EliteBridgePlanner.Server.Services;
+using EliteBridgePlanner.Server.Services.Contracts;
 using EliteBridgePlanner.Tests.Helpers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;

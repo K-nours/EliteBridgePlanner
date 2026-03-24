@@ -4,11 +4,12 @@ using System.Text;
 using EliteBridgePlanner.Server.Auth;
 using EliteBridgePlanner.Server.DTOs;
 using EliteBridgePlanner.Server.Models;
+using EliteBridgePlanner.Server.Services.Contracts;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
-namespace EliteBridgePlanner.Server.Services;
+namespace EliteBridgePlanner.Server.Services.Implementations;
 
 public class AuthService : IAuthService
 {

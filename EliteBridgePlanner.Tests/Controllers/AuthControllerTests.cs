@@ -1,6 +1,6 @@
 using EliteBridgePlanner.Server.Controllers;
 using EliteBridgePlanner.Server.DTOs;
-using EliteBridgePlanner.Server.Services;
+using EliteBridgePlanner.Server.Services.Contracts;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using NUnit.Framework;

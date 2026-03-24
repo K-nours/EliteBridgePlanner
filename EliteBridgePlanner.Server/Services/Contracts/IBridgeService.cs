@@ -1,6 +1,6 @@
 using EliteBridgePlanner.Server.DTOs;
 
-namespace EliteBridgePlanner.Server.Services;
+namespace EliteBridgePlanner.Server.Services.Contracts;
 
 /// <summary>
 /// Contrat du service métier Bridge + StarSystem.

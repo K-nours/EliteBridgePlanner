@@ -1,9 +1,10 @@
 using EliteBridgePlanner.Server.Data;
 using EliteBridgePlanner.Server.DTOs;
 using EliteBridgePlanner.Server.Models;
+using EliteBridgePlanner.Server.Services.Contracts;
 using Microsoft.EntityFrameworkCore;
 
-namespace EliteBridgePlanner.Server.Services;
+namespace EliteBridgePlanner.Server.Services.Implementations;
 
 public class BridgeService : IBridgeService
 {

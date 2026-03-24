@@ -1,6 +1,6 @@
 using EliteBridgePlanner.Server.DTOs;
 using EliteBridgePlanner.Server.Models;
-using EliteBridgePlanner.Server.Services;
+using EliteBridgePlanner.Server.Services.Contracts;
 using EliteBridgePlanner.Tests.Helpers;
 using NUnit.Framework;
 
