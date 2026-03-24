@@ -17,6 +17,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { GuildSystemBgsDto } from '../../../core/models/guild-systems.model';
 import type { SystemsFilterValue } from '../../../core/models/guild-systems.model';
 import { GuildSystemsSyncService } from '../../../core/services/guild-systems-sync.service';
+import type { FrontierJournalSystemDerivedDto } from '../../../core/services/frontier-journal-api.service';
 
 export type MapCategoryKey =
   | 'origin'
@@ -57,7 +58,14 @@ const HOVER_SCALE = 1.3;
 
 interface MapSystem extends GuildSystemBgsDto {
   mapCategory: MapCategoryKey;
+  /** Point synthétique vue Cmdr (pas un système Inara / pas de clic panneau guilde). */
+  isJournalCmdrPoint?: boolean;
 }
+
+/** Couleurs calques journal (distinctes des catégories 501st). */
+const JOURNAL_COLOR_VISITED = 0x26c6da;
+const JOURNAL_COLOR_DISCOVERED = 0xb388ff;
+const JOURNAL_COLOR_FULLSCAN = 0xffb300;
 
 const FILTER_TO_CATEGORY: Partial<Record<SystemsFilterValue, MapCategoryKey>> = {
   origin: 'origin',
@@ -82,6 +90,17 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   @Input() systems: GuildSystemsResponseInput = emptyInput();
   @Input() selectedSystemId: number | null = null;
   @Input() systemsFilter: SystemsFilterValue = 'all';
+  /** Vue Faction : systèmes guilde ; Vue Cmdr : points journal avec coordonnées StarPos. */
+  @Input() mapViewMode: 'faction' | 'cmdr' = 'faction';
+  /** Systèmes dérivés du journal ayant coordsX/Y/Z (passé par le parent). */
+  @Input() journalCmdrPoints: FrontierJournalSystemDerivedDto[] = [];
+
+  /** Calques journal CMDR (cumulables) — surbrillance sur la carte. */
+  @Input() journalLayerVisited = false;
+  @Input() journalLayerDiscovered = false;
+  @Input() journalLayerFullScan = false;
+  /** Clé = nom système normalisé (uppercase trim), valeurs depuis GET derived/systems. */
+  @Input() journalByName: Record<string, { isVisited: boolean; isDiscovered: boolean; isFullScanned: boolean }> = {};
 
   private readonly guildSync = inject(GuildSystemsSyncService);
   private readonly cdr = inject(ChangeDetectorRef);
@@ -121,12 +140,15 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   constructor() {
     effect(() => {
       const id = this.guildSync.focusOnSystemId();
-      if (id != null && this.camera && this.controls) this.focusOnSystemId(id);
+      if (id != null && id > 0 && this.camera && this.controls) this.focusOnSystemId(id);
     });
   }
 
-  /** true si des systèmes existent mais aucun n'a de coords. */
+  /** true si aucun point à afficher (message selon la vue). */
   hasNoCoords(): boolean {
+    if (this.mapViewMode === 'cmdr') {
+      return this.journalCmdrPoints.length === 0;
+    }
     const list = this.systemsWithCoords;
     const hasAny = this.totalSystemsCount > 0;
     return hasAny && list.length === 0;
@@ -142,6 +164,9 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   }
 
   private get systemsWithCoords(): MapSystem[] {
+    if (this.mapViewMode === 'cmdr') {
+      return this.journalCmdrPoints.map((p) => journalDtoToMapSystem(p));
+    }
     const byId = new Map<number, MapSystem>();
     const append = (arr: GuildSystemBgsDto[], cat: MapCategoryKey) => {
       for (const s of arr ?? []) {
@@ -169,8 +194,22 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['systems'] && this.scene) this.updatePoints();
-    if (changes['systemsFilter'] && this.scene) this.updateFilterHighlight();
+    if (
+      changes['systems'] ||
+      changes['mapViewMode'] ||
+      changes['journalCmdrPoints']
+    ) {
+      if (this.scene) this.updatePoints();
+    } else if (
+      (changes['systemsFilter'] ||
+        changes['journalLayerVisited'] ||
+        changes['journalLayerDiscovered'] ||
+        changes['journalLayerFullScan'] ||
+        changes['journalByName']) &&
+      this.scene
+    ) {
+      this.updateVisualHighlight();
+    }
   }
 
   ngOnDestroy(): void {
@@ -299,7 +338,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const cz = sumZ / n;
 
     for (const sys of list) {
-      const r = this.radiusFromInfluence(sys.influencePercent);
+      const r = sys.isJournalCmdrPoint ? 1.15 : this.radiusFromInfluence(sys.influencePercent);
       const color = CATEGORY_COLORS[sys.mapCategory] ?? 0xffffff;
 
       const geometry = new THREE.SphereGeometry(r, 10, 8);
@@ -326,7 +365,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
       this.scene.add(hitMesh);
       this.hitMeshMap.set(sys.id, hitMesh);
 
-      if (GLOW_CATEGORIES.has(sys.mapCategory)) {
+      if (!sys.isJournalCmdrPoint && GLOW_CATEGORIES.has(sys.mapCategory)) {
         const glowGeom = new THREE.SphereGeometry(r * 1.15, 8, 6);
         const glowMat = new THREE.MeshBasicMaterial({
           color,
@@ -339,7 +378,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
         this.glowMeshes.push(glow);
       }
     }
-    this.updateFilterHighlight();
+    this.updateVisualHighlight();
 
     this.viewCenter.set(cx, cy, cz);
     this.controls.target.copy(this.viewCenter);
@@ -358,10 +397,51 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     return min + (pct / 100) * (max - min);
   }
 
-  private updateFilterHighlight(): void {
+  private journalLayersActive(): boolean {
+    return this.journalLayerVisited || this.journalLayerDiscovered || this.journalLayerFullScan;
+  }
+
+  private normalizeJournalKey(name: string): string {
+    return name.trim().toUpperCase();
+  }
+
+  /** Priorité affichage : full scan > découvert FSS > visité. */
+  private journalAccentColor(sys: MapSystem): number | null {
+    if (!this.journalLayersActive()) return null;
+    const j = this.journalByName[this.normalizeJournalKey(sys.name)];
+    if (!j) return null;
+    if (this.journalLayerFullScan && j.isFullScanned) return JOURNAL_COLOR_FULLSCAN;
+    if (this.journalLayerDiscovered && j.isDiscovered) return JOURNAL_COLOR_DISCOVERED;
+    if (this.journalLayerVisited && j.isVisited) return JOURNAL_COLOR_VISITED;
+    return null;
+  }
+
+  private journalMatchesActiveLayers(sys: MapSystem): boolean {
+    const j = this.journalByName[this.normalizeJournalKey(sys.name)];
+    if (!j) return false;
+    return (
+      (this.journalLayerVisited && j.isVisited) ||
+      (this.journalLayerDiscovered && j.isDiscovered) ||
+      (this.journalLayerFullScan && j.isFullScanned)
+    );
+  }
+
+  private journalCmdrDefaultColor(sys: MapSystem): number {
+    const j = this.journalByName[this.normalizeJournalKey(sys.name)];
+    if (!j) return 0x778899;
+    if (j.isFullScanned) return JOURNAL_COLOR_FULLSCAN;
+    if (j.isDiscovered) return JOURNAL_COLOR_DISCOVERED;
+    if (j.isVisited) return JOURNAL_COLOR_VISITED;
+    return 0x778899;
+  }
+
+  private updateVisualHighlight(): void {
     if (!this.scene) return;
     const filter = this.systemsFilter;
     const highlightCat = filter === 'all' ? null : (FILTER_TO_CATEGORY[filter] ?? null);
+    const journalOn = this.journalLayersActive();
+    const cmdr = this.mapViewMode === 'cmdr';
+
     for (const [id, mesh] of this.meshMap) {
       const mat = mesh.material as THREE.MeshBasicMaterial;
       const sys = (mesh as THREE.Mesh & { systemData?: MapSystem }).systemData;
@@ -370,8 +450,29 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
         mat.opacity = 1;
         continue;
       }
-      const match = !highlightCat || sys.mapCategory === highlightCat;
-      mat.opacity = match ? 0.85 : 0.2;
+      if (cmdr) {
+        const matchJ = !journalOn || this.journalMatchesActiveLayers(sys);
+        mat.opacity = matchJ ? 0.85 : 0.2;
+        const accent = this.journalAccentColor(sys);
+        if (journalOn && accent != null && matchJ) {
+          mat.color.setHex(accent);
+        } else if (!journalOn) {
+          mat.color.setHex(this.journalCmdrDefaultColor(sys));
+        } else {
+          mat.color.setHex(CATEGORY_COLORS[sys.mapCategory] ?? 0x888888);
+        }
+        continue;
+      }
+      const matchCat = !highlightCat || sys.mapCategory === highlightCat;
+      const matchJ = !journalOn || this.journalMatchesActiveLayers(sys);
+      mat.opacity = matchCat && matchJ ? 0.85 : 0.2;
+
+      const accent = this.journalAccentColor(sys);
+      if (journalOn && accent != null && matchJ && matchCat) {
+        mat.color.setHex(accent);
+      } else {
+        mat.color.setHex(CATEGORY_COLORS[sys.mapCategory] ?? 0xffffff);
+      }
     }
   }
 
@@ -419,7 +520,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
           mat.depthTest = true;
         }
       }
-      this.updateFilterHighlight();
+      this.updateVisualHighlight();
     }
   }
 
@@ -445,7 +546,11 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
       : null;
     this.selectedSystem = sys;
     if (sys) {
-      this.guildSync.onMapSystemClicked(sys.name, sys.id);
+      if (sys.isJournalCmdrPoint) {
+        this.guildSync.clearMapSelection();
+      } else {
+        this.guildSync.onMapSystemClicked(sys.name, sys.id);
+      }
     } else {
       this.guildSync.clearMapSelection();
     }
@@ -568,6 +673,36 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const sign = r >= 0 ? '+' : '-';
     return ` ${sign} ${Math.abs(r).toFixed(2).replace('.', ',')}%`;
   }
+}
+
+function syntheticJournalId(systemName: string): number {
+  let h = 0;
+  const s = systemName.trim().toUpperCase();
+  for (let i = 0; i < s.length; i++) {
+    h = (h << 5) - h + s.charCodeAt(i);
+    h |= 0;
+  }
+  return h <= 0 ? h - 1 : -h;
+}
+
+function journalDtoToMapSystem(dto: FrontierJournalSystemDerivedDto): MapSystem {
+  return {
+    id: syntheticJournalId(dto.systemName),
+    name: dto.systemName,
+    influencePercent: 0,
+    isThreatened: false,
+    isExpansionCandidate: false,
+    isHeadquarter: false,
+    isUnderSurveillance: false,
+    isClean: true,
+    category: 'Journal CMDR',
+    isFromSeed: false,
+    coordsX: dto.coordsX!,
+    coordsY: dto.coordsY!,
+    coordsZ: dto.coordsZ!,
+    mapCategory: 'others',
+    isJournalCmdrPoint: true,
+  };
 }
 
 function emptyInput(): GuildSystemsResponseInput {
