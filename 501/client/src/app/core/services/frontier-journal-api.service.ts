@@ -8,6 +8,7 @@ export interface FrontierJournalBackfillStatusDto {
   currentDate: string | null;
   startDate: string | null;
   minDate: string | null;
+  effectiveMinDate?: string | null;
   totalDaysProcessed: number;
   successCount: number;
   emptyCount: number;
@@ -21,8 +22,12 @@ export class FrontierJournalApiService {
   private readonly http = inject(HttpClient);
   private readonly base = '/api/frontier/journal';
 
-  startBackfill(): Observable<{ success: boolean; message: string }> {
-    return this.http.post<{ success: boolean; message: string }>(`${this.base}/backfill/start`, {});
+  startBackfill(recentDays?: number): Observable<{ success: boolean; message: string }> {
+    const q =
+      recentDays != null && recentDays >= 1 && recentDays <= 366
+        ? `?recentDays=${encodeURIComponent(String(recentDays))}`
+        : '';
+    return this.http.post<{ success: boolean; message: string }>(`${this.base}/backfill/start${q}`, {});
   }
 
   getStatus(): Observable<FrontierJournalBackfillStatusDto> {

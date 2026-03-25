@@ -29,18 +29,29 @@ export type MapCategoryKey =
   | 'healthy'
   | 'others';
 
+/** Couleurs calques journal — néon / forte saturation pour rester visibles à grande distance. */
+const JOURNAL_COLOR_VISITED = 0x00fff0;
+const JOURNAL_COLOR_DISCOVERED = 0xff3df2;
+const JOURNAL_COLOR_FULLSCAN = 0xfffc40;
+
+/** Halo additif (MeshBasicMaterial.opacity) — Cmdr & Faction identiques. */
+const HALO_OPACITY_INITIAL = 0.25;
+const HALO_OPACITY_VISIBLE = 0.25;
+const HALO_OPACITY_DIMMED = 0.05;
+const HALO_OPACITY_HOVER = 0.5;
+
+/** Low / others : même néon que « Visités » journal (distinct des pastels du panneau influence). */
 const CATEGORY_COLORS: Record<MapCategoryKey, number> = {
   origin: 0x00d4ff,
   headquarter: 0xd4af37,
   surveillance: 0x93c5fd,
   conflicts: 0xcc5500,
   critical: 0xff6b6b,
-  low: 0xe0e0e0,
+  low: JOURNAL_COLOR_VISITED,
   healthy: 0x00ff88,
-  others: 0xaaaaaa,
+  others: JOURNAL_COLOR_VISITED,
 };
 
-const GLOW_CATEGORIES: Set<MapCategoryKey> = new Set(['origin', 'headquarter', 'critical']);
 /** Repères galactiques (coordonnées ED en années-lumière). */
 const GALACTIC_LANDMARKS = [
   { id: 'sol', name: 'Sol', x: 0, y: 0, z: 0, color: 0xffdd44, region: 'Bulle' },
@@ -56,16 +67,33 @@ const HIT_TOLERANCE = 2;
 /** Facteur de scale au survol. */
 const HOVER_SCALE = 1.3;
 
+/** Distance caméra ↔ cible : molette OrbitControls et curseur identiques. */
+const MAP_ZOOM_DISTANCE_MIN = 5;
+const MAP_ZOOM_DISTANCE_MAX = 40000;
+/** Distance par défaut centre (HQ ou barycentre) → caméra : chargement + reset vue. */
+const DEFAULT_MAP_VIEW_DISTANCE = 50;
+
+function zoomLevelForViewDistance(dist: number): number {
+  const minD = MAP_ZOOM_DISTANCE_MIN;
+  const maxD = MAP_ZOOM_DISTANCE_MAX;
+  const d = Math.max(minD, Math.min(maxD, dist));
+  return Math.round(100 * (1 - (d - minD) / (maxD - minD)));
+}
+
 interface MapSystem extends GuildSystemBgsDto {
   mapCategory: MapCategoryKey;
   /** Point synthétique vue Cmdr (pas un système Inara / pas de clic panneau guilde). */
   isJournalCmdrPoint?: boolean;
 }
 
-/** Couleurs calques journal (distinctes des catégories 501st). */
-const JOURNAL_COLOR_VISITED = 0x26c6da;
-const JOURNAL_COLOR_DISCOVERED = 0xb388ff;
-const JOURNAL_COLOR_FULLSCAN = 0xffb300;
+/** Rayon du noyau (parsecs affichés) — plus large que l’ancien 1.15 pour la lisibilité. */
+const CMDR_JOURNAL_CORE_RADIUS = 2.85;
+/** Halo additif (vue Faction & Cmdr) : rayon = noyau × ce facteur. */
+const MAP_SYSTEM_HALO_FACTOR = 1.35;
+/** Noyau : légère transparence pour laisser un peu voir au travers (halo / profondeur). */
+const MAP_SYSTEM_CORE_OPACITY = 0.92;
+/** Couleur par défaut si pas de calque : glaçage clair (pas gris terne). */
+const CMDR_JOURNAL_FALLBACK = 0x8effff;
 
 const FILTER_TO_CATEGORY: Partial<Record<SystemsFilterValue, MapCategoryKey>> = {
   origin: 'origin',
@@ -113,7 +141,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   private mouse = new THREE.Vector2();
   private meshMap = new Map<number, THREE.Mesh>();
   private hitMeshMap = new Map<number, THREE.Mesh>();
-  private glowMeshes: THREE.Mesh[] = [];
+  /** Halos additifs (même techno Cmdr / Faction). */
+  private systemHaloById = new Map<number, THREE.Mesh>();
   private animationId = 0;
   private hoveredSystem: MapSystem | null = null;
 
@@ -124,8 +153,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   tooltipData: { system: MapSystem; x: number; y: number } | null = null;
   selectedSystem: MapSystem | null = null;
 
-  /** Zoom 0..100 : 0 = loin, 100 = proche. */
-  zoomLevel = 50;
+  /** Zoom 0..100 : 0 = loin, 100 = proche (aligné sur DEFAULT_MAP_VIEW_DISTANCE au départ). */
+  zoomLevel = zoomLevelForViewDistance(DEFAULT_MAP_VIEW_DISTANCE);
 
   /** Toggle repères galactiques (Sol, Centre galactique) + labels. */
   landmarksVisible = true;
@@ -134,6 +163,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   landmarkLabels: { id: string; name: string; region?: string; x: number; y: number; visible: boolean }[] = [];
 
   private panInterval: ReturnType<typeof setInterval> | null = null;
+  private zoomInterval: ReturnType<typeof setInterval> | null = null;
   private landmarkMeshes: THREE.Mesh[] = [];
   private landmarkPositions: THREE.Vector3[] = [];
 
@@ -214,6 +244,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
 
   ngOnDestroy(): void {
     this.stopPan();
+    this.stopZoomHold();
     cancelAnimationFrame(this.animationId);
     this.controls?.dispose();
     this.renderer?.dispose();
@@ -241,8 +272,9 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
-    this.controls.minDistance = 40;
-    this.controls.maxDistance = 2000;
+    this.controls.zoomToCursor = true;
+    this.controls.minDistance = MAP_ZOOM_DISTANCE_MIN;
+    this.controls.maxDistance = MAP_ZOOM_DISTANCE_MAX;
 
     this.addStarfield();
     this.addLandmarks();
@@ -320,8 +352,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.meshMap.clear();
     this.hitMeshMap.forEach((m) => this.scene!.remove(m));
     this.hitMeshMap.clear();
-    for (const glow of this.glowMeshes) this.scene!.remove(glow);
-    this.glowMeshes = [];
+    for (const glow of this.systemHaloById.values()) this.scene!.remove(glow);
+    this.systemHaloById.clear();
 
     const list = this.systemsWithCoords;
     if (list.length === 0) return;
@@ -338,22 +370,38 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const cz = sumZ / n;
 
     for (const sys of list) {
-      const r = sys.isJournalCmdrPoint ? 1.15 : this.radiusFromInfluence(sys.influencePercent);
-      const color = CATEGORY_COLORS[sys.mapCategory] ?? 0xffffff;
+      const r = sys.isJournalCmdrPoint ? CMDR_JOURNAL_CORE_RADIUS : this.radiusFromInfluence(sys.influencePercent);
+      const color = sys.isJournalCmdrPoint ? CMDR_JOURNAL_FALLBACK : CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED;
 
       const geometry = new THREE.SphereGeometry(r, 10, 8);
       const material = new THREE.MeshBasicMaterial({
         color,
         transparent: true,
-        opacity: 0.85,
+        opacity: MAP_SYSTEM_CORE_OPACITY,
+        depthTest: true,
       });
       const mesh = new THREE.Mesh(geometry, material);
       mesh.position.set(ED_TO_SCENE_X(sys.coordsX!), sys.coordsY!, sys.coordsZ!);
       (mesh as THREE.Mesh & { systemData?: MapSystem }).systemData = sys;
       mesh.name = `sys-${sys.id}`;
-      mesh.renderOrder = 0;
+      mesh.renderOrder = 2;
       this.scene.add(mesh);
       this.meshMap.set(sys.id, mesh);
+
+      const glowR = r * MAP_SYSTEM_HALO_FACTOR;
+      const glowGeom = new THREE.SphereGeometry(glowR, 10, 8);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: HALO_OPACITY_INITIAL,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+      const glowMesh = new THREE.Mesh(glowGeom, glowMat);
+      glowMesh.position.copy(mesh.position);
+      glowMesh.renderOrder = 1;
+      this.scene.add(glowMesh);
+      this.systemHaloById.set(sys.id, glowMesh);
 
       const hitRadius = r * HIT_TOLERANCE;
       const hitGeom = new THREE.SphereGeometry(hitRadius, 8, 6);
@@ -364,37 +412,42 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
       hitMesh.name = `hit-${sys.id}`;
       this.scene.add(hitMesh);
       this.hitMeshMap.set(sys.id, hitMesh);
-
-      if (!sys.isJournalCmdrPoint && GLOW_CATEGORIES.has(sys.mapCategory)) {
-        const glowGeom = new THREE.SphereGeometry(r * 1.15, 8, 6);
-        const glowMat = new THREE.MeshBasicMaterial({
-          color,
-          transparent: true,
-          opacity: 0.04,
-        });
-        const glow = new THREE.Mesh(glowGeom, glowMat);
-        glow.position.copy(mesh.position);
-        this.scene.add(glow);
-        this.glowMeshes.push(glow);
-      }
     }
     this.updateVisualHighlight();
 
-    this.viewCenter.set(cx, cy, cz);
-    this.controls.target.copy(this.viewCenter);
-    let maxDist = 0;
-    for (const sys of list) {
-      const d = Math.hypot(ED_TO_SCENE_X(sys.coordsX!) - cx, sys.coordsY! - cy, sys.coordsZ! - cz);
-      if (d > maxDist) maxDist = d;
+    const defaultDist = DEFAULT_MAP_VIEW_DISTANCE;
+    const defaultViewDir = new THREE.Vector3(1, 1, 1).normalize();
+
+    const hqSys = list.find(
+      (s) =>
+        !s.isJournalCmdrPoint &&
+        s.mapCategory === 'headquarter' &&
+        s.coordsX != null &&
+        s.coordsY != null &&
+        s.coordsZ != null,
+    );
+
+    if (hqSys) {
+      this.viewCenter.set(ED_TO_SCENE_X(hqSys.coordsX!), hqSys.coordsY!, hqSys.coordsZ!);
+    } else {
+      this.viewCenter.set(cx, cy, cz);
     }
-    this.viewDistance = Math.max(200, maxDist * 1.5);
-    this.camera.position.set(cx + this.viewDistance, cy + this.viewDistance, cz + this.viewDistance);
+
+    this.controls.target.copy(this.viewCenter);
+    this.zoomLevel = zoomLevelForViewDistance(defaultDist);
+    this.viewDistance = defaultDist;
+    this.camera.position.copy(this.viewCenter).add(defaultViewDir.clone().multiplyScalar(defaultDist));
   }
 
+  /** Noyau : rayon minR → maxR selon influence 1–80 % (écart large pour lisibilité). */
   private radiusFromInfluence(pct: number): number {
-    const min = 0.8;
-    const max = 4;
-    return min + (pct / 100) * (max - min);
+    const minR = 0.45;
+    const maxR = 7;
+    const pctMin = 1;
+    const pctMax = 80;
+    const clamped = Math.max(pctMin, Math.min(pctMax, pct));
+    const t = (clamped - pctMin) / (pctMax - pctMin);
+    return minR + t * (maxR - minR);
   }
 
   private journalLayersActive(): boolean {
@@ -428,11 +481,11 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
 
   private journalCmdrDefaultColor(sys: MapSystem): number {
     const j = this.journalByName[this.normalizeJournalKey(sys.name)];
-    if (!j) return 0x778899;
+    if (!j) return CMDR_JOURNAL_FALLBACK;
     if (j.isFullScanned) return JOURNAL_COLOR_FULLSCAN;
     if (j.hasFirstDiscoveryBody) return JOURNAL_COLOR_DISCOVERED;
     if (j.isVisited) return JOURNAL_COLOR_VISITED;
-    return 0x778899;
+    return CMDR_JOURNAL_FALLBACK;
   }
 
   private updateVisualHighlight(): void {
@@ -452,26 +505,46 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
       }
       if (cmdr) {
         const matchJ = !journalOn || this.journalMatchesActiveLayers(sys);
-        mat.opacity = matchJ ? 0.85 : 0.2;
+        mat.opacity = matchJ ? MAP_SYSTEM_CORE_OPACITY : 0.18;
         const accent = this.journalAccentColor(sys);
+        let coreHex: number;
         if (journalOn && accent != null && matchJ) {
+          coreHex = accent;
           mat.color.setHex(accent);
         } else if (!journalOn) {
-          mat.color.setHex(this.journalCmdrDefaultColor(sys));
+          coreHex = this.journalCmdrDefaultColor(sys);
+          mat.color.setHex(coreHex);
         } else {
-          mat.color.setHex(CATEGORY_COLORS[sys.mapCategory] ?? 0x888888);
+          coreHex = CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED;
+          mat.color.setHex(coreHex);
+        }
+        const halo = this.systemHaloById.get(id);
+        if (halo) {
+          const hm = halo.material as THREE.MeshBasicMaterial;
+          hm.color.setHex(coreHex);
+          hm.opacity = matchJ ? HALO_OPACITY_VISIBLE : HALO_OPACITY_DIMMED;
         }
         continue;
       }
       const matchCat = !highlightCat || sys.mapCategory === highlightCat;
       const matchJ = !journalOn || this.journalMatchesActiveLayers(sys);
-      mat.opacity = matchCat && matchJ ? 0.85 : 0.2;
+      const visible = matchCat && matchJ;
+      mat.opacity = visible ? MAP_SYSTEM_CORE_OPACITY : 0.2;
 
       const accent = this.journalAccentColor(sys);
+      let coreHex: number;
       if (journalOn && accent != null && matchJ && matchCat) {
+        coreHex = accent;
         mat.color.setHex(accent);
       } else {
-        mat.color.setHex(CATEGORY_COLORS[sys.mapCategory] ?? 0xffffff);
+        coreHex = CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED;
+        mat.color.setHex(coreHex);
+      }
+      const halo = this.systemHaloById.get(id);
+      if (halo) {
+        const hm = halo.material as THREE.MeshBasicMaterial;
+        hm.color.setHex(coreHex);
+        hm.opacity = visible ? HALO_OPACITY_VISIBLE : HALO_OPACITY_DIMMED;
       }
     }
   }
@@ -512,11 +585,11 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
       const mesh = this.meshMap.get(this.hoveredSystem.id);
       if (mesh) {
         mesh.scale.setScalar(1);
-        mesh.renderOrder = 0;
+        mesh.renderOrder = 2;
         const sys = (mesh as THREE.Mesh & { systemData?: MapSystem }).systemData;
         if (sys) {
           const mat = mesh.material as THREE.MeshBasicMaterial;
-          mat.color.setHex(CATEGORY_COLORS[sys.mapCategory] ?? 0xffffff);
+          mat.color.setHex(CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED);
           mat.depthTest = true;
         }
       }
@@ -530,9 +603,16 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     mesh.scale.setScalar(HOVER_SCALE);
     mesh.renderOrder = 10;
     const mat = mesh.material as THREE.MeshBasicMaterial;
+    const sys = (mesh as THREE.Mesh & { systemData?: MapSystem }).systemData;
     mat.opacity = 1;
-    mat.color.setHex(0x00e5ff);
+    mat.color.setHex(sys?.isJournalCmdrPoint ? 0xffffff : 0x00e5ff);
     mat.depthTest = false;
+    const g = this.systemHaloById.get(systemId);
+    if (g) {
+      const gm = g.material as THREE.MeshBasicMaterial;
+      gm.color.setHex(0xffffff);
+      gm.opacity = HALO_OPACITY_HOVER;
+    }
   }
 
   private onClick(_event: MouseEvent): void {
@@ -575,13 +655,12 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
 
   resetView(): void {
     if (!this.camera || !this.controls) return;
-    this.zoomLevel = 50;
+    const dist = DEFAULT_MAP_VIEW_DISTANCE;
+    this.zoomLevel = zoomLevelForViewDistance(dist);
     this.controls.target.copy(this.viewCenter);
-    this.camera.position.set(
-      this.viewCenter.x + this.viewDistance,
-      this.viewCenter.y + this.viewDistance,
-      this.viewCenter.z + this.viewDistance
-    );
+    this.viewDistance = dist;
+    const dir = new THREE.Vector3(1, 1, 1).normalize();
+    this.camera.position.copy(this.viewCenter).add(dir.multiplyScalar(dist));
   }
 
   panCamera(dx: number, dy: number, dz: number): void {
@@ -593,6 +672,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
 
   startPan(ev: PointerEvent, dx: number, dy: number, dz: number): void {
     this.stopPan();
+    this.stopZoomHold();
     (ev.currentTarget as HTMLElement)?.setPointerCapture(ev.pointerId);
     this.panInterval = setInterval(() => this.panCamera(dx, dy, dz), 50);
   }
@@ -604,18 +684,65 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     }
   }
 
+  startZoomHold(ev: PointerEvent, delta: number): void {
+    this.stopZoomHold();
+    this.stopPan();
+    (ev.currentTarget as HTMLElement)?.setPointerCapture(ev.pointerId);
+    this.zoomStep(delta);
+    this.zoomInterval = setInterval(() => this.zoomStep(delta), 50);
+  }
+
+  stopZoomHold(): void {
+    if (this.zoomInterval) {
+      clearInterval(this.zoomInterval);
+      this.zoomInterval = null;
+    }
+  }
+
   zoomStep(delta: number): void {
     this.setZoomFromLevel(this.zoomLevel + delta);
   }
 
+  /**
+   * Zoom UI (+/−, curseur) : distance par rapport au centre de la carte (barycentre des points),
+   * pas le pivot Orbit (qui suit le pan). La molette garde zoomToCursor sur le pointeur.
+   */
   setZoomFromLevel(level: number): void {
-    this.zoomLevel = Math.max(0, Math.min(100, level));
+    this.zoomLevel = Math.round(Math.max(0, Math.min(100, level)));
     if (!this.camera || !this.controls) return;
-    const dir = new THREE.Vector3().subVectors(this.camera.position, this.controls.target).normalize();
-    const minD = 50;
-    const maxD = 1600;
+    const anchor = this.viewCenter;
+    const minD = MAP_ZOOM_DISTANCE_MIN;
+    const maxD = MAP_ZOOM_DISTANCE_MAX;
     const dist = minD + (1 - this.zoomLevel / 100) * (maxD - minD);
-    this.camera.position.copy(this.controls.target).add(dir.multiplyScalar(dist));
+
+    let dir = new THREE.Vector3().subVectors(this.camera.position, anchor);
+    if (dir.lengthSq() < 1e-10) {
+      dir.set(1, 1, 1);
+    }
+    dir.normalize();
+
+    this.controls.target.copy(anchor);
+    this.camera.position.copy(anchor).add(dir.multiplyScalar(dist));
+  }
+
+  /** Inverse de la formule du slider : distance orbit ↔ niveau 0 (loin) … 100 (proche). */
+  private distanceToZoomLevel(dist: number): number {
+    const minD = MAP_ZOOM_DISTANCE_MIN;
+    const maxD = MAP_ZOOM_DISTANCE_MAX;
+    const d = Math.max(minD, Math.min(maxD, dist));
+    return 100 * (1 - (d - minD) / (maxD - minD));
+  }
+
+  /** Garde le curseur aligné sur la distance réelle après molette / pinch OrbitControls. */
+  private syncZoomSliderFromOrbit(): void {
+    if (!this.camera || !this.controls) return;
+    const dist = this.camera.position.distanceTo(this.controls.target);
+    const level = this.distanceToZoomLevel(dist);
+    const rounded = Math.round(level);
+    if (rounded === this.zoomLevel) return;
+    this.zoomLevel = rounded;
+    this.viewDistance = dist;
+    this.cdr.markForCheck();
   }
 
   private onResize(): void {
@@ -637,6 +764,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   private animate = (): void => {
     this.animationId = requestAnimationFrame(this.animate);
     this.controls?.update();
+    this.syncZoomSliderFromOrbit();
     if (this.landmarksVisible && this.camera && this.renderer && this.landmarkPositions.length > 0) {
       const rect = this.renderer.domElement.getBoundingClientRect();
       const w = rect.width;
