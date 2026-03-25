@@ -386,3 +386,7 @@ PROFILE_MENU_REFACTOR.md
 IMPLEMENTATION_GUIDE_I18N.md
 FRONTEND_IMPLEMENTATION_SUMMARY.md
 IMPLEMENTATION_COMPLETE.md
+
+# Clé API EDSM saisie via Paramètres (ne pas versionner)
+501/server/Data/edsm-journal-user.json
+501/server/Data/inara-api-user.json

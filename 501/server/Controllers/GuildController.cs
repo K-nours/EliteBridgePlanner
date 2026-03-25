@@ -22,9 +22,10 @@ public class GuildController : ControllerBase
     private readonly SystemsImportProgressStore _importProgressStore;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _config;
+    private readonly InaraApiUserSettingsStore _inaraApiUserStore;
     private readonly ILogger<GuildController> _log;
 
-    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader, SystemsImportProgressStore importProgressStore, IServiceScopeFactory scopeFactory, IConfiguration config, ILogger<GuildController> log)
+    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader, SystemsImportProgressStore importProgressStore, IServiceScopeFactory scopeFactory, IConfiguration config, InaraApiUserSettingsStore inaraApiUserStore, ILogger<GuildController> log)
     {
         _service = service;
         _dashboard = dashboard;
@@ -38,6 +39,7 @@ public class GuildController : ControllerBase
         _importProgressStore = importProgressStore;
         _scopeFactory = scopeFactory;
         _config = config;
+        _inaraApiUserStore = inaraApiUserStore;
         _log = log;
     }
 
@@ -305,6 +307,33 @@ public class GuildController : ControllerBase
             lastCommandersSyncAt,
             lastAvatarImportAt = guild.LastAvatarImportAt,
         });
+    }
+
+    /// <summary>GET /api/guild/settings/inara-api — indique si une clé INAPI est configurée (fichier local ou secret/env hors dépôt).</summary>
+    [HttpGet("settings/inara-api")]
+    public ActionResult<InaraApiClientSettingsDto> GetInaraApiSettings()
+    {
+        var file = _inaraApiUserStore.Load();
+        var configured =
+            !string.IsNullOrWhiteSpace(file?.ApiKey) ||
+            !string.IsNullOrWhiteSpace(_config["Inara:ApiKey"]);
+        return Ok(new InaraApiClientSettingsDto { ApiKeyConfigured = configured });
+    }
+
+    /// <summary>
+    /// PUT /api/guild/settings/inara-api — enregistre la clé dans <c>Data/inara-api-user.json</c> (source prévue : modal Paramètres).
+    /// Omettre <c>apiKey</c> pour ne pas la modifier.
+    /// </summary>
+    [HttpPut("settings/inara-api")]
+    public IActionResult PutInaraApiSettings([FromBody] InaraApiSettingsWriteDto? dto)
+    {
+        if (dto == null)
+            return BadRequest(new { error = "Payload invalide" });
+        var cur = _inaraApiUserStore.Load() ?? new InaraApiUserSettingsFile();
+        if (!string.IsNullOrWhiteSpace(dto.ApiKey))
+            cur.ApiKey = dto.ApiKey.Trim();
+        _inaraApiUserStore.Save(cur);
+        return Ok(new { saved = true });
     }
 
     /// <summary>PUT /api/guild/settings — met à jour les URLs Inara.</summary>

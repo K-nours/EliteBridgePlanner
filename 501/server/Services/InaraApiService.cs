@@ -11,13 +11,15 @@ public class InaraApiService
 {
     private readonly HttpClient _http;
     private readonly IConfiguration _config;
+    private readonly InaraApiUserSettingsStore _inaraApiUser;
     private readonly ILogger<InaraApiService> _log;
     private const string InaraApiUrl = "https://inara.cz/inapi/v1/";
 
-    public InaraApiService(HttpClient http, IConfiguration config, ILogger<InaraApiService> log)
+    public InaraApiService(HttpClient http, IConfiguration config, InaraApiUserSettingsStore inaraApiUser, ILogger<InaraApiService> log)
     {
         _http = http;
         _config = config;
+        _inaraApiUser = inaraApiUser;
         _log = log;
         _http.Timeout = TimeSpan.FromSeconds(15);
         _http.DefaultRequestHeaders.Add("User-Agent", "EliteBridgePlanner/1.0");
@@ -36,7 +38,7 @@ public class InaraApiService
     /// <summary>Récupère le profil d'un commandant (squadron, avatar, etc.). Retourne toujours un résultat pour validation.</summary>
     public async Task<GetCommanderProfileResult?> GetCommanderProfileAsync(string searchName, CancellationToken ct = default)
     {
-        var apiKey = _config["Inara:ApiKey"];
+        var apiKey = _inaraApiUser.ResolveApiKey(_config);
         if (string.IsNullOrWhiteSpace(apiKey))
             return null;
 

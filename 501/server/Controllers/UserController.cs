@@ -131,7 +131,7 @@ public class UserController : ControllerBase
                 result?.AvatarImageUrl,
                 result?.OtherNamesFound ?? Array.Empty<string>(),
                 result?.HasEventData ?? false,
-                result == null ? "Appel Inara échoué ou Inara:ApiKey non configurée" : null), "text/html; charset=utf-8");
+                result == null ? "Appel Inara échoué ou clé INAPI non configurée" : null), "text/html; charset=utf-8");
         }
 
         if (string.IsNullOrWhiteSpace(searchName))
@@ -139,7 +139,7 @@ public class UserController : ControllerBase
 
         var res = await _inara.GetCommanderProfileAsync(searchName.Trim(), ct);
         if (res == null)
-            return Ok(new { searchName = searchName.Trim(), error = "Appel Inara échoué ou Inara:ApiKey non configurée" });
+            return Ok(new { searchName = searchName.Trim(), error = "Appel Inara échoué ou clé INAPI non configurée" });
 
         return Ok(new
         {

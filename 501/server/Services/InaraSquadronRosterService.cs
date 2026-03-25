@@ -7,21 +7,23 @@ namespace GuildDashboard.Server.Services;
 /// <remarks>
 /// Le roster est obtenu via la page HTML https://inara.cz/elite/squadron-roster/{id}, pas via l'API Inara.
 /// L'API Inara (inapi/v1) n'a pas d'endpoint roster — elle sert à getCommanderProfile, etc.
-/// On teste les deux modes (sans clé, avec clé) pour documenter si Inara:ApiKey donne accès au roster privé.
+/// On teste les deux modes (sans clé, avec clé INAPI) pour documenter si la clé donne accès au roster privé.
 /// TODO: Replace Inara roster scraping with a reliable data source (Frontier API or managed roster). Voir docs/INTEGRATION-INARA.md.
 /// </remarks>
 public class InaraSquadronRosterService
 {
     private readonly HttpClient _http;
     private readonly IConfiguration _config;
+    private readonly InaraApiUserSettingsStore _inaraApiUser;
     private readonly ILogger<InaraSquadronRosterService> _logger;
     private static readonly Regex CmdrLinkRegex = new(@"\[([^\]]+)\]\(https://inara\.cz/elite/cmdr/\d+/\)", RegexOptions.Compiled);
     private static readonly Regex SquadronLinkRegex = new(@"https://inara\.cz/elite/squadron/(\d+)/?", RegexOptions.Compiled);
 
-    public InaraSquadronRosterService(HttpClient http, IConfiguration config, ILogger<InaraSquadronRosterService> logger)
+    public InaraSquadronRosterService(HttpClient http, IConfiguration config, InaraApiUserSettingsStore inaraApiUser, ILogger<InaraSquadronRosterService> logger)
     {
         _http = http;
         _config = config;
+        _inaraApiUser = inaraApiUser;
         _logger = logger;
         _http.Timeout = TimeSpan.FromSeconds(15);
         _http.DefaultRequestHeaders.Add("User-Agent", "EliteBridgePlanner/1.0");
@@ -31,7 +33,7 @@ public class InaraSquadronRosterService
     public async Task<IReadOnlyList<(string Name, string? Rank)>> GetMemberNamesAndRanksAsync(int squadronId, CancellationToken ct = default)
     {
         var url = $"https://inara.cz/elite/squadron-roster/{squadronId}";
-        var apiKey = _config["Inara:ApiKey"];
+        var apiKey = _inaraApiUser.ResolveApiKey(_config);
         var hasApiKey = !string.IsNullOrWhiteSpace(apiKey);
 
         _logger.LogInformation("Inara roster fetch: squadronId={SquadronId}, endpoint={Url}", squadronId, url);
@@ -60,7 +62,7 @@ public class InaraSquadronRosterService
         }
         else
         {
-            _logger.LogInformation("Inara roster: Inara:ApiKey non configurée — pas de tentative avec clé API");
+            _logger.LogInformation("Inara roster: clé INAPI non configurée — pas de tentative avec clé API");
         }
 
         _logger.LogWarning("Inara roster: ZÉRO membre récupéré (roster privé ou indisponible) — endpoint={Url}", url);
@@ -117,7 +119,7 @@ public class InaraSquadronRosterService
     public async Task<RosterDiagnosticResult> GetRosterDiagnosticAsync(int squadronId, CancellationToken ct = default)
     {
         var url = $"https://inara.cz/elite/squadron-roster/{squadronId}";
-        var apiKey = _config["Inara:ApiKey"];
+        var apiKey = _inaraApiUser.ResolveApiKey(_config);
         var hasApiKey = !string.IsNullOrWhiteSpace(apiKey);
 
         var result = new RosterDiagnosticResult
@@ -154,7 +156,7 @@ public class InaraSquadronRosterService
 
         result.Conclusion = result.AnonymousAttempt.MembersParsed > 0 || (result.WithApiKeyAttempt?.MembersParsed ?? 0) > 0
             ? "Roster accessible"
-            : "Roster non accessible (privé ou indisponible). Inara:ApiKey ne fournit pas d'accès au roster — l'API Inara n'a pas d'endpoint roster.";
+            : "Roster non accessible (privé ou indisponible). La clé INAPI ne fournit pas d'accès roster via l'API — l'API Inara n'a pas d'endpoint roster.";
         return result;
     }
 
