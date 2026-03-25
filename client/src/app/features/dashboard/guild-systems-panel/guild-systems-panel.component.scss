@@ -537,7 +537,7 @@
   color: #00ff88;
 }
 
-/* Tendance 72h (EDSM) : badge status vert/rouge, texte blanc, typo réduite. */
+/* Tendance 72h : texte blanc (exception vs influence en pastel — lisibilité sur badge coloré). */
 .delta {
   font-family: 'Exo 2', sans-serif;
   font-size: 0.5rem;
@@ -578,7 +578,7 @@
 .influence-high .influence {
   color: #00ff88;
 }
-/* Autres 15–60% : neutre */
+/* Autres 15–60% : blanc */
 .influence-normal .influence {
   color: rgba(255, 255, 255, 0.85);
 }

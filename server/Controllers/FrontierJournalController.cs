@@ -16,14 +16,18 @@ public class FrontierJournalController : ControllerBase
         _parse = parse;
     }
 
-    /// <summary>POST /api/frontier/journal/backfill/start — démarre ou reprend le backfill journal.</summary>
+    /// <summary>POST /api/frontier/journal/backfill/start — démarre ou reprend le backfill journal. Query recentDays (1–366) = seulement ces derniers jours UTC depuis hier.</summary>
     [HttpPost("backfill/start")]
-    public IActionResult StartBackfill()
+    public IActionResult StartBackfill([FromQuery] int? recentDays = null)
     {
-        var started = _backfill.Start();
+        if (recentDays is < 1 or > 366)
+            return BadRequest(new { success = false, message = "recentDays doit être entre 1 et 366." });
+
+        var started = _backfill.Start(recentDays);
         if (!started)
             return BadRequest(new { success = false, message = "Backfill déjà en cours ou token Frontier absent." });
-        return Ok(new { success = true, message = "Backfill démarré." });
+        var hint = recentDays is >= 1 and <= 366 ? $" Fenêtre {recentDays} jour(s)." : "";
+        return Ok(new { success = true, message = "Backfill démarré." + hint });
     }
 
     /// <summary>POST /api/frontier/journal/backfill/stop — arrête le backfill ou retry en cours.</summary>

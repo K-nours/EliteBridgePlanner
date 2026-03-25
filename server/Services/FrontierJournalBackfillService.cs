@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 
 namespace GuildDashboard.Server.Services;
@@ -39,6 +40,15 @@ public class FrontierJournalBackfillService
 
     private string DataDir => Path.Combine(_env.ContentRootPath ?? AppContext.BaseDirectory ?? ".", "Data", "frontier-journal");
 
+    private static DateTime FloorFromProgress(FrontierJournalProgress? p)
+    {
+        if (string.IsNullOrEmpty(p?.EffectiveMinDate))
+            return MinDate;
+        return DateTime.TryParse(p.EffectiveMinDate, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)
+            ? d.Date
+            : MinDate;
+    }
+
     /// <summary>Retourne les dates à retraiter (status=error, HttpStatusCode=401) depuis raw.json.</summary>
     public IReadOnlyList<string> GetDatesToRetry()
     {
@@ -56,7 +66,8 @@ public class FrontierJournalBackfillService
     }
 
     /// <summary>Démarre le backfill (ou reprend si non terminé). Retourne false si déjà en cours.</summary>
-    public bool Start()
+    /// <param name="recentDays">Si défini (1–366), ne récupère que ces derniers jours calendaires UTC (depuis hier inclus vers le passé).</param>
+    public bool Start(int? recentDays = null)
     {
         lock (_runLock)
         {
@@ -74,8 +85,8 @@ public class FrontierJournalBackfillService
             }
 
             _cts = new CancellationTokenSource();
-            _runTask = RunBackfillAsync(token.AccessToken, _cts.Token);
-            _log.LogInformation("[FrontierJournal] Backfill démarré");
+            _runTask = RunBackfillAsync(token.AccessToken, recentDays, _cts.Token);
+            _log.LogInformation("[FrontierJournal] Backfill démarré recentDays={RecentDays}", recentDays?.ToString() ?? "full");
             return true;
         }
     }
@@ -139,6 +150,7 @@ public class FrontierJournalBackfillService
             CurrentDate = progress?.CurrentDate,
             StartDate = progress?.StartDate,
             MinDate = progress?.MinDate ?? MinDate.ToString("yyyy-MM-dd"),
+            EffectiveMinDate = progress?.EffectiveMinDate,
             TotalDaysProcessed = progress?.TotalDaysProcessed ?? 0,
             SuccessCount = progress?.SuccessCount ?? 0,
             EmptyCount = progress?.EmptyCount ?? 0,
@@ -148,7 +160,7 @@ public class FrontierJournalBackfillService
         };
     }
 
-    private async Task RunBackfillAsync(string accessToken, CancellationToken ct)
+    private async Task RunBackfillAsync(string accessToken, int? recentDaysForNewStart, CancellationToken ct)
     {
         try
         {
@@ -156,11 +168,14 @@ public class FrontierJournalBackfillService
             var progress = LoadProgress();
             DateTime current;
             string startDateStr;
-            DateTime minDate = MinDate;
 
-            if (progress != null && !progress.Completed)
+            var resume = progress != null && !progress.Completed;
+            if (resume && recentDaysForNewStart is >= 1 and <= 366 && string.IsNullOrEmpty(progress!.EffectiveMinDate))
+                resume = false;
+
+            if (resume)
             {
-                current = DateTime.Parse(progress.CurrentDate!).Date;
+                current = DateTime.Parse(progress!.CurrentDate!, CultureInfo.InvariantCulture).Date;
                 startDateStr = progress.StartDate!;
                 progress.TotalDaysProcessed = progress.TotalDaysProcessed;
                 progress.SuccessCount = progress.SuccessCount;
@@ -173,11 +188,15 @@ public class FrontierJournalBackfillService
             {
                 current = DateTime.UtcNow.Date.AddDays(-1);
                 startDateStr = current.ToString("yyyy-MM-dd");
+                var floorBoundary = recentDaysForNewStart is >= 1 and <= 366
+                    ? DateTime.UtcNow.Date.AddDays(-recentDaysForNewStart.Value)
+                    : MinDate;
                 progress = new FrontierJournalProgress
                 {
                     CurrentDate = current.ToString("yyyy-MM-dd"),
                     StartDate = startDateStr,
-                    MinDate = minDate.ToString("yyyy-MM-dd"),
+                    MinDate = floorBoundary.ToString("yyyy-MM-dd"),
+                    EffectiveMinDate = recentDaysForNewStart is >= 1 and <= 366 ? floorBoundary.ToString("yyyy-MM-dd") : null,
                     TotalDaysProcessed = 0,
                     SuccessCount = 0,
                     EmptyCount = 0,
@@ -186,14 +205,17 @@ public class FrontierJournalBackfillService
                     UpdatedAt = DateTime.UtcNow,
                     Completed = false,
                 };
-                AppendLog("start", current.ToString("yyyy-MM-dd"), $"Démarrage backfill date={current:yyyy-MM-dd}");
-                _log.LogInformation("[FrontierJournal] START date={Date}", current.ToString("yyyy-MM-dd"));
+                var hint = recentDaysForNewStart is >= 1 and <= 366
+                    ? $" fenêtre={recentDaysForNewStart}j min={floorBoundary:yyyy-MM-dd}"
+                    : "";
+                AppendLog("start", current.ToString("yyyy-MM-dd"), $"Démarrage backfill date={current:yyyy-MM-dd}{hint}");
+                _log.LogInformation("[FrontierJournal] START date={Date}{Hint}", current.ToString("yyyy-MM-dd"), hint);
             }
 
+            var floorDate = FloorFromProgress(progress);
             var raw = LoadRaw();
-            var jsonOpts = new JsonSerializerOptions { WriteIndented = false };
 
-            while (current >= minDate && !ct.IsCancellationRequested)
+            while (current >= floorDate && !ct.IsCancellationRequested)
             {
                 var dateStr = current.ToString("yyyy-MM-dd");
                 if (raw.TryGetValue(dateStr, out var existing) &&
@@ -203,7 +225,7 @@ public class FrontierJournalBackfillService
                     progress!.CurrentDate = dateStr;
                     progress.UpdatedAt = DateTime.UtcNow;
                     _log.LogInformation("[FrontierJournal] SKIP date={Date} (déjà {Status})", dateStr, existing.Status);
-                    if (current <= minDate)
+                    if (current <= floorDate)
                     {
                         progress.Completed = true;
                         SaveProgress(progress);
@@ -284,7 +306,7 @@ public class FrontierJournalBackfillService
                 SaveRaw(raw);
                 SaveProgress(progress);
 
-                if (current <= minDate)
+                if (current <= floorDate)
                 {
                     progress.Completed = true;
                     progress.UpdatedAt = DateTime.UtcNow;
@@ -559,6 +581,8 @@ public class FrontierJournalProgress
     public string? CurrentDate { get; set; }
     public string? StartDate { get; set; }
     public string? MinDate { get; set; }
+    /// <summary>Première date UTC à inclure (fenêtre recentDays). Null = backfill complet jusqu’à la date plancher historique.</summary>
+    public string? EffectiveMinDate { get; set; }
     public int TotalDaysProcessed { get; set; }
     public int SuccessCount { get; set; }
     public int EmptyCount { get; set; }
@@ -585,6 +609,7 @@ public class FrontierJournalBackfillStatus
     public string? CurrentDate { get; set; }
     public string? StartDate { get; set; }
     public string? MinDate { get; set; }
+    public string? EffectiveMinDate { get; set; }
     public int TotalDaysProcessed { get; set; }
     public int SuccessCount { get; set; }
     public int EmptyCount { get; set; }

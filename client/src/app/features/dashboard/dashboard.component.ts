@@ -128,10 +128,10 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                 <div class="map-view-toggle" role="group" aria-label="Vue carte">
                   <button type="button" class="map-view-toggle-btn"
                     [class.map-view-toggle-btn--active]="mapViewMode() === 'faction'"
-                    (click)="mapViewMode.set('faction')">Vue Faction</button>
+                    (click)="onMapViewFaction()">Vue Faction</button>
                   <button type="button" class="map-view-toggle-btn"
                     [class.map-view-toggle-btn--active]="mapViewMode() === 'cmdr'"
-                    (click)="mapViewMode.set('cmdr')">Vue Cmdr</button>
+                    (click)="onMapViewCmdr()">Vue Cmdr</button>
                 </div>
               </div>
               <div class="map-3d-wrapper">
@@ -152,6 +152,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                     <button type="button"
                       class="map-counter"
                       [class.map-counter--active]="guildSystemsSync.systemsFilter() === fb.value"
+                      [class.map-counter--total]="fb.value === 'all'"
                       [class.map-counter--healthy]="fb.value === 'healthy'"
                       [class.map-counter--critical]="fb.value === 'critical'"
                       [class.map-counter--conflicts]="fb.value === 'conflicts'"
@@ -169,6 +170,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                     <button type="button"
                       class="map-counter"
                       [class.map-counter--active]="guildSystemsSync.systemsFilter() === fb.value"
+                      [class.map-counter--total]="fb.value === 'all'"
                       [class.map-counter--healthy]="fb.value === 'healthy'"
                       [class.map-counter--critical]="fb.value === 'critical'"
                       [class.map-counter--conflicts]="fb.value === 'conflicts'"
@@ -189,28 +191,31 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                   <button type="button" class="map-counter map-counter--journal map-counter--journal-visited"
                     [class.map-counter--active]="journalMapLayerVisited()"
                     [attr.aria-pressed]="journalMapLayerVisited()"
+                    [disabled]="journalCmdrCountVisited() === 0"
                     title="Visités (FSDJump / CarrierJump / Location)"
-                    (click)="toggleJournalMapVisited()">
+                    (click)="selectJournalMapLayer('visited')">
                     <span class="map-counter-label">Visités</span>
-                    <span class="map-counter-value map-counter-value--journal">{{ journalMapLayerVisited() ? '●' : '—' }}</span>
+                    <span class="map-counter-value map-counter-value--journal">{{ journalCmdrCountVisited() }}</span>
                   </button>
                 </div>
                 <div class="map-filter-counters-right">
                   <button type="button" class="map-counter map-counter--journal map-counter--journal-disc"
                     [class.map-counter--active]="journalMapLayerDiscovered()"
                     [attr.aria-pressed]="journalMapLayerDiscovered()"
+                    [disabled]="journalCmdrCountDiscovered() === 0"
                     title="Découverts (au moins un corps : Scan, wasDiscovered=false)"
-                    (click)="toggleJournalMapDiscovered()">
+                    (click)="selectJournalMapLayer('discovered')">
                     <span class="map-counter-label">Découverts</span>
-                    <span class="map-counter-value map-counter-value--journal">{{ journalMapLayerDiscovered() ? '●' : '—' }}</span>
+                    <span class="map-counter-value map-counter-value--journal">{{ journalCmdrCountDiscovered() }}</span>
                   </button>
                   <button type="button" class="map-counter map-counter--journal map-counter--journal-full"
                     [class.map-counter--active]="journalMapLayerFullScan()"
                     [attr.aria-pressed]="journalMapLayerFullScan()"
+                    [disabled]="journalCmdrCountFullScan() === 0"
                     title="Full scan (FSSAllBodiesFound)"
-                    (click)="toggleJournalMapFullScan()">
+                    (click)="selectJournalMapLayer('fullscan')">
                     <span class="map-counter-label">Full scan</span>
-                    <span class="map-counter-value map-counter-value--journal">{{ journalMapLayerFullScan() ? '●' : '—' }}</span>
+                    <span class="map-counter-value map-counter-value--journal">{{ journalCmdrCountFullScan() }}</span>
                   </button>
                 </div>
               </div>
@@ -312,7 +317,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                     <span class="btn-journal-sync-text">Sync journal en cours...</span>
                     <span class="btn-journal-sync-status">{{ journalBackfillStatus()?.totalDaysProcessed ?? 0 }} jours</span>
                   } @else {
-                    <span class="btn-journal-sync-text">Sync journal de vol du CMDR</span>
+                    <span class="btn-journal-sync-text">Sync journal (4 derniers jours)</span>
                     @if (journalBackfillStatus(); as st) {
                       @if (st.totalDaysProcessed > 0) {
                         <span class="btn-journal-sync-status">
@@ -1134,14 +1139,36 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       cursor: pointer;
       transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
     }
-    .map-counter:hover {
+    .map-counter:hover:not(:disabled):not(.map-counter--active) {
       background: rgba(0, 212, 255, 0.08);
       border-color: rgba(0, 212, 255, 0.5);
     }
-    .map-counter--active {
-      background: rgba(0, 212, 255, 0.15);
-      border-color: rgba(0, 212, 255, 0.6);
-      box-shadow: 0 0 8px rgba(0, 212, 255, 0.2);
+    /* Sélection : fond + bordure teintés comme le chiffre (Faction + Cmdr). */
+    .map-counter--active.map-counter--total {
+      background: rgba(0, 255, 240, 0.18);
+      border-color: rgba(0, 255, 240, 0.75);
+      box-shadow: 0 0 14px rgba(0, 255, 240, 0.35);
+    }
+    .map-counter--active.map-counter--healthy {
+      background: rgba(0, 255, 136, 0.14);
+      border-color: rgba(0, 255, 136, 0.6);
+      box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
+    }
+    .map-counter--active.map-counter--critical,
+    .map-counter--active.map-counter--surveillance-critical {
+      background: rgba(255, 107, 107, 0.14);
+      border-color: rgba(255, 107, 107, 0.62);
+      box-shadow: 0 0 10px rgba(255, 107, 107, 0.2);
+    }
+    .map-counter--active.map-counter--conflicts {
+      background: rgba(204, 85, 0, 0.16);
+      border-color: rgba(204, 85, 0, 0.65);
+      box-shadow: 0 0 10px rgba(204, 85, 0, 0.2);
+    }
+    .map-counter--active.map-counter--surveillance-ok {
+      background: rgba(147, 197, 253, 0.15);
+      border-color: rgba(147, 197, 253, 0.62);
+      box-shadow: 0 0 10px rgba(147, 197, 253, 0.22);
     }
     .map-counter-label {
       font-family: 'Exo 2', sans-serif;
@@ -1160,7 +1187,14 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       font-variant-numeric: tabular-nums;
       color: #00d4ff;
     }
-    .map-counter--active:not(.map-counter--healthy):not(.map-counter--critical):not(.map-counter--conflicts):not(.map-counter--surveillance-ok):not(.map-counter--surveillance-critical) .map-counter-value {
+    /* Total (vue Faction) : même néon que le calque Visités (#00fff0). */
+    .map-counter--total .map-counter-value {
+      color: #00fff0;
+    }
+    .map-counter--active.map-counter--total .map-counter-value {
+      color: #b8fff9;
+    }
+    .map-counter--active:not(.map-counter--healthy):not(.map-counter--critical):not(.map-counter--conflicts):not(.map-counter--surveillance-ok):not(.map-counter--surveillance-critical):not(.map-counter--journal):not(.map-counter--total) .map-counter-value {
       color: #00eaff;
     }
     .map-counter--healthy .map-counter-value {
@@ -1183,30 +1217,52 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       cursor: default;
       border-color: rgba(0, 212, 255, 0.15);
     }
-    .map-counter:disabled .map-counter-value {
-      color: rgba(255, 255, 255, 0.5);
+    .map-counter--total:disabled .map-counter-value {
+      color: rgba(0, 255, 240, 0.42);
     }
+    .map-counter:disabled:not(.map-counter--journal):not(.map-counter--total) .map-counter-value {
+      color: rgba(255, 255, 255, 0.45);
+    }
+    /* Chiffres vue Cmdr = couleurs des points carte (guild-systems-map JOURNAL_COLOR_*), pas le cyan filtre Faction. */
     .map-counter-value--journal {
-      font-size: 1rem;
-      color: rgba(255, 255, 255, 0.35);
+      font-size: 1.25rem;
+      font-variant-numeric: tabular-nums;
     }
-    .map-counter--journal-visited.map-counter--active .map-counter-value--journal {
-      color: #26c6da;
+    .map-counter--journal-visited .map-counter-value--journal {
+      color: #00fff0;
     }
-    .map-counter--journal-disc.map-counter--active .map-counter-value--journal {
-      color: #b388ff;
+    .map-counter--journal-disc .map-counter-value--journal {
+      color: #ff3df2;
     }
-    .map-counter--journal-full.map-counter--active .map-counter-value--journal {
-      color: #ffb300;
+    .map-counter--journal-full .map-counter-value--journal {
+      color: #fffc40;
+    }
+    .map-counter--journal-visited:disabled .map-counter-value--journal {
+      color: rgba(0, 255, 240, 0.42);
+    }
+    .map-counter--journal-disc:disabled .map-counter-value--journal {
+      color: rgba(255, 61, 242, 0.42);
+    }
+    .map-counter--journal-full:disabled .map-counter-value--journal {
+      color: rgba(255, 252, 64, 0.42);
     }
     .map-counter--journal-visited.map-counter--active {
-      border-color: rgba(38, 198, 218, 0.55);
+      background: rgba(0, 255, 240, 0.18);
+      border-color: rgba(0, 255, 240, 0.75);
+      box-shadow: 0 0 14px rgba(0, 255, 240, 0.35);
     }
     .map-counter--journal-disc.map-counter--active {
-      border-color: rgba(179, 136, 255, 0.55);
+      background: rgba(255, 61, 242, 0.16);
+      border-color: rgba(255, 61, 242, 0.72);
+      box-shadow: 0 0 14px rgba(255, 61, 242, 0.32);
     }
     .map-counter--journal-full.map-counter--active {
-      border-color: rgba(255, 179, 0, 0.55);
+      background: rgba(255, 252, 64, 0.2);
+      border-color: rgba(255, 252, 64, 0.78);
+      box-shadow: 0 0 14px rgba(255, 252, 64, 0.38);
+    }
+    .map-counter--active:hover:not(:disabled) {
+      filter: brightness(1.06);
     }
     .box-frontier-cmdr {
       display: flex;
@@ -1653,6 +1709,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
       (s) => s.coordsX != null && s.coordsY != null && s.coordsZ != null,
     ),
   );
+  /** Compteurs calques vue Cmdr (même périmètre que les points sur la carte). */
+  protected readonly journalCmdrCountVisited = computed(
+    () => this.journalCmdrMapPoints().filter((s) => s.isVisited).length,
+  );
+  protected readonly journalCmdrCountDiscovered = computed(
+    () => this.journalCmdrMapPoints().filter((s) => s.hasFirstDiscoveryBody).length,
+  );
+  protected readonly journalCmdrCountFullScan = computed(
+    () => this.journalCmdrMapPoints().filter((s) => s.isFullScanned).length,
+  );
   /** faction = carte guilde + filtres BGS ; cmdr = points journal avec coords. */
   protected readonly mapViewMode = signal<'faction' | 'cmdr'>('faction');
   protected readonly journalParseRunning = signal(false);
@@ -1789,6 +1855,40 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.journalMapLayerFullScan.set(false);
   }
 
+  /** Un seul filtre carte à la fois : changement de vue réinitialise l’autre côté. */
+  protected onMapViewFaction(): void {
+    this.mapViewMode.set('faction');
+    this.journalMapLayerVisited.set(false);
+    this.journalMapLayerDiscovered.set(false);
+    this.journalMapLayerFullScan.set(false);
+  }
+
+  protected onMapViewCmdr(): void {
+    this.mapViewMode.set('cmdr');
+    this.guildSystemsSync.systemsFilter.set('all');
+  }
+
+  /** Calques journal exclusifs ; reclic sur l’actif désactive. Réinitialise le filtre Faction sur « Total ». */
+  protected selectJournalMapLayer(mode: 'visited' | 'discovered' | 'fullscan'): void {
+    this.guildSystemsSync.systemsFilter.set('all');
+    const vis = this.journalMapLayerVisited();
+    const disc = this.journalMapLayerDiscovered();
+    const full = this.journalMapLayerFullScan();
+    const was =
+      (mode === 'visited' && vis) ||
+      (mode === 'discovered' && disc) ||
+      (mode === 'fullscan' && full);
+    if (was) {
+      this.journalMapLayerVisited.set(false);
+      this.journalMapLayerDiscovered.set(false);
+      this.journalMapLayerFullScan.set(false);
+      return;
+    }
+    this.journalMapLayerVisited.set(mode === 'visited');
+    this.journalMapLayerDiscovered.set(mode === 'discovered');
+    this.journalMapLayerFullScan.set(mode === 'fullscan');
+  }
+
   protected showCmdrConnected = signal(true);
 
   private addLog(msg: string): void {
@@ -1865,14 +1965,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const journalProgress = this.journalBackfillProgress();
     const progressLine = progress ? [`[${new Date().toISOString().slice(11, 23)}] ${progress}`] : [];
     const journalLine = journalProgress ? [`[${new Date().toISOString().slice(11, 23)}] ${journalProgress}`] : [];
-    const ps = this.journalParseStatus();
-    const journalParsedTotalLine =
-      ps != null
-        ? [
-            `[${new Date().toISOString().slice(11, 23)}] Journal parsé : ${ps.parsedDaysCount} jour${ps.parsedDaysCount > 1 ? 's' : ''} au total`,
-          ]
-        : [];
-    const logsReversed = [...logLines, ...progressLine, ...journalLine, ...journalParsedTotalLine].reverse();
+    // Ne pas injecter de faux log « Journal parsé » ici : parsedDaysCount concerne le parseur (bouton Parser → carte),
+    // pas la sync brut CAPI ; un new Date() dans ce computed refaisait une ligne à chaque rafraîchissement.
+    const logsReversed = [...logLines, ...progressLine, ...journalLine].reverse();
     return [...logsReversed, '---------', ...recapLines];
   });
 
@@ -1977,7 +2072,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   protected onSyncJournalClick(): void {
     if (this.journalBackfillRunning()) return;
-    this.frontierJournalApi.startBackfill().subscribe({
+    this.frontierJournalApi.startBackfill(4).subscribe({
       next: (res) => {
         this.addLog(res.message);
         this.journalBackfillRunning.set(true);
@@ -2169,7 +2264,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.journalParseRunning.set(false);
             this.stopJournalParsePolling();
             this.loadJournalDerived();
-            this.addLog('Parsing journal : lot terminé.');
+            const d = st.parsedDaysCount;
+            this.addLog(
+              `Parsing journal : lot terminé — ${d} jour${d > 1 ? 's' : ''} parsé${d > 1 ? 's' : ''} au total (voir aussi le bouton Parser → carte).`,
+            );
           }
         },
       });
@@ -2183,16 +2281,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       clearInterval(this.journalParsePollingRef);
       this.journalParsePollingRef = null;
     }
-  }
-
-  protected toggleJournalMapVisited(): void {
-    this.journalMapLayerVisited.update((v) => !v);
-  }
-  protected toggleJournalMapDiscovered(): void {
-    this.journalMapLayerDiscovered.update((v) => !v);
-  }
-  protected toggleJournalMapFullScan(): void {
-    this.journalMapLayerFullScan.update((v) => !v);
   }
 
   ngOnInit(): void {
