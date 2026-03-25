@@ -14,6 +14,7 @@ import { GuildSettingsService } from '../../core/services/guild-settings.service
 import { InaraSyncBridgeService } from '../../core/services/inara-sync-bridge.service';
 import { SyncHelpModalService } from '../../core/services/sync-help-modal.service';
 import { FrontierJournalApiService } from '../../core/services/frontier-journal-api.service';
+import { EdsmJournalApiService } from '../../core/services/edsm-journal-api.service';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
 import type { SystemsFilterValue } from '../../core/models/guild-systems.model';
@@ -352,6 +353,14 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                 @if (journalParseStatus(); as ps) {
                   <span class="btn-journal-parse-meta">{{ ps.systemsCount }} syst. · {{ ps.pendingDaysEstimate }} j. restants</span>
                 }
+              </button>
+              <button type="button" class="btn-journal-edsm-test"
+                [disabled]="edsmJournalTestRunning()"
+                (click)="onEdsmJournalTestClick()"
+                title="Envoie un FSDJump/Location du raw local vers EDSM. Identifiants : Paramètres → section EDSM (ou appsettings).">
+                <span class="btn-journal-edsm-test-text">
+                  {{ edsmJournalTestRunning() ? 'EDSM…' : 'Test EDSM (1 ligne)' }}
+                </span>
               </button>
             </div>
             </div>
@@ -1309,6 +1318,33 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .btn-journal-parse-text {
       font-weight: 600;
     }
+    .btn-journal-edsm-test {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 0.4rem;
+      padding: 0.35rem 0.65rem;
+      border: 1px solid rgba(0, 255, 200, 0.35);
+      border-radius: 6px;
+      background: rgba(0, 255, 200, 0.08);
+      color: rgba(0, 255, 200, 0.95);
+      font-family: 'Exo 2', sans-serif;
+      font-size: 0.7rem;
+      cursor: pointer;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .btn-journal-edsm-test:hover:not(:disabled) {
+      background: rgba(0, 255, 200, 0.14);
+      border-color: rgba(0, 255, 200, 0.55);
+    }
+    .btn-journal-edsm-test:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .btn-journal-edsm-test-text {
+      font-weight: 600;
+    }
     .btn-journal-parse-meta {
       font-size: 0.5rem;
       color: rgba(255, 255, 255, 0.55);
@@ -1685,6 +1721,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly syncHelpModal = inject(SyncHelpModalService);
   protected readonly frontierAuth = inject(FrontierAuthService);
   private readonly frontierJournalApi = inject(FrontierJournalApiService);
+  private readonly edsmJournalApi = inject(EdsmJournalApiService);
   protected readonly frontierMenuOpen = signal(false);
   protected readonly journalBackfillRunning = signal(false);
   protected readonly journalBackfillStatus = signal<FrontierJournalBackfillStatusDto | null>(null);
@@ -1723,6 +1760,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly mapViewMode = signal<'faction' | 'cmdr'>('faction');
   protected readonly journalParseRunning = signal(false);
   protected readonly journalParseStatus = signal<FrontierJournalParseStatusDto | null>(null);
+  protected readonly edsmJournalTestRunning = signal(false);
   private journalParsePollingRef: ReturnType<typeof setInterval> | null = null;
   protected readonly cmdrsMenuOpen = signal(false);
   protected readonly syncStatusMenuOpen = signal(false);
@@ -2236,6 +2274,36 @@ export class DashboardComponent implements OnInit, OnDestroy {
       },
       error: () => {
         /* silencieux si pas encore de derived */
+      },
+    });
+  }
+
+  protected onEdsmJournalTestClick(): void {
+    this.edsmJournalTestRunning.set(true);
+    this.edsmJournalApi.testUpload({}).subscribe({
+      next: (r) => {
+        this.edsmJournalTestRunning.set(false);
+        if (r.error && r.msgNum == null && r.httpStatus == null) {
+          this.addLog(`EDSM test : ${r.error}`);
+          return;
+        }
+        const code = r.msgNum != null ? ` msgnum=${r.msgNum}` : '';
+        const sys = r.starSystem ? ` · ${r.starSystem}` : '';
+        this.addLog(
+          r.success
+            ? `EDSM test OK${code} — ${r.msg ?? 'OK'}${sys}${r.detail ? ` (${r.detail})` : ''}`
+            : `EDSM test : HTTP ${r.httpStatus ?? '?'}${code} — ${r.msg ?? r.error ?? 'erreur'}${sys}`,
+        );
+      },
+      error: (err) => {
+        this.edsmJournalTestRunning.set(false);
+        const b = err?.error;
+        if (b && typeof b === 'object' && typeof (b as { error?: string }).error === 'string') {
+          this.addLog(`EDSM test : ${(b as { error: string }).error}`);
+          return;
+        }
+        const msg = b?.message ?? err?.message ?? 'Erreur réseau';
+        this.addLog(`EDSM test : ${msg}`);
       },
     });
   }

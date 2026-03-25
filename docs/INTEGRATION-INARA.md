@@ -2,6 +2,18 @@
 
 Documentation de l'intégration avec Inara.cz pour le Guild Dashboard 501.
 
+## Clé API INAPI — où la configurer
+
+**Décision :** la clé API Inara (INAPI, `inapi/v1`) n’est plus déclarée dans les fichiers `appsettings*.json` suivis par Git, afin d’éviter d’exposer ou de committer un secret par inadvertance.
+
+| Source | Rôle |
+|--------|------|
+| **Modal Paramètres** (client) | Flux prévu pour l’équipe : saisie côté UI → `PUT /api/guild/settings/inara-api` → écriture serveur. |
+| **`501/server/Data/inara-api-user.json`** | Fichier créé/mis à jour par cette API ; entré dans `.gitignore` ; prioritaire à la résolution de la clé. |
+| **Variable d’environnement / user secrets** (optionnel) | Ex. `Inara__ApiKey` pour déploiement ou machine locale sans passer par la modal ; hors dépôt uniquement. |
+
+La résolution côté serveur est implémentée dans `InaraApiUserSettingsStore.ResolveApiKey`.
+
 ## Statut technique
 
 | Composant | Statut |

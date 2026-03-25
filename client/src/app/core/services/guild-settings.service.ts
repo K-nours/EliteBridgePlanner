@@ -1,6 +1,10 @@
 import { Injectable, inject, signal, computed, isDevMode } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { tap, catchError, of } from 'rxjs';
+
+export interface InaraApiSettingsClientDto {
+  apiKeyConfigured: boolean;
+}
 import type { GuildSettingsDto, GuildSettingsUpdateDto } from '../models/guild-settings.model';
 
 /** Base API. En dev, URL explicite si proxy Vite inactif. À retirer une fois proxy confirmé. */
@@ -42,6 +46,14 @@ export class GuildSettingsService {
 
   update(payload: GuildSettingsUpdateDto) {
     return this.http.put<void>(`${this.base}/guild/settings`, payload).pipe(tap(() => this.load()));
+  }
+
+  getInaraApiSettings() {
+    return this.http.get<InaraApiSettingsClientDto>(`${this.base}/guild/settings/inara-api`);
+  }
+
+  putInaraApiSettings(body: { apiKey?: string }) {
+    return this.http.put<{ saved: boolean }>(`${this.base}/guild/settings/inara-api`, body);
   }
 
   /** Rafraîchit lastSystemsImportAt (après import réussi). */
