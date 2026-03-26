@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Inara Sync — Guild Dashboard
 // @namespace    https://github.com/elitebridgeplanner
-// @version      2.17.0
+// @version      2.19.0
 // @description  Script unique : bridge sur dashboard, extraction systèmes (faction), extraction CMDRs (squadron)
 // @author       EliteBridgePlanner
 // @match        https://inara.cz/elite/*
@@ -26,6 +26,154 @@
   const isCmdrProfile = isInara && path.includes('/elite/cmdr/');
 
   const BACKEND_URL = 'https://localhost:7294';
+  /** Timeout HTTP Tampermonkey (annulation + erreur utilisateur). */
+  const TM_HTTP_TIMEOUT_MS = 10000;
+  const TM_SAFETY_MS = TM_HTTP_TIMEOUT_MS + 1500;
+
+  function logTm(...args) {
+    if (typeof console !== 'undefined' && console.log) console.log('[TM]', ...args);
+  }
+  function logTmError(...args) {
+    if (typeof console !== 'undefined' && console.error) console.error('[TM] Error', ...args);
+  }
+
+  /**
+   * Vérifie BACKEND_URL et qu’une route API répond (avant sync).
+   * @param {string} contextLabel
+   * @param {{ quiet?: boolean }} [options] Si quiet: pas de toast (les appels post* renvoient le message).
+   * @returns {Promise<{ ok: true } | { ok: false, message: string }>}
+   */
+  async function verifyBackendReachable(contextLabel, options = {}) {
+    const quiet = options.quiet === true;
+    logTm('Sync start', contextLabel || '');
+    const base = (BACKEND_URL || '').trim();
+    if (!base || !/^https?:\/\//i.test(base)) {
+      const msg =
+        'URL backend invalide. Éditez BACKEND_URL dans le script (ex. https://localhost:7294).';
+      logTmError(msg);
+      if (!quiet) showToast(msg, true);
+      return { ok: false, message: msg };
+    }
+    const probeUrl = base.replace(/\/$/, '') + '/api/integrations/frontier/me';
+    try {
+      logTm('Calling API ...', '(probe GET)', probeUrl);
+      const r = await tmRequest('GET', probeUrl);
+      logTm('Response received', 'probe', r.status, probeUrl);
+      return { ok: true };
+    } catch (e) {
+      const detail = (e && e.message) || String(e);
+      logTmError('Backend unreachable —', detail);
+      const msg =
+        'Backend injoignable — ' +
+        detail +
+        '. Démarrez l’API et vérifiez que l’URL est correcte : ' +
+        base;
+      if (!quiet) showToast(msg, true);
+      return { ok: false, message: msg };
+    }
+  }
+
+  /**
+   * Requête GM avec timeout court, logs [TM], et rejet sur erreur réseau / timeout / abort.
+   * En cas de réponse HTTP, résolution avec { ok, status, message, json, responseText, gmPostDiag }.
+   */
+  function tmRequest(method, url, data) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const startMs = Date.now();
+      let reqControl = null;
+
+      const finish = (fn) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(safetyTimer);
+        try {
+          if (reqControl && typeof reqControl.abort === 'function') reqControl.abort();
+        } catch (_) {/**/}
+        fn();
+      };
+
+      const safetyTimer = setTimeout(() => {
+        finish(() => {
+          logTmError('safety timeout — aucun callback après', TM_SAFETY_MS, 'ms |', url);
+          reject(new Error('Aucune réponse du backend après ' + TM_SAFETY_MS / 1000 + ' s'));
+        });
+      }, TM_SAFETY_MS);
+
+      logTm('Calling API ...', method, url);
+
+      const headers = {};
+      if (data != null && method !== 'GET' && method !== 'HEAD') {
+        headers['Content-Type'] = 'application/json';
+      }
+
+      reqControl = GM_xmlhttpRequest({
+        method,
+        url,
+        headers,
+        data:
+          data != null && method !== 'GET' && method !== 'HEAD'
+            ? typeof data === 'string'
+              ? data
+              : JSON.stringify(data)
+            : undefined,
+        timeout: TM_HTTP_TIMEOUT_MS,
+        onload: (res) => {
+          const respText = res.responseText || '';
+          logTm('Response received', res.status, method, url);
+          let json = {};
+          try {
+            json = JSON.parse(respText) || {};
+          } catch (e) {
+            /**/
+          }
+          if (typeof json !== 'object') json = {};
+          const ok = res.status >= 200 && res.status < 300;
+          const msg = json.error || json.message || res.statusText || (ok ? 'OK' : 'Erreur ' + res.status);
+          const elapsedMs = Date.now() - startMs;
+          finish(() =>
+            resolve({
+              ok,
+              status: res.status,
+              message: msg,
+              json,
+              responseText: respText,
+              gmPostDiag: {
+                event: 'onload',
+                status: res.status,
+                statusText: res.statusText || '',
+                elapsedMs,
+                responsePreview: respText.slice(0, 200),
+              },
+            }),
+          );
+        },
+        onerror: (err) => {
+          const st = (err && err.message) || 'Network error';
+          logTmError('network / onerror', st, url);
+          finish(() => reject(new Error('Erreur réseau lors de la récupération des données (' + st + ')')));
+        },
+        ontimeout: () => {
+          logTmError('HTTP timeout', TM_HTTP_TIMEOUT_MS + 'ms', url);
+          finish(() =>
+            reject(
+              new Error(
+                'Délai dépassé (' + TM_HTTP_TIMEOUT_MS / 1000 + ' s) — serveur trop lent ou injoignable',
+              ),
+            ),
+          );
+        },
+        onabort: () => {
+          logTmError('aborted', url);
+          finish(() => reject(new Error('Requête annulée')));
+        },
+      });
+    });
+  }
+
+  function gmPost(url, data) {
+    return tmRequest('POST', url, data);
+  }
 
   /** URLs ou patterns identifiant l'avatar par défaut Inara (placeholder). Ne pas enregistrer en base.
    * Garder synchronisé avec avatar.constants.ts (AVATAR_PLACEHOLDER_PATTERNS). */
@@ -147,62 +295,6 @@
     el.textContent = msg;
     document.body.appendChild(el);
     setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 4000);
-  }
-
-  // GM_xmlhttpRequest (bypass CORS). Diagnostic: onload/onerror/ontimeout/onabort — Promise toujours résolue ou rejetée.
-  function gmPost(url, data) {
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      const startMs = Date.now();
-      const MAX_PREVIEW = 200;
-
-      function finish(result, eventType, status, statusText, respPreview) {
-        if (settled) return;
-        settled = true;
-        clearTimeout(safetyTimer);
-        const elapsedMs = Date.now() - startMs;
-        const preview = (respPreview || '').slice(0, MAX_PREVIEW);
-        console.log('[Inara Sync][gmPost] event=', eventType, 'status=', status, 'statusText=', statusText, 'elapsedMs=', elapsedMs, 'responsePreview=', preview);
-        if (result) result.gmPostDiag = { event: eventType, status, statusText, elapsedMs, responsePreview: preview };
-        resolve(result || { ok: false, message: statusText || eventType, json: {}, responseText: '' });
-      }
-
-      const safetyTimer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(safetyTimer);
-        const elapsedMs = Date.now() - startMs;
-        console.log('[Inara Sync][gmPost] SAFETY: aucun callback après', elapsedMs, 'ms — reject');
-        reject(new Error('gmPost: aucun callback après ' + elapsedMs + ' ms'));
-      }, 65000);
-
-      GM_xmlhttpRequest({
-        method: 'POST',
-        url,
-        headers: { 'Content-Type': 'application/json' },
-        data: typeof data === 'string' ? data : JSON.stringify(data),
-        timeout: 60000,
-        onload: (res) => {
-          const respText = res.responseText || '';
-          let json = {};
-          try { json = JSON.parse(respText) || {}; } catch (e) { /**/ }
-          if (typeof json !== 'object') json = {};
-          const ok = res.status >= 200 && res.status < 300;
-          const msg = json.error || json.message || res.statusText || (ok ? 'OK' : `Erreur ${res.status}`);
-          finish({ ok, message: msg, json, responseText: respText }, 'onload', res.status, res.statusText || '', respText);
-        },
-        onerror: (err) => {
-          const st = (err && err.message) || 'Network error';
-          finish({ ok: false, message: st, json: {}, responseText: '' }, 'onerror', 0, st, '');
-        },
-        ontimeout: () => {
-          finish({ ok: false, message: 'Délai dépassé (60s).', json: {}, responseText: '' }, 'ontimeout', 0, 'Timeout', '');
-        },
-        onabort: () => {
-          finish({ ok: false, message: 'Requête interrompue (abort).', json: {}, responseText: '' }, 'onabort', 0, 'Aborted', '');
-        }
-      });
-    });
   }
 
   // ——— Contexte FACTION PRESENCE : extraction systèmes ———
@@ -574,6 +666,8 @@
     }
 
     async function postSystems(payload, diag) {
+      const vr = await verifyBackendReachable('systems-post', { quiet: true });
+      if (!vr.ok) return { ok: false, message: vr.message || 'Backend injoignable', json: {} };
       const url = `${BACKEND_URL.replace(/\/$/, '')}/api/guild/systems/import`;
       const payloadStr = JSON.stringify(payload);
       console.log('[Inara Sync][Systems][DIAG] payload bytes=', payloadStr.length);
@@ -586,6 +680,7 @@
         r = await gmPost(url, payload);
         console.log('[Inara Sync][Systems][DIAG] gmPost returned');
       } catch (e) {
+        logTmError('postSystems / gmPost', e);
         console.log('[Inara Sync][Systems][DIAG] gmPost threw', e?.message || e);
         return { ok: false, message: (e && e.message) || 'Erreur gmPost', json: {} };
       }
@@ -635,21 +730,21 @@
         console.log('[Inara Sync][Systems][DIAG] isSystemsSubmitting avant post=', isSystemsSubmitting);
         showToast(forceMinimal ? 'Test A minimal…' : 'Envoi en cours…');
         const diag = { submitting: true };
-        postSystems(payload, diag)
-          .then((r) => {
+        void (async () => {
+          try {
+            const r = await postSystems(payload, diag);
             console.log('[Inara Sync][Systems][DIAG] postSystems SUCCESS ok=', r.ok);
             showToast(r.message, !r.ok);
-          })
-          .catch((err) => {
-            console.log('[Inara Sync][Systems][DIAG] postSystems ERROR', err);
+          } catch (err) {
+            logTmError('postSystems flux manuel', err);
             const msg = (err && err.message) || String(err) || 'Erreur inattendue';
             showToast('Erreur : ' + msg, true);
-          })
-          .finally(() => {
+          } finally {
             isSystemsSubmitting = false;
             diag.submitting = false;
             console.log('[Inara Sync][Systems][DIAG] after postSystems (finally) isSystemsSubmitting=', isSystemsSubmitting);
-          });
+          }
+        })();
       }
     }
 
@@ -710,30 +805,33 @@
         const originSystemName = extractOriginFromHeader();
         const systemsToSend = DEBUG_SEND_MINIMAL && systems.length > 0 ? systems.slice(0, 1) : systems;
         showToast('Envoi en cours…');
-        postSystems({ originSystemName: originSystemName || undefined, systems: systemsToSend })
-          .then((r) => {
-            if (!r.ok) {
-              showToast(r.message, true);
-              safePostMessageSystems('inara-sync-error', { message: r.message });
-              return;
-            }
-            showToast(r.message);
-            const j = r.json ?? {};
-            safePostMessageSystems('inara-sync-success', {
-              detail: {
-                inserted: j.inserted ?? 0,
-                updated: j.updated ?? 0,
-                total: j.totalReceived ?? systems.length,
-                edsm: j.edsm,
-              },
-            });
-            window.close();
-          })
-          .catch((err) => {
-            const msg = (err && err.message) || String(err) || 'Erreur inattendue';
-            showToast('Erreur : ' + msg, true);
-            safePostMessageSystems('inara-sync-error', { message: msg });
+        try {
+          const r = await postSystems(
+            { originSystemName: originSystemName || undefined, systems: systemsToSend },
+            { submitting: true },
+          );
+          if (!r.ok) {
+            showToast(r.message, true);
+            safePostMessageSystems('inara-sync-error', { message: r.message });
+            return;
+          }
+          showToast(r.message);
+          const j = r.json ?? {};
+          safePostMessageSystems('inara-sync-success', {
+            detail: {
+              inserted: j.inserted ?? 0,
+              updated: j.updated ?? 0,
+              total: j.totalReceived ?? systems.length,
+              edsm: j.edsm,
+            },
           });
+          window.close();
+        } catch (err) {
+          logTmError('systems autoImport', err);
+          const msg = (err && err.message) || String(err) || 'Erreur inattendue';
+          showToast('Erreur : ' + msg, true);
+          safePostMessageSystems('inara-sync-error', { message: msg });
+        }
       }, 1200);
     }
     return;
@@ -867,9 +965,17 @@
     }
 
     async function postCommanders(payload) {
+      const vr = await verifyBackendReachable('roster-post', { quiet: true });
+      if (!vr.ok) return { ok: false, message: vr.message || 'Backend injoignable', json: {} };
       const url = `${BACKEND_URL.replace(/\/$/, '')}/api/sync/inara/commanders/import`;
       console.log('[Inara Sync] Envoi POST roster:', url);
-      const r = await gmPost(url, payload);
+      let r;
+      try {
+        r = await gmPost(url, payload);
+      } catch (e) {
+        logTmError('postCommanders / gmPost', e);
+        return { ok: false, message: (e && e.message) || String(e), json: {} };
+      }
       if (!r.ok) return { ok: false, message: r.message, json: {} };
       const j = r.json ?? {};
       const imported = j.imported ?? 0;
@@ -896,13 +1002,17 @@
         showToast(`${commanders.length} CMDR(s) téléchargé(s)`);
       } else {
         showToast('Envoi en cours…');
-        postCommanders(payload).then((r) => {
-          if (r.ok) {
-            showToast(r.message);
-          } else {
-            showToast('Erreur : ' + r.message, true);
+        void (async () => {
+          try {
+            const r = await postCommanders(payload);
+            if (r.ok) showToast(r.message);
+            else showToast('Erreur : ' + r.message, true);
+          } catch (e) {
+            logTmError('runCommanders post', e);
+            const msg = (e && e.message) || String(e) || 'Erreur inattendue';
+            showToast('Erreur : ' + msg, true);
           }
-        });
+        })();
       }
     }
 
@@ -944,7 +1054,7 @@
       document.body.appendChild(container);
     }
 
-    const doRosterAutoImport = () => {
+    const doRosterAutoImport = async () => {
       const raw = extractCommanders();
       const commanders = filterAndValidate(raw);
       if (commanders.length === 0) {
@@ -954,39 +1064,40 @@
         return;
       }
       showToast('Envoi en cours…');
-      postCommanders({ commanders }).then((r) => {
-        try {
-          if (!r.ok) {
-            showToast('Erreur : ' + r.message, true);
-            notifyOpenerError('roster', r.message);
-            return;
-          }
-          console.log('[Inara Sync] Import roster réussi');
-          showToast(r.message);
-          const j = r.json ?? {};
-          const imported = j.imported ?? commanders.length;
-          const totalReceived = j.totalReceived ?? commanders.length;
-          const detail = { imported, total: totalReceived };
-          console.log('[Inara Sync] Avant postMessage:', { hasOpener: !!window.opener, typeofOpener: typeof window.opener, openerOrigin, urlCourante: location.href });
-          notifyOpenerSuccess('roster', detail);
-          console.log('[Inara Sync] Tentative fermeture');
-          window.close();
-          console.log('[Inara Sync] window.close() appelé');
-        } catch (e) {
-          console.log('[Inara Sync] Erreur fin de flux roster:', e);
-          try { notifyOpenerSuccess('roster', { imported: commanders.length, total: commanders.length }); } catch (_) {}
-          try { window.close(); } catch (_) {}
+      try {
+        const r = await postCommanders({ commanders });
+        if (!r.ok) {
+          showToast('Erreur : ' + r.message, true);
+          notifyOpenerError('roster', r.message);
+          return;
         }
-      });
+        console.log('[Inara Sync] Import roster réussi');
+        showToast(r.message);
+        const j = r.json ?? {};
+        const imported = j.imported ?? commanders.length;
+        const totalReceived = j.totalReceived ?? commanders.length;
+        const detail = { imported, total: totalReceived };
+        console.log('[Inara Sync] Avant postMessage:', { hasOpener: !!window.opener, typeofOpener: typeof window.opener, openerOrigin, urlCourante: location.href });
+        notifyOpenerSuccess('roster', detail);
+        console.log('[Inara Sync] Tentative fermeture');
+        window.close();
+        console.log('[Inara Sync] window.close() appelé');
+      } catch (e) {
+        logTmError('doRosterAutoImport', e);
+        console.log('[Inara Sync] Erreur fin de flux roster:', e);
+        const msg = (e && e.message) || String(e) || 'Erreur inattendue';
+        showToast('Erreur : ' + msg, true);
+        notifyOpenerError('roster', msg);
+      }
     };
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
         injectRosterButton();
-        if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import CMDRs (autoImport=1)'); notifyOpenerStarted('roster'); doRosterAutoImport(); }, 1200);
+        if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import CMDRs (autoImport=1)'); notifyOpenerStarted('roster'); void doRosterAutoImport(); }, 1200);
       });
     } else {
       injectRosterButton();
-      if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import CMDRs (autoImport=1)'); notifyOpenerStarted('roster'); doRosterAutoImport(); }, 1200);
+      if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import CMDRs (autoImport=1)'); notifyOpenerStarted('roster'); void doRosterAutoImport(); }, 1200);
     }
     return;
   }
@@ -1110,8 +1221,16 @@
     }
 
     async function postAvatar(avatarUrl, commanderName) {
+      const vr = await verifyBackendReachable('avatar-post', { quiet: true });
+      if (!vr.ok) return { ok: false, message: vr.message || 'Backend injoignable' };
       const url = `${BACKEND_URL.replace(/\/$/, '')}/api/sync/inara/avatar`;
-      const r = await gmPost(url, { avatarUrl, commanderName });
+      let r;
+      try {
+        r = await gmPost(url, { avatarUrl, commanderName });
+      } catch (e) {
+        logTmError('postAvatar / gmPost', e);
+        return { ok: false, message: (e && e.message) || String(e) };
+      }
       if (!r.ok) return { ok: false, message: r.message };
       return { ok: true, message: `Avatar mis à jour pour ${commanderName}` };
     }
@@ -1138,7 +1257,16 @@
       const payload = { avatarUrl, commanderName };
       console.log('[Inara Sync] Payload avatar:', JSON.stringify(payload));
       showToast('Envoi en cours…');
-      postAvatar(avatarUrl, commanderName).then((r) => showToast(r.message, !r.ok));
+      void (async () => {
+        try {
+          const r = await postAvatar(avatarUrl, commanderName);
+          showToast(r.message, !r.ok);
+        } catch (e) {
+          logTmError('runAvatar', e);
+          const msg = (e && e.message) || String(e) || 'Erreur inattendue';
+          showToast('Erreur : ' + msg, true);
+        }
+      })();
     }
 
     function injectAvatarButton() {
@@ -1161,7 +1289,7 @@
       document.body.appendChild(container);
     }
 
-    const doAvatarAutoImport = () => {
+    const doAvatarAutoImport = async () => {
       const avatarUrl = extractAvatar();
       const commanderName = extractCommanderName();
       console.log('[Inara Sync] Avatar extraction:', { avatarUrl: !!avatarUrl, commanderName: commanderName || '(vide)' });
@@ -1192,30 +1320,31 @@
       const payload = { avatarUrl, commanderName };
       console.log('[Inara Sync][Avatar] Payload envoyé:', JSON.stringify(payload));
       showToast('Envoi en cours…');
-      postAvatar(avatarUrl, commanderName).then((r) => {
-        try {
-          if (!r.ok) {
-            showToast(r.message, true);
-            notifyOpenerError('avatar', r.message);
-            return;
-          }
-          console.log('[Inara Sync] Import avatar réussi');
-          showToast(r.message);
-          console.log('[Inara Sync] Avant postMessage:', { hasOpener: !!window.opener, typeofOpener: typeof window.opener, openerOrigin, urlCourante: location.href });
-          notifyOpenerSuccess('avatar', { commanderName });
-          console.log('[Inara Sync] Tentative fermeture');
-          window.close();
-          console.log('[Inara Sync] window.close() appelé');
-        } catch (e) {
-          console.log('[Inara Sync] Erreur fin de flux avatar:', e);
-          try { notifyOpenerSuccess('avatar', { commanderName }); } catch (_) {}
-          try { window.close(); } catch (_) {}
+      try {
+        const r = await postAvatar(avatarUrl, commanderName);
+        if (!r.ok) {
+          showToast(r.message, true);
+          notifyOpenerError('avatar', r.message);
+          return;
         }
-      });
+        console.log('[Inara Sync] Import avatar réussi');
+        showToast(r.message);
+        console.log('[Inara Sync] Avant postMessage:', { hasOpener: !!window.opener, typeofOpener: typeof window.opener, openerOrigin, urlCourante: location.href });
+        notifyOpenerSuccess('avatar', { commanderName });
+        console.log('[Inara Sync] Tentative fermeture');
+        window.close();
+        console.log('[Inara Sync] window.close() appelé');
+      } catch (e) {
+        logTmError('doAvatarAutoImport', e);
+        console.log('[Inara Sync] Erreur fin de flux avatar:', e);
+        const msg = (e && e.message) || String(e) || 'Erreur inattendue';
+        showToast('Erreur : ' + msg, true);
+        notifyOpenerError('avatar', msg);
+      }
     };
     const doAvatarSetup = () => {
       injectAvatarButton();
-      if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import avatar (autoImport=1)'); notifyOpenerStarted('avatar'); doAvatarAutoImport(); }, 1200);
+      if (autoImport) setTimeout(() => { console.log('[Inara Sync] Auto-import avatar (autoImport=1)'); notifyOpenerStarted('avatar'); void doAvatarAutoImport(); }, 1200);
     };
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', doAvatarSetup);

@@ -4,23 +4,37 @@ using System.Text.Json;
 namespace GuildDashboard.Server.Services;
 
 /// <summary>
-/// Parsing incrémental du journal CAPI (raw.json) vers agrégats par système.
-/// Règles : visité = FSDJump / CarrierJump / Location ; full scan = FSSAllBodiesFound ;
-/// « découvert par moi » = au moins un Scan avec WasDiscovered=false (premier corps).
-/// Le brut journal est du NDJSON (une ligne JSON par événement) ou legacy tableau JSON.
+/// Parsing incrémental du journal Frontier (brut local par CMDR) vers agrégats pour la carte.
 /// </summary>
 public class FrontierJournalParseService
 {
-    public const int CurrentParseVersion = 3;
+    public const int CurrentParseVersion = 4;
+
+    private static readonly JsonSerializerOptions RawJsonReadOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
 
     private const string ParseStateFileName = "frontier-journal-parse-state.json";
     private const string DerivedFileName = "frontier-journal-derived.json";
-    private const string RawFileName = "frontier-journal-raw.json";
+    private const string RawFileName = FrontierJournalBackfillService.RawFileName;
 
     private readonly IWebHostEnvironment _env;
     private readonly ILogger<FrontierJournalParseService> _log;
-    private readonly object _runLock = new();
-    private Task? _parseTask;
+
+    /// <summary>Résumé du dernier lot parsé par CMDR (feedback UI).</summary>
+    private readonly object _lastBatchLock = new();
+    private readonly Dictionary<string, LastBatchSnapshot> _lastBatchByCommander = new(StringComparer.Ordinal);
+
+    private sealed class LastBatchSnapshot
+    {
+        public DateTime CompletedAtUtc { get; init; }
+        public int DaysProcessed { get; init; }
+        public int NewSystemsCount { get; init; }
+        /// <summary>Nouveaux systèmes du lot avec coords (placables sur la carte).</summary>
+        public int NewSystemsWithCoordsCount { get; init; }
+        public List<string> NewSystemNames { get; init; } = new();
+    }
 
     public FrontierJournalParseService(IWebHostEnvironment env, ILogger<FrontierJournalParseService> log)
     {
@@ -28,47 +42,66 @@ public class FrontierJournalParseService
         _log = log;
     }
 
-    private string DataDir => Path.Combine(_env.ContentRootPath ?? AppContext.BaseDirectory ?? ".", "Data", "frontier-journal");
+    private static string JournalDir(IWebHostEnvironment env, string frontierCustomerId) =>
+        FrontierJournalStoragePaths.CommanderDirectory(env, frontierCustomerId);
 
-    /// <summary>Lance un lot de parsing (async). Retourne false si un lot est déjà en cours.</summary>
-    public bool StartIncrementalParse(int batchSize = 40)
+    /// <summary>Boucle jusqu’à épuisement des jours à parser (utilisé après fetch Frontier).</summary>
+    public async Task<int> ParseAllPendingAsync(string frontierCustomerId, int batchSize, CancellationToken ct)
     {
-        lock (_runLock)
+        ArgumentException.ThrowIfNullOrWhiteSpace(frontierCustomerId);
+        var dir = JournalDir(_env, frontierCustomerId);
+        var size = Math.Clamp(batchSize, 1, 200);
+        var total = 0;
+        while (!ct.IsCancellationRequested)
         {
-            if (_parseTask != null && !_parseTask.IsCompleted)
-            {
-                _log.LogWarning("[FrontierJournalParse] Lot ignoré : parsing déjà en cours");
-                return false;
-            }
-            var size = Math.Clamp(batchSize, 1, 200);
-            _parseTask = Task.Run(() => RunIncrementalParseAsync(size));
-            return true;
+            var pendingBefore = CountPendingInDirectory(dir);
+            if (pendingBefore == 0) break;
+            var n = await Task.Run(() => RunOneParseBatch(frontierCustomerId, dir, size), ct);
+            total += n;
+            if (n == 0) break;
         }
+        return total;
     }
 
-    public FrontierJournalParseStatusDto GetParseStatus()
+    private int CountPendingInDirectory(string journalDir)
     {
-        var state = LoadParseState();
-        var derived = LoadDerived();
-        var raw = LoadRawKeys();
+        var raw = LoadRawKeys(journalDir);
+        var state = LoadParseState(journalDir);
+        return CountPendingDates(raw, state);
+    }
+
+    public FrontierJournalParseStatusDto GetParseStatus(string frontierCustomerId)
+    {
+        var dir = JournalDir(_env, frontierCustomerId);
+        var state = LoadParseState(dir);
+        var derived = LoadDerived(dir);
+        var raw = LoadRawKeys(dir);
         var pending = CountPendingDates(raw, state);
-        var isRunning = _parseTask != null && !_parseTask.IsCompleted;
+        var withCoords = derived?.Systems?.Values.Count(s => s.CoordsX.HasValue && s.CoordsY.HasValue && s.CoordsZ.HasValue) ?? 0;
+        LastBatchSnapshot? snap = null;
+        lock (_lastBatchLock)
+            _lastBatchByCommander.TryGetValue(frontierCustomerId, out snap);
         return new FrontierJournalParseStatusDto
         {
-            IsRunning = isRunning,
+            IsRunning = false,
             ParseVersion = CurrentParseVersion,
             PendingDaysEstimate = pending,
             ParsedDaysCount = state?.Entries?.Count(e => e.Value.Status == "parsed_ok") ?? 0,
             ErrorDaysCount = state?.Entries?.Count(e => e.Value.Status == "parsed_error") ?? 0,
             SystemsCount = derived?.Systems?.Count ?? 0,
+            SystemsWithCoordsCount = withCoords,
             DerivedUpdatedAt = derived?.UpdatedAt,
             LastParseError = state?.LastBatchError,
+            LastBatchDaysProcessed = snap?.DaysProcessed ?? 0,
+            LastBatchNewSystemsCount = snap?.NewSystemsCount ?? 0,
+            LastBatchNewSystemsWithCoordsCount = snap?.NewSystemsWithCoordsCount ?? 0,
+            LastBatchNewSystemNames = snap?.NewSystemNames ?? new List<string>(),
         };
     }
 
-    public FrontierJournalDerivedResponseDto GetDerivedForMap()
+    public FrontierJournalDerivedResponseDto GetDerivedForMap(string frontierCustomerId)
     {
-        var d = LoadDerived();
+        var d = LoadDerived(JournalDir(_env, frontierCustomerId));
         var list = d?.Systems?.Values
             .Select(s => new FrontierJournalSystemDerivedDto
             {
@@ -94,15 +127,15 @@ public class FrontierJournalParseService
         };
     }
 
-    private async Task RunIncrementalParseAsync(int batchSize)
+    /// <returns>Nombre de jours traités dans ce lot (0 si rien à faire).</returns>
+    private int RunOneParseBatch(string frontierCustomerId, string journalDir, int batchSize)
     {
         try
         {
-            await Task.Yield();
-            var raw = LoadRawDictionary();
-            var state = LoadParseState() ?? new FrontierJournalParseState { Entries = new Dictionary<string, FrontierJournalParseDayState>() };
+            var raw = LoadRawDictionary(journalDir);
+            var state = LoadParseState(journalDir) ?? new FrontierJournalParseState { Entries = new Dictionary<string, FrontierJournalParseDayState>() };
             state.Entries ??= new Dictionary<string, FrontierJournalParseDayState>();
-            var derived = LoadDerived() ?? new FrontierJournalDerivedFile { Systems = new Dictionary<string, FrontierJournalDerivedSystem>(StringComparer.OrdinalIgnoreCase) };
+            var derived = LoadDerived(journalDir) ?? new FrontierJournalDerivedFile { Systems = new Dictionary<string, FrontierJournalDerivedSystem>(StringComparer.OrdinalIgnoreCase) };
             derived.Systems ??= new Dictionary<string, FrontierJournalDerivedSystem>(StringComparer.OrdinalIgnoreCase);
 
             if (derived.ParseVersion != 0 && derived.ParseVersion != CurrentParseVersion)
@@ -124,6 +157,11 @@ public class FrontierJournalParseService
                 .Where(d => NeedsParsing(d, state))
                 .Take(batchSize)
                 .ToList();
+
+            if (datesToProcess.Count == 0)
+                return 0;
+
+            var systemKeysBefore = derived.Systems.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             state.LastBatchError = null;
             foreach (var dateStr in datesToProcess)
@@ -156,25 +194,47 @@ public class FrontierJournalParseService
 
             derived.ParseVersion = CurrentParseVersion;
             derived.UpdatedAt = DateTime.UtcNow;
-            SaveDerived(derived);
-            SaveParseState(state);
-            _log.LogInformation("[FrontierJournalParse] Lot terminé : {Count} jour(s) traité(s), {Sys} système(s)", datesToProcess.Count, derived.Systems.Count);
-            if (datesToProcess.Count > 0)
-                LogDerivedDiagnostics(derived);
+            SaveDerived(journalDir, derived);
+            SaveParseState(journalDir, state);
+
+            var newKeys = derived.Systems.Keys.Where(k => !systemKeysBefore.Contains(k)).ToList();
+            var newWithCoords = newKeys.Count(k =>
+                derived.Systems.TryGetValue(k, out var s) &&
+                s.CoordsX.HasValue && s.CoordsY.HasValue && s.CoordsZ.HasValue);
+            var newNames = newKeys
+                .Select(k => derived.Systems[k].SystemName)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .Take(25)
+                .ToList();
+            lock (_lastBatchLock)
+            {
+                _lastBatchByCommander[frontierCustomerId] = new LastBatchSnapshot
+                {
+                    CompletedAtUtc = DateTime.UtcNow,
+                    DaysProcessed = datesToProcess.Count,
+                    NewSystemsCount = newKeys.Count,
+                    NewSystemsWithCoordsCount = newWithCoords,
+                    NewSystemNames = newNames,
+                };
+            }
+
+            _log.LogInformation(
+                "[FrontierJournalParse] Lot terminé : {Count} jour(s) traité(s), {Sys} système(s), +{New} nouveau(x) dont {WithC} avec coords",
+                datesToProcess.Count,
+                derived.Systems.Count,
+                newKeys.Count,
+                newWithCoords);
+            LogDerivedDiagnostics(derived);
+            return datesToProcess.Count;
         }
         catch (Exception ex)
         {
             _log.LogError(ex, "[FrontierJournalParse] Erreur fatale lot");
-            var state = LoadParseState() ?? new FrontierJournalParseState { Entries = new Dictionary<string, FrontierJournalParseDayState>() };
-            state.LastBatchError = ex.Message;
-            SaveParseState(state);
-        }
-        finally
-        {
-            lock (_runLock)
-            {
-                _parseTask = null;
-            }
+            var st = LoadParseState(journalDir) ?? new FrontierJournalParseState { Entries = new Dictionary<string, FrontierJournalParseDayState>() };
+            st.LastBatchError = ex.Message;
+            SaveParseState(journalDir, st);
+            throw;
         }
     }
 
@@ -247,37 +307,15 @@ public class FrontierJournalParseService
 
     private void ParseDayPayload(string dateStr, string payload, FrontierJournalDerivedFile derived)
     {
-        var trimmed = payload.TrimStart();
-        if (trimmed.Length == 0)
-            return;
+        if (!FrontierJournalPayloadNormalizer.TryOpenJournalDayAsArray(payload, out var doc, out var err) || doc == null)
+            throw new InvalidOperationException(err ?? "Lecture du journal du jour impossible (NDJSON / CAPI Frontier).");
 
-        if (trimmed[0] == '[')
+        using (doc)
         {
-            using var doc = JsonDocument.Parse(payload);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array)
-                return;
             foreach (var el in doc.RootElement.EnumerateArray())
             {
                 if (el.ValueKind == JsonValueKind.Object)
                     ProcessJournalEvent(dateStr, el, derived);
-            }
-            return;
-        }
-
-        foreach (var rawLine in payload.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
-        {
-            var line = rawLine.Trim();
-            if (line.Length == 0)
-                continue;
-            try
-            {
-                using var doc = JsonDocument.Parse(line);
-                if (doc.RootElement.ValueKind == JsonValueKind.Object)
-                    ProcessJournalEvent(dateStr, doc.RootElement, derived);
-            }
-            catch (JsonException)
-            {
-                /* ligne non JSON — ignorée */
             }
         }
     }
@@ -408,15 +446,15 @@ public class FrontierJournalParseService
 
     private static string NormalizeSystemKey(string name) => name.Trim().ToUpperInvariant();
 
-    private Dictionary<string, FrontierJournalRawEntry> LoadRawDictionary()
+    private Dictionary<string, FrontierJournalRawEntry> LoadRawDictionary(string journalDir)
     {
-        var path = Path.Combine(DataDir, RawFileName);
+        var path = Path.Combine(journalDir, RawFileName);
         if (!File.Exists(path))
             return new Dictionary<string, FrontierJournalRawEntry>();
         try
         {
             var json = File.ReadAllText(path);
-            return JsonSerializer.Deserialize<Dictionary<string, FrontierJournalRawEntry>>(json)
+            return JsonSerializer.Deserialize<Dictionary<string, FrontierJournalRawEntry>>(json, RawJsonReadOptions)
                    ?? new Dictionary<string, FrontierJournalRawEntry>();
         }
         catch (Exception ex)
@@ -426,9 +464,9 @@ public class FrontierJournalParseService
         }
     }
 
-    private HashSet<string> LoadRawKeys()
+    private HashSet<string> LoadRawKeys(string journalDir)
     {
-        var raw = LoadRawDictionary();
+        var raw = LoadRawDictionary(journalDir);
         var set = new HashSet<string>(StringComparer.Ordinal);
         foreach (var kv in raw)
         {
@@ -440,9 +478,9 @@ public class FrontierJournalParseService
         return set;
     }
 
-    private FrontierJournalParseState? LoadParseState()
+    private FrontierJournalParseState? LoadParseState(string journalDir)
     {
-        var path = Path.Combine(DataDir, ParseStateFileName);
+        var path = Path.Combine(journalDir, ParseStateFileName);
         if (!File.Exists(path))
             return null;
         try
@@ -457,13 +495,13 @@ public class FrontierJournalParseService
         }
     }
 
-    private void SaveParseState(FrontierJournalParseState state)
+    private void SaveParseState(string journalDir, FrontierJournalParseState state)
     {
-        var path = Path.Combine(DataDir, ParseStateFileName);
+        var path = Path.Combine(journalDir, ParseStateFileName);
         var tmp = path + ".tmp";
         try
         {
-            Directory.CreateDirectory(DataDir);
+            Directory.CreateDirectory(journalDir);
             var json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(tmp, json);
             File.Move(tmp, path, overwrite: true);
@@ -475,9 +513,9 @@ public class FrontierJournalParseService
         }
     }
 
-    private FrontierJournalDerivedFile? LoadDerived()
+    private FrontierJournalDerivedFile? LoadDerived(string journalDir)
     {
-        var path = Path.Combine(DataDir, DerivedFileName);
+        var path = Path.Combine(journalDir, DerivedFileName);
         if (!File.Exists(path))
             return null;
         try
@@ -492,13 +530,13 @@ public class FrontierJournalParseService
         }
     }
 
-    private void SaveDerived(FrontierJournalDerivedFile derived)
+    private void SaveDerived(string journalDir, FrontierJournalDerivedFile derived)
     {
-        var path = Path.Combine(DataDir, DerivedFileName);
+        var path = Path.Combine(journalDir, DerivedFileName);
         var tmp = path + ".tmp";
         try
         {
-            Directory.CreateDirectory(DataDir);
+            Directory.CreateDirectory(journalDir);
             var json = JsonSerializer.Serialize(derived, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(tmp, json);
             File.Move(tmp, path, overwrite: true);
@@ -556,8 +594,17 @@ public class FrontierJournalParseStatusDto
     public int ParsedDaysCount { get; set; }
     public int ErrorDaysCount { get; set; }
     public int SystemsCount { get; set; }
+    /// <summary>Systèmes avec StarPos / Position (affichables sur la carte 3D).</summary>
+    public int SystemsWithCoordsCount { get; set; }
     public DateTime? DerivedUpdatedAt { get; set; }
     public string? LastParseError { get; set; }
+    /// <summary>Nombre de jours traités dans le dernier lot terminé.</summary>
+    public int LastBatchDaysProcessed { get; set; }
+    /// <summary>Nouveaux systèmes distincts ajoutés au dérivé durant ce lot.</summary>
+    public int LastBatchNewSystemsCount { get; set; }
+    /// <summary>Parmi ces nouveaux, combien ont des coords (carte).</summary>
+    public int LastBatchNewSystemsWithCoordsCount { get; set; }
+    public List<string> LastBatchNewSystemNames { get; set; } = new();
 }
 
 public class FrontierJournalDerivedResponseDto

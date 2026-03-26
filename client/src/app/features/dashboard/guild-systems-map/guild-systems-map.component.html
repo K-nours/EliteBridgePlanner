@@ -54,12 +54,12 @@
   </div>
   @if (hasNoCoords()) {
     <div class="map-empty-hint">
-      @if (mapViewMode === 'cmdr') {
-        <span>Aucun système journal avec coordonnées</span>
-        <span class="map-empty-hint-sub">Parsez le journal ou vérifiez la présence de StarPos dans les événements</span>
+      @if (mapViewMode === 'faction') {
+        <span>Aucun système de guilde avec coordonnées sur la carte</span>
+        <span class="map-empty-hint-sub">Importez les systèmes (Inara) puis lancez l’enrichissement EDSM des coordonnées pour la vue Faction.</span>
       } @else {
-        <span>Aucune coordonnée galactique</span>
-        <span class="map-empty-hint-sub">Importez depuis Inara puis lancez l'enrichissement EDSM</span>
+        <span>Aucun système avec coordonnées dans le journal Frontier parsé</span>
+        <span class="map-empty-hint-sub">Utilisez « Synchronisation du journal » dans le bloc CMDR connecté pour télécharger et parser le journal CAPI.</span>
       }
     </div>
   }

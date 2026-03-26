@@ -10,12 +10,18 @@ public class FrontierController : ControllerBase
     private readonly FrontierAuthService _auth;
     private readonly FrontierTokenStore _store;
     private readonly FrontierUserService _userService;
+    private readonly FrontierJournalUnifiedSyncService _journalUnifiedSync;
 
-    public FrontierController(FrontierAuthService auth, FrontierTokenStore store, FrontierUserService userService)
+    public FrontierController(
+        FrontierAuthService auth,
+        FrontierTokenStore store,
+        FrontierUserService userService,
+        FrontierJournalUnifiedSyncService journalUnifiedSync)
     {
         _auth = auth;
         _store = store;
         _userService = userService;
+        _journalUnifiedSync = journalUnifiedSync;
     }
 
     /// <summary>POST /api/integrations/frontier/logout — déconnexion Frontier (efface le token).</summary>
@@ -261,6 +267,7 @@ public class FrontierController : ControllerBase
 
         var report = await _auth.RunFullValidationAsync(token, ct);
         _store.SetToken(token, report);
+        _journalUnifiedSync.ClearAuthErrorStateAfterFrontierLogin();
 
         _ = await _userService.GetProfileAsync(ct);
 

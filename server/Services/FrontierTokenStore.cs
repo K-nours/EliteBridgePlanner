@@ -18,6 +18,8 @@ public class FrontierTokenStore
 
     private FrontierTokenResult? _lastToken;
     private FrontierValidationReport? _lastReport;
+    /// <summary>Horodatage de la dernière lecture du couple access/refresh (SetToken).</summary>
+    private DateTime? _tokenReceivedUtc;
 
     public void SetPendingAuth(string state, string codeVerifier)
     {
@@ -76,10 +78,32 @@ public class FrontierTokenStore
         {
             _lastToken = token;
             _lastReport = report;
+            _tokenReceivedUtc = DateTime.UtcNow;
         }
     }
 
     public FrontierTokenResult? GetToken() => _lastToken;
+
+    /// <summary>Indique si l’access token est probablement expiré (sans appel réseau).</summary>
+    public FrontierSessionDiagnostics GetSessionDiagnostics()
+    {
+        lock (_lock)
+        {
+            if (_lastToken == null)
+                return new FrontierSessionDiagnostics(false, false, false, false);
+
+            var hasA = !string.IsNullOrEmpty(_lastToken.AccessToken);
+            var hasR = !string.IsNullOrEmpty(_lastToken.RefreshToken);
+            var expired = false;
+            if (hasA && _tokenReceivedUtc != null && _lastToken.ExpiresIn > 0)
+            {
+                var expiresAt = _tokenReceivedUtc.Value.AddSeconds(_lastToken.ExpiresIn).AddMinutes(-2);
+                expired = DateTime.UtcNow >= expiresAt;
+            }
+
+            return new FrontierSessionDiagnostics(true, hasA, hasR, expired);
+        }
+    }
 
     public FrontierValidationReport? GetReport() => _lastReport;
 
@@ -89,6 +113,17 @@ public class FrontierTokenStore
         {
             _lastToken = null;
             _lastReport = null;
+            _tokenReceivedUtc = null;
         }
     }
 }
+
+/// <param name="HasStoredToken">Un enregistrement token est présent en mémoire.</param>
+/// <param name="HasAccessToken">Access token non vide.</param>
+/// <param name="HasRefreshToken">Refresh token non vide.</param>
+/// <param name="AccessProbablyExpired">Estimation locale via expires_in (si connu).</param>
+public readonly record struct FrontierSessionDiagnostics(
+    bool HasStoredToken,
+    bool HasAccessToken,
+    bool HasRefreshToken,
+    bool AccessProbablyExpired);

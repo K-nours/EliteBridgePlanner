@@ -4,8 +4,8 @@ using System.Text.Json;
 namespace GuildDashboard.Server.Services;
 
 /// <summary>
-/// Backfill incrémental du journal Frontier CAPI par date.
-/// Récupération brute jour par jour, persistance dans 3 fichiers JSON, reprise automatique.
+/// Téléchargement incrémental du journal Frontier CAPI par date UTC, pour un CMDR donné (dossier dédié).
+/// Les jours déjà en success/empty dans le brut local sont ignorés ; les erreurs peuvent être re-téléchargées au prochain run.
 /// </summary>
 public class FrontierJournalBackfillService
 {
@@ -17,11 +17,7 @@ public class FrontierJournalBackfillService
     private readonly IWebHostEnvironment _env;
     private readonly ILogger<FrontierJournalBackfillService> _log;
 
-    private readonly object _runLock = new();
-    private CancellationTokenSource? _cts;
-    private Task? _runTask;
-
-    private const string RawFileName = "frontier-journal-raw.json";
+    public const string RawFileName = "frontier-journal-raw.json";
     private const string ProgressFileName = "frontier-journal-progress.json";
     private const string LogFileName = "frontier-journal-log.json";
     private const string CapiJournalBase = "https://companion.orerve.net";
@@ -38,8 +34,6 @@ public class FrontierJournalBackfillService
         _log = log;
     }
 
-    private string DataDir => Path.Combine(_env.ContentRootPath ?? AppContext.BaseDirectory ?? ".", "Data", "frontier-journal");
-
     private static DateTime FloorFromProgress(FrontierJournalProgress? p)
     {
         if (string.IsNullOrEmpty(p?.EffectiveMinDate))
@@ -49,103 +43,34 @@ public class FrontierJournalBackfillService
             : MinDate;
     }
 
-    /// <summary>Retourne les dates à retraiter (status=error, HttpStatusCode=401) depuis raw.json.</summary>
-    public IReadOnlyList<string> GetDatesToRetry()
+    /// <summary>Exécution attendue par l’orchestrateur (sync complète fetch + annulation via <paramref name="ct"/>).</summary>
+    /// <param name="progressReporter">Mise à jour libellé UI (thread-safe attendu côté appelant si besoin).</param>
+    public async Task RunForCommanderAsync(
+        string frontierCustomerId,
+        int? recentDays,
+        CancellationToken ct,
+        Action<string>? progressReporter = null)
     {
-        var raw = LoadRaw();
-        var list = new List<string>();
-        foreach (var (dateStr, entry) in raw)
-        {
-            var status = entry.Status ?? "";
-            var code = entry.HttpStatusCode ?? 0;
-            if (status.Equals("error", StringComparison.OrdinalIgnoreCase) && code == 401)
-                list.Add(dateStr);
-        }
-        list.Sort(StringComparer.Ordinal);
-        return list;
+        ArgumentException.ThrowIfNullOrWhiteSpace(frontierCustomerId);
+        var token = _tokenStore.GetToken();
+        if (token == null || string.IsNullOrEmpty(token.AccessToken))
+            throw new InvalidOperationException("FRONTIER_JOURNAL_NO_ACCESS_TOKEN");
+
+        var journalDir = FrontierJournalStoragePaths.CommanderDirectory(_env, frontierCustomerId);
+        FrontierJournalStoragePaths.TryMigrateLegacyJournalFiles(_env, journalDir, _log);
+        Directory.CreateDirectory(journalDir);
+
+        await RunBackfillAsync(token.AccessToken, journalDir, recentDays, ct, progressReporter);
     }
 
-    /// <summary>Démarre le backfill (ou reprend si non terminé). Retourne false si déjà en cours.</summary>
-    /// <param name="recentDays">Si défini (1–366), ne récupère que ces derniers jours calendaires UTC (depuis hier inclus vers le passé).</param>
-    public bool Start(int? recentDays = null)
+    /// <summary>État persistant du fetch (fichier progress du CMDR).</summary>
+    public FrontierJournalBackfillStatus GetStatus(string frontierCustomerId)
     {
-        lock (_runLock)
-        {
-            if (_runTask != null && !_runTask.IsCompleted)
-            {
-                _log.LogWarning("[FrontierJournal] Démarrage ignoré : backfill déjà en cours");
-                return false;
-            }
-
-            var token = _tokenStore.GetToken();
-            if (token == null || string.IsNullOrEmpty(token.AccessToken))
-            {
-                _log.LogWarning("[FrontierJournal] Impossible de démarrer : pas de token Frontier");
-                return false;
-            }
-
-            _cts = new CancellationTokenSource();
-            _runTask = RunBackfillAsync(token.AccessToken, recentDays, _cts.Token);
-            _log.LogInformation("[FrontierJournal] Backfill démarré recentDays={RecentDays}", recentDays?.ToString() ?? "full");
-            return true;
-        }
-    }
-
-    /// <summary>Lance le retry uniquement sur les erreurs 401. Retourne false si déjà en cours ou aucune erreur à retraiter.</summary>
-    public bool StartRetryErrors()
-    {
-        lock (_runLock)
-        {
-            if (_runTask != null && !_runTask.IsCompleted)
-            {
-                _log.LogWarning("[FrontierJournal] Retry ignoré : backfill déjà en cours");
-                return false;
-            }
-
-            var datesToRetry = GetDatesToRetry();
-            if (datesToRetry.Count == 0)
-            {
-                _log.LogInformation("[FrontierJournal] Retry : aucune erreur 401 à retraiter");
-                return false;
-            }
-
-            var token = _tokenStore.GetToken();
-            if (token == null || string.IsNullOrEmpty(token.AccessToken))
-            {
-                _log.LogWarning("[FrontierJournal] Retry impossible : pas de token Frontier (reconnectez-vous)");
-                return false;
-            }
-
-            _cts = new CancellationTokenSource();
-            _runTask = RunRetryErrorsAsync(token.AccessToken, datesToRetry, _cts.Token);
-            _log.LogInformation("[FrontierJournal] Retry démarré : {Count} erreur(s) 401 à retraiter", datesToRetry.Count);
-            return true;
-        }
-    }
-
-    /// <summary>Arrête le backfill ou retry en cours. Retourne true si un job a été arrêté.</summary>
-    public bool Stop()
-    {
-        lock (_runLock)
-        {
-            if (_cts != null && !_cts.IsCancellationRequested)
-            {
-                _cts.Cancel();
-                _log.LogInformation("[FrontierJournal] Arrêt demandé");
-                return true;
-            }
-            return false;
-        }
-    }
-
-    /// <summary>Retourne l'état courant du backfill.</summary>
-    public FrontierJournalBackfillStatus GetStatus()
-    {
-        var progress = LoadProgress();
-        var isRunning = _runTask != null && !_runTask.IsCompleted;
+        var journalDir = FrontierJournalStoragePaths.CommanderDirectory(_env, frontierCustomerId);
+        var progress = LoadProgress(journalDir);
         return new FrontierJournalBackfillStatus
         {
-            IsRunning = isRunning,
+            IsRunning = false,
             Completed = progress?.Completed ?? false,
             CurrentDate = progress?.CurrentDate,
             StartDate = progress?.StartDate,
@@ -160,12 +85,45 @@ public class FrontierJournalBackfillService
         };
     }
 
-    private async Task RunBackfillAsync(string accessToken, int? recentDaysForNewStart, CancellationToken ct)
+    /// <summary>Nombre de clés « success » avec payload non vide dans le brut.</summary>
+    public int CountFetchedSuccessDays(string frontierCustomerId)
+    {
+        var journalDir = FrontierJournalStoragePaths.CommanderDirectory(_env, frontierCustomerId);
+        var raw = LoadRaw(journalDir);
+        return raw.Count(kv =>
+            string.Equals(kv.Value.Status, "success", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(kv.Value.Payload)
+            && kv.Value.Payload.Trim() != "[]");
+    }
+
+    private static int CountMissingJournalDates(DateTime current, DateTime floorDate, Dictionary<string, FrontierJournalRawEntry> raw)
+    {
+        var n = 0;
+        for (var d = current.Date; d >= floorDate.Date; d = d.AddDays(-1))
+        {
+            var ds = d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            if (!raw.TryGetValue(ds, out var ex))
+            {
+                n++;
+                continue;
+            }
+            var done = string.Equals(ex.Status, "success", StringComparison.OrdinalIgnoreCase)
+                       || string.Equals(ex.Status, "empty", StringComparison.OrdinalIgnoreCase);
+            if (!done) n++;
+        }
+        return n;
+    }
+
+    private async Task RunBackfillAsync(
+        string accessToken,
+        string journalDir,
+        int? recentDaysForNewStart,
+        CancellationToken ct,
+        Action<string>? progressReporter)
     {
         try
         {
-            Directory.CreateDirectory(DataDir);
-            var progress = LoadProgress();
+            var progress = LoadProgress(journalDir);
             DateTime current;
             string startDateStr;
 
@@ -177,11 +135,7 @@ public class FrontierJournalBackfillService
             {
                 current = DateTime.Parse(progress!.CurrentDate!, CultureInfo.InvariantCulture).Date;
                 startDateStr = progress.StartDate!;
-                progress.TotalDaysProcessed = progress.TotalDaysProcessed;
-                progress.SuccessCount = progress.SuccessCount;
-                progress.EmptyCount = progress.EmptyCount;
-                progress.ErrorCount = progress.ErrorCount;
-                AppendLog("resume", current.ToString("yyyy-MM-dd"), $"Reprise depuis {current:yyyy-MM-dd}");
+                AppendLog(journalDir, "resume", current.ToString("yyyy-MM-dd"), $"Reprise depuis {current:yyyy-MM-dd}");
                 _log.LogInformation("[FrontierJournal] RESUME from={Date}", current.ToString("yyyy-MM-dd"));
             }
             else
@@ -208,12 +162,18 @@ public class FrontierJournalBackfillService
                 var hint = recentDaysForNewStart is >= 1 and <= 366
                     ? $" fenêtre={recentDaysForNewStart}j min={floorBoundary:yyyy-MM-dd}"
                     : "";
-                AppendLog("start", current.ToString("yyyy-MM-dd"), $"Démarrage backfill date={current:yyyy-MM-dd}{hint}");
+                AppendLog(journalDir, "start", current.ToString("yyyy-MM-dd"), $"Démarrage backfill date={current:yyyy-MM-dd}{hint}");
                 _log.LogInformation("[FrontierJournal] START date={Date}{Hint}", current.ToString("yyyy-MM-dd"), hint);
             }
 
             var floorDate = FloorFromProgress(progress);
-            var raw = LoadRaw();
+            var raw = LoadRaw(journalDir);
+
+            progressReporter?.Invoke("Journal Frontier : vérification des dates déjà présentes");
+            var missingUpFront = CountMissingJournalDates(current, floorDate, raw);
+            progressReporter?.Invoke(missingUpFront == 0
+                ? "Journal Frontier : aucune date manquante à télécharger"
+                : $"Journal Frontier : {missingUpFront} date(s) manquante(s) détectée(s)");
 
             while (current >= floorDate && !ct.IsCancellationRequested)
             {
@@ -224,42 +184,40 @@ public class FrontierJournalBackfillService
                 {
                     progress!.CurrentDate = dateStr;
                     progress.UpdatedAt = DateTime.UtcNow;
-                    _log.LogInformation("[FrontierJournal] SKIP date={Date} (déjà {Status})", dateStr, existing.Status);
+                    _log.LogDebug("[FrontierJournal] SKIP date={Date} (déjà {Status})", dateStr, existing.Status);
                     if (current <= floorDate)
                     {
                         progress.Completed = true;
-                        SaveProgress(progress);
+                        SaveProgress(journalDir, progress);
                         var finishMsg = $"FINISHED processed={progress.TotalDaysProcessed} success={progress.SuccessCount} empty={progress.EmptyCount} error={progress.ErrorCount}";
-                        AppendLog("finished", dateStr, finishMsg);
+                        AppendLog(journalDir, "finished", dateStr, finishMsg);
                         break;
                     }
-                    SaveProgress(progress);
+                    SaveProgress(journalDir, progress);
                     current = current.AddDays(-1);
                     continue;
                 }
 
+                progressReporter?.Invoke($"Journal Frontier : récupération de {dateStr}");
                 var (statusCode, body) = await FetchJournalDayAsync(accessToken, current.Year, current.Month, current.Day, ct);
                 var fetchedAt = DateTime.UtcNow;
                 int? entriesCount = null;
 
-                if (statusCode >= 200 && statusCode < 300)
+                if (statusCode is >= 200 and < 300 && !string.IsNullOrWhiteSpace(body))
                 {
-                    if (!string.IsNullOrWhiteSpace(body))
+                    try
                     {
-                        try
-                        {
-                            using var doc = JsonDocument.Parse(body);
-                            if (doc.RootElement.ValueKind == JsonValueKind.Array)
-                                entriesCount = doc.RootElement.GetArrayLength();
-                        }
-                        catch { /* ignore */ }
+                        using var doc = JsonDocument.Parse(body);
+                        if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                            entriesCount = doc.RootElement.GetArrayLength();
                     }
+                    catch { /* ignore */ }
                 }
 
                 string status;
                 string logType;
                 string logMessage;
-                if (statusCode >= 200 && statusCode < 300)
+                if (statusCode is >= 200 and < 300)
                 {
                     if (string.IsNullOrWhiteSpace(body) || body.Trim() == "[]")
                     {
@@ -300,19 +258,26 @@ public class FrontierJournalBackfillService
                 progress.CurrentDate = dateStr;
                 progress.UpdatedAt = fetchedAt;
 
-                AppendLog(logType, dateStr, logMessage, statusCode, body?.Length);
+                AppendLog(journalDir, logType, dateStr, logMessage, statusCode, body?.Length);
                 _log.LogInformation("[FrontierJournal] {Msg}", logMessage);
 
-                SaveRaw(raw);
-                SaveProgress(progress);
+                if (string.Equals(status, "success", StringComparison.OrdinalIgnoreCase))
+                    progressReporter?.Invoke($"Journal Frontier : {dateStr} — date récupérée");
+                else if (string.Equals(status, "empty", StringComparison.OrdinalIgnoreCase))
+                    progressReporter?.Invoke($"Journal Frontier : {dateStr} — jour sans entrée");
+                else
+                    progressReporter?.Invoke($"Journal Frontier : {dateStr} — échec de récupération");
+
+                SaveRawPrivate(journalDir, raw);
+                SaveProgress(journalDir, progress);
 
                 if (current <= floorDate)
                 {
                     progress.Completed = true;
                     progress.UpdatedAt = DateTime.UtcNow;
-                    SaveProgress(progress);
+                    SaveProgress(journalDir, progress);
                     var finishMsg = $"FINISHED processed={progress.TotalDaysProcessed} success={progress.SuccessCount} empty={progress.EmptyCount} error={progress.ErrorCount}";
-                    AppendLog("finished", dateStr, finishMsg);
+                    AppendLog(journalDir, "finished", dateStr, finishMsg);
                     _log.LogInformation("[FrontierJournal] {Msg}", finishMsg);
                     break;
                 }
@@ -323,134 +288,31 @@ public class FrontierJournalBackfillService
         }
         catch (OperationCanceledException)
         {
-            _log.LogInformation("[FrontierJournal] Backfill arrêté par l'utilisateur");
+            _log.LogInformation("[FrontierJournal] Backfill annulé");
+            throw;
         }
         catch (Exception ex)
         {
             _log.LogError(ex, "[FrontierJournal] Erreur fatale du backfill");
-            AppendLog("error", "?", $"Exception: {ex.Message}", 0, null);
-        }
-        finally
-        {
-            lock (_runLock)
-            {
-                _runTask = null;
-                _cts?.Dispose();
-                _cts = null;
-            }
+            throw;
         }
     }
 
-    private async Task RunRetryErrorsAsync(string accessToken, IReadOnlyList<string> datesToRetry, CancellationToken ct)
+    private void SaveRawPrivate(string journalDir, Dictionary<string, FrontierJournalRawEntry> raw)
     {
+        var path = Path.Combine(journalDir, RawFileName);
+        var tempPath = path + ".tmp";
         try
         {
-            Directory.CreateDirectory(DataDir);
-            var raw = LoadRaw();
-            var progress = LoadProgress();
-
-            var remaining = datesToRetry.Count;
-            AppendLog("retry_start", datesToRetry[0], $"[Retry] démarré — {remaining} erreur(s) 401 à retraiter");
-            _log.LogInformation("[FrontierJournal] RETRY démarré — {Count} dates à retraiter", remaining);
-
-            foreach (var dateStr in datesToRetry)
-            {
-                if (ct.IsCancellationRequested) break;
-
-                var parsed = DateTime.TryParse(dateStr, out var dt) ? dt : default;
-                var (statusCode, body) = await FetchJournalDayAsync(accessToken, parsed.Year, parsed.Month, parsed.Day, ct);
-                var fetchedAt = DateTime.UtcNow;
-                int? entriesCount = null;
-
-                if (statusCode == 401)
-                {
-                    AppendLog("retry_token_expired", dateStr, "Token expiré — backfill interrompu");
-                    _log.LogWarning("[FrontierJournal] Token expiré — backfill interrompu. Reconnectez-vous puis relancez le retry.");
-                    break;
-                }
-
-                if (statusCode >= 200 && statusCode < 300)
-                {
-                    if (!string.IsNullOrWhiteSpace(body))
-                    {
-                        try
-                        {
-                            using var doc = JsonDocument.Parse(body);
-                            if (doc.RootElement.ValueKind == JsonValueKind.Array)
-                                entriesCount = doc.RootElement.GetArrayLength();
-                        }
-                        catch { /* ignore */ }
-                    }
-                }
-
-                if (statusCode >= 200 && statusCode < 300)
-                {
-                    var status = string.IsNullOrWhiteSpace(body) || body.Trim() == "[]" ? "empty" : "success";
-                    var rawEntry = new FrontierJournalRawEntry
-                    {
-                        RequestedDate = dateStr,
-                        Status = status,
-                        Payload = body,
-                        FetchedAt = fetchedAt,
-                        PayloadSize = body?.Length ?? 0,
-                        HttpStatusCode = statusCode,
-                        EntriesCount = entriesCount,
-                    };
-                    raw[dateStr] = rawEntry;
-
-                    if (progress != null)
-                    {
-                        progress.ErrorCount = Math.Max(0, progress.ErrorCount - 1);
-                        if (status == "success")
-                            progress.SuccessCount++;
-                        else
-                            progress.EmptyCount++;
-                        progress.UpdatedAt = fetchedAt;
-                    }
-
-                    SaveRaw(raw);
-                    if (progress != null) SaveProgress(progress);
-
-                    AppendLog("retry_ok", dateStr, $"[Retry] date={dateStr} OK");
-                    _log.LogInformation("[FrontierJournal] [Retry] date={Date} OK", dateStr);
-                }
-                else
-                {
-                    AppendLog("retry_failed", dateStr, $"[Retry] date={dateStr} FAILED status={statusCode}");
-                    _log.LogWarning("[FrontierJournal] [Retry] date={Date} FAILED status={Status}", dateStr, statusCode);
-                }
-
-                remaining--;
-                AppendLog("retry_remaining", dateStr, $"[Retry] remaining={remaining}");
-                _log.LogInformation("[FrontierJournal] [Retry] remaining={Remaining}", remaining);
-
-                if (remaining > 0)
-                    await Task.Delay(PauseBetweenDays, ct);
-            }
-
-            var finishMsg = remaining == 0
-                ? "[Retry] terminé — toutes les erreurs 401 retraitées"
-                : $"[Retry] interrompu — {remaining} erreur(s) restante(s)";
-            AppendLog("retry_finished", "", finishMsg);
-            _log.LogInformation("[FrontierJournal] {Msg}", finishMsg);
-        }
-        catch (OperationCanceledException)
-        {
-            _log.LogInformation("[FrontierJournal] Retry arrêté");
+            var json = JsonSerializer.Serialize(raw, new JsonSerializerOptions { WriteIndented = false });
+            File.WriteAllText(tempPath, json);
+            File.Move(tempPath, path, overwrite: true);
         }
         catch (Exception ex)
         {
-            _log.LogError(ex, "[FrontierJournal] Erreur fatale du retry");
-            AppendLog("error", "?", $"Retry exception: {ex.Message}", 0, null);
-        }
-        finally
-        {
-            lock (_runLock)
-            {
-                _runTask = null;
-                _cts?.Dispose();
-                _cts = null;
-            }
+            _log.LogError(ex, "[FrontierJournal] Erreur écriture raw");
+            if (File.Exists(tempPath)) File.Delete(tempPath);
+            throw;
         }
     }
 
@@ -474,15 +336,15 @@ public class FrontierJournalBackfillService
         }
     }
 
-    private Dictionary<string, FrontierJournalRawEntry> LoadRaw()
+    public Dictionary<string, FrontierJournalRawEntry> LoadRaw(string journalDir)
     {
-        var path = Path.Combine(DataDir, RawFileName);
+        var path = Path.Combine(journalDir, RawFileName);
         if (!File.Exists(path)) return new Dictionary<string, FrontierJournalRawEntry>();
         try
         {
             var json = File.ReadAllText(path);
             return JsonSerializer.Deserialize<Dictionary<string, FrontierJournalRawEntry>>(json)
-                ?? new Dictionary<string, FrontierJournalRawEntry>();
+                   ?? new Dictionary<string, FrontierJournalRawEntry>();
         }
         catch (Exception ex)
         {
@@ -491,26 +353,16 @@ public class FrontierJournalBackfillService
         }
     }
 
-    private void SaveRaw(Dictionary<string, FrontierJournalRawEntry> raw)
+    /// <summary>Persistance du brut local (même format que le backfill). Utilisé par l’import fusion.</summary>
+    public void SaveRaw(string journalDir, Dictionary<string, FrontierJournalRawEntry> raw)
     {
-        var path = Path.Combine(DataDir, RawFileName);
-        var tempPath = path + ".tmp";
-        try
-        {
-            var json = JsonSerializer.Serialize(raw, new JsonSerializerOptions { WriteIndented = false });
-            File.WriteAllText(tempPath, json);
-            File.Move(tempPath, path, overwrite: true);
-        }
-        catch (Exception ex)
-        {
-            _log.LogError(ex, "[FrontierJournal] Erreur écriture raw");
-            if (File.Exists(tempPath)) File.Delete(tempPath);
-        }
+        ArgumentException.ThrowIfNullOrWhiteSpace(journalDir);
+        SaveRawPrivate(journalDir, raw ?? new Dictionary<string, FrontierJournalRawEntry>());
     }
 
-    private FrontierJournalProgress? LoadProgress()
+    public static FrontierJournalProgress? LoadProgressStatic(string journalDir)
     {
-        var path = Path.Combine(DataDir, ProgressFileName);
+        var path = Path.Combine(journalDir, ProgressFileName);
         if (!File.Exists(path)) return null;
         try
         {
@@ -523,9 +375,11 @@ public class FrontierJournalBackfillService
         }
     }
 
-    private void SaveProgress(FrontierJournalProgress progress)
+    private FrontierJournalProgress? LoadProgress(string journalDir) => LoadProgressStatic(journalDir);
+
+    private void SaveProgress(string journalDir, FrontierJournalProgress progress)
     {
-        var path = Path.Combine(DataDir, ProgressFileName);
+        var path = Path.Combine(journalDir, ProgressFileName);
         var tempPath = path + ".tmp";
         try
         {
@@ -540,9 +394,9 @@ public class FrontierJournalBackfillService
         }
     }
 
-    private void AppendLog(string type, string requestedDate, string message, int? httpStatusCode = null, int? payloadSize = null)
+    private void AppendLog(string journalDir, string type, string requestedDate, string message, int? httpStatusCode = null, int? payloadSize = null)
     {
-        var path = Path.Combine(DataDir, LogFileName);
+        var path = Path.Combine(journalDir, LogFileName);
         var entry = new FrontierJournalLogEntry
         {
             Timestamp = DateTime.UtcNow,
@@ -555,7 +409,7 @@ public class FrontierJournalBackfillService
         var line = JsonSerializer.Serialize(entry) + "\n";
         try
         {
-            Directory.CreateDirectory(DataDir);
+            Directory.CreateDirectory(journalDir);
             File.AppendAllText(path, line);
         }
         catch (Exception ex)
@@ -568,7 +422,7 @@ public class FrontierJournalBackfillService
 public class FrontierJournalRawEntry
 {
     public string RequestedDate { get; set; } = "";
-    public string Status { get; set; } = ""; // success | empty | error
+    public string Status { get; set; } = "";
     public string? Payload { get; set; }
     public DateTime FetchedAt { get; set; }
     public int PayloadSize { get; set; }
@@ -581,7 +435,6 @@ public class FrontierJournalProgress
     public string? CurrentDate { get; set; }
     public string? StartDate { get; set; }
     public string? MinDate { get; set; }
-    /// <summary>Première date UTC à inclure (fenêtre recentDays). Null = backfill complet jusqu’à la date plancher historique.</summary>
     public string? EffectiveMinDate { get; set; }
     public int TotalDaysProcessed { get; set; }
     public int SuccessCount { get; set; }
