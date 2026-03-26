@@ -7,84 +7,87 @@ namespace GuildDashboard.Server.Controllers;
 [Route("api/frontier/journal")]
 public class FrontierJournalController : ControllerBase
 {
-    private readonly FrontierJournalBackfillService _backfill;
+    private readonly FrontierJournalUnifiedSyncService _unified;
     private readonly FrontierJournalParseService _parse;
+    private readonly FrontierJournalImportExportService _importExport;
 
-    public FrontierJournalController(FrontierJournalBackfillService backfill, FrontierJournalParseService parse)
+    public FrontierJournalController(
+        FrontierJournalUnifiedSyncService unified,
+        FrontierJournalParseService parse,
+        FrontierJournalImportExportService importExport)
     {
-        _backfill = backfill;
+        _unified = unified;
         _parse = parse;
+        _importExport = importExport;
     }
 
-    /// <summary>POST /api/frontier/journal/backfill/start — démarre ou reprend le backfill journal. Query recentDays (1–366) = seulement ces derniers jours UTC depuis hier.</summary>
-    [HttpPost("backfill/start")]
-    public IActionResult StartBackfill([FromQuery] int? recentDays = null)
+    /// <summary>GET /api/frontier/journal/export — archive ZIP du journal local du CMDR connecté.</summary>
+    [HttpGet("export")]
+    public async Task<IActionResult> ExportJournal(CancellationToken ct)
     {
-        if (recentDays is < 1 or > 366)
-            return BadRequest(new { success = false, message = "recentDays doit être entre 1 et 366." });
+        var pack = await _importExport.ExportAsync(ct);
+        if (pack == null)
+            return BadRequest(new { message = "Aucun profil Frontier : impossible d’exporter le journal." });
+        return File(pack.Value.ZipBytes, "application/zip", pack.Value.DownloadFileName);
+    }
 
-        var started = _backfill.Start(recentDays);
+    /// <summary>
+    /// POST /api/frontier/journal/import — multipart : file, strategy=replace|merge, duplicatePolicy=skip|import (fusion seulement).
+    /// </summary>
+    [HttpPost("import")]
+    [RequestSizeLimit(512 * 1024 * 1024)]
+    public async Task<IActionResult> ImportJournal(
+        [FromForm] IFormFile? file,
+        [FromForm] string? strategy,
+        [FromForm] string? duplicatePolicy,
+        CancellationToken ct)
+    {
+        if (file == null || file.Length == 0)
+            return BadRequest(new FrontierJournalImportResultDto { Success = false, Message = "Fichier manquant." });
+        await using var stream = file.OpenReadStream();
+        var result = await _importExport.ImportAsync(stream, strategy ?? "replace", duplicatePolicy ?? "skip", ct);
+        if (!result.Success)
+            return BadRequest(result);
+        return Ok(result);
+    }
+
+    /// <summary>POST /api/frontier/journal/sync — fetch incrémental + parsing (une seule entrée métier).</summary>
+    [HttpPost("sync")]
+    public IActionResult StartSync()
+    {
+        var started = _unified.Start();
         if (!started)
-            return BadRequest(new { success = false, message = "Backfill déjà en cours ou token Frontier absent." });
-        var hint = recentDays is >= 1 and <= 366 ? $" Fenêtre {recentDays} jour(s)." : "";
-        return Ok(new { success = true, message = "Backfill démarré." + hint });
+            return BadRequest(new { success = false, message = "Synchronisation journal déjà en cours." });
+        return Ok(new { success = true, message = "Journal Frontier : synchronisation démarrée." });
     }
 
-    /// <summary>POST /api/frontier/journal/backfill/stop — arrête le backfill ou retry en cours.</summary>
-    [HttpPost("backfill/stop")]
-    public IActionResult StopBackfill()
+    [HttpPost("sync/stop")]
+    public IActionResult StopSync()
     {
-        var stopped = _backfill.Stop();
-        return Ok(new { success = stopped, message = stopped ? "Backfill arrêté." : "Aucun backfill en cours." });
+        var stopped = _unified.Stop();
+        return Ok(new { success = stopped, message = stopped ? "Journal Frontier : arrêt demandé." : "Aucune synchro en cours." });
     }
 
-    /// <summary>GET /api/frontier/journal/backfill/status — état du backfill.</summary>
-    [HttpGet("backfill/status")]
-    public IActionResult GetStatus()
-    {
-        var status = _backfill.GetStatus();
-        return Ok(status);
-    }
+    [HttpGet("sync/status")]
+    public IActionResult GetSyncStatus() => Ok(_unified.GetStatusSnapshot());
 
-    /// <summary>GET /api/frontier/journal/backfill/retry-errors — nombre d'erreurs 401 à retraiter.</summary>
-    [HttpGet("backfill/retry-errors")]
-    public IActionResult GetRetryErrorsCount()
-    {
-        var dates = _backfill.GetDatesToRetry();
-        return Ok(new { count = dates.Count, datesToRetry = dates });
-    }
-
-    /// <summary>POST /api/frontier/journal/backfill/retry-errors — lance le retry uniquement sur les erreurs 401.</summary>
-    [HttpPost("backfill/retry-errors")]
-    public IActionResult StartRetryErrors()
-    {
-        var started = _backfill.StartRetryErrors();
-        if (!started)
-            return BadRequest(new { success = false, message = "Retry impossible : déjà en cours, aucune erreur 401, ou token Frontier absent. Reconnectez-vous puis réessayez." });
-        return Ok(new { success = true, message = "Retry des erreurs 401 démarré." });
-    }
-
-    /// <summary>POST /api/frontier/journal/parse/incremental — parse un lot de jours (non bloquant côté client si lot court).</summary>
-    [HttpPost("parse/incremental")]
-    public IActionResult StartIncrementalParse([FromQuery] int batchSize = 40)
-    {
-        var started = _parse.StartIncrementalParse(batchSize);
-        if (!started)
-            return BadRequest(new { success = false, message = "Parsing déjà en cours." });
-        return Ok(new { success = true, message = "Parsing incrémental démarré." });
-    }
-
-    /// <summary>GET /api/frontier/journal/parse/status — état du parsing dérivé.</summary>
-    [HttpGet("parse/status")]
-    public IActionResult GetParseStatus()
-    {
-        return Ok(_parse.GetParseStatus());
-    }
-
-    /// <summary>GET /api/frontier/journal/derived/systems — agrégats par système pour la carte.</summary>
+    /// <summary>Agrégats carte pour le CMDR actuellement identifié (profil Frontier).</summary>
     [HttpGet("derived/systems")]
-    public IActionResult GetDerivedSystems()
+    public async Task<IActionResult> GetDerivedSystems([FromServices] FrontierUserService users, CancellationToken ct)
     {
-        return Ok(_parse.GetDerivedForMap());
+        var profile = await users.GetProfileAsync(ct);
+        if (profile == null || string.IsNullOrEmpty(profile.FrontierCustomerId))
+            return Ok(new FrontierJournalDerivedResponseDto());
+        return Ok(_parse.GetDerivedForMap(profile.FrontierCustomerId));
+    }
+
+    /// <summary>Statut détaillé du parsing (jours restants, systèmes) pour le CMDR courant.</summary>
+    [HttpGet("parse/status")]
+    public async Task<IActionResult> GetParseStatus([FromServices] FrontierUserService users, CancellationToken ct)
+    {
+        var profile = await users.GetProfileAsync(ct);
+        if (profile == null || string.IsNullOrEmpty(profile.FrontierCustomerId))
+            return Ok(new FrontierJournalParseStatusDto());
+        return Ok(_parse.GetParseStatus(profile.FrontierCustomerId));
     }
 }

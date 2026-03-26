@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, inject, signal, computed, effect, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, computed, effect, ViewChild, ElementRef } from '@angular/core';
 import { TruncateTooltipDirective } from '../../shared/directives/truncate-tooltip.directive';
 import { SettingsModalComponent } from '../../shared/components/settings-modal/settings-modal.component';
 import { SyncHelpModalComponent } from '../../shared/components/sync-help-modal/sync-help-modal.component';
@@ -14,12 +14,11 @@ import { GuildSettingsService } from '../../core/services/guild-settings.service
 import { InaraSyncBridgeService } from '../../core/services/inara-sync-bridge.service';
 import { SyncHelpModalService } from '../../core/services/sync-help-modal.service';
 import { FrontierJournalApiService } from '../../core/services/frontier-journal-api.service';
-import { EdsmJournalApiService } from '../../core/services/edsm-journal-api.service';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
 import type { SystemsFilterValue } from '../../core/models/guild-systems.model';
 import type {
-  FrontierJournalBackfillStatusDto,
+  FrontierJournalUnifiedSyncStatusDto,
   FrontierJournalParseStatusDto,
   FrontierJournalSystemDerivedDto,
 } from '../../core/services/frontier-journal-api.service';
@@ -251,7 +250,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             <div class="sync-logs-container">
               @if (mapViewMode() === 'cmdr') {
                 <p class="sync-status-cmdr-hint">
-                  Vue Faction : calques sur les systèmes guilde (coords EDSM). Vue Cmdr : tous les points journal avec StarPos.
+                  Carte : uniquement les positions StarPos du journal CAPI (raw). Vue Faction colore selon la guilde si le nom correspond ; vue Cmdr : calques visité / découvert / full scan.
                 </p>
               }
               <div class="sync-logs">
@@ -310,58 +309,54 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
               }
             </div>
             <div class="frontier-cmdr-journal-sync">
-              <div class="journal-sync-row">
-                <button type="button" class="btn-journal-sync"
-                  [disabled]="journalBackfillRunning()"
-                  (click)="onSyncJournalClick()">
-                  @if (journalBackfillRunning()) {
-                    <span class="btn-journal-sync-text">Sync journal en cours...</span>
-                    <span class="btn-journal-sync-status">{{ journalBackfillStatus()?.totalDaysProcessed ?? 0 }} jours</span>
-                  } @else {
-                    <span class="btn-journal-sync-text">Sync journal (4 derniers jours)</span>
-                    @if (journalBackfillStatus(); as st) {
-                      @if (st.totalDaysProcessed > 0) {
-                        <span class="btn-journal-sync-status">
-                          {{ st.totalDaysProcessed }} jours · {{ st.completed ? 'terminé' : 'en pause' }}
-                        </span>
-                      }
-                    }
+              @if (journalFrontierStatusLines(); as lines) {
+                <div class="journal-cmdr-status" role="status">
+                  @for (line of lines; track line) {
+                    <div class="journal-cmdr-status-line">{{ line }}</div>
                   }
-                </button>
-                @if (journalBackfillRunning()) {
-                  <button type="button" class="btn-journal-stop-icon"
-                    [disabled]="journalStopRequested()"
-                    [attr.aria-label]="'Arrêter le backfill'"
-                    (click)="onStopJournalClick()">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      <rect x="6" y="6" width="12" height="12" rx="1"/>
-                    </svg>
-                    <span class="btn-journal-stop-text">Stop</span>
-                  </button>
-                }
-              </div>
-              @if (journalRetryCount() > 0 && !journalBackfillRunning()) {
-                <button type="button" class="btn-journal-retry"
-                  (click)="onRetryErrorsClick()">
-                  <span class="btn-journal-retry-text">Retry {{ journalRetryCount() }} erreur(s) 401</span>
-                </button>
+                </div>
               }
-              <button type="button" class="btn-journal-parse"
-                [disabled]="journalParseRunning()"
-                (click)="onParseJournalClick()">
-                <span class="btn-journal-parse-text">{{ journalParseRunning() ? 'Parsing…' : 'Parser journal → carte' }}</span>
-                @if (journalParseStatus(); as ps) {
-                  <span class="btn-journal-parse-meta">{{ ps.systemsCount }} syst. · {{ ps.pendingDaysEstimate }} j. restants</span>
-                }
-              </button>
-              <button type="button" class="btn-journal-edsm-test"
-                [disabled]="edsmJournalTestRunning()"
-                (click)="onEdsmJournalTestClick()"
-                title="Envoie un FSDJump/Location du raw local vers EDSM. Identifiants : Paramètres → section EDSM (ou appsettings).">
-                <span class="btn-journal-edsm-test-text">
-                  {{ edsmJournalTestRunning() ? 'EDSM…' : 'Test EDSM (1 ligne)' }}
+              <div class="journal-sync-actions">
+              <button type="button" class="btn-journal-sync btn-journal-sync--single"
+                [disabled]="journalUnifiedRunning()"
+                (click)="onSyncJournalClick()">
+                <span class="btn-journal-sync-text">
+                  {{ journalUnifiedRunning() ? (journalUnifiedStatus()?.lastMessage ?? 'Journal Frontier…') : 'Synchronisation du journal' }}
                 </span>
               </button>
+              <div class="journal-backup-dropdown">
+                @if (journalBackupMenuOpen()) {
+                  <div class="journal-backup-backdrop" (click)="journalBackupMenuOpen.set(false)"></div>
+                }
+                <button type="button"
+                  class="btn-journal-more"
+                  title="Sauvegarde du journal"
+                  [disabled]="journalUnifiedRunning()"
+                  (click)="journalBackupMenuOpen.update((o) => !o)">
+                  <span class="btn-journal-more-icon" aria-hidden="true">⋮</span>
+                </button>
+                @if (journalBackupMenuOpen()) {
+                  <div class="journal-backup-menu" role="menu">
+                    <button type="button" class="journal-backup-item" role="menuitem"
+                      (click)="onJournalExportClick(); journalBackupMenuOpen.set(false)">Exporter le journal</button>
+                    <button type="button" class="journal-backup-item" role="menuitem"
+                      (click)="triggerJournalImportReplace(); journalBackupMenuOpen.set(false)">Importer (remplacer)</button>
+                    <button type="button" class="journal-backup-item" role="menuitem"
+                      (click)="triggerJournalImportMergeSkip(); journalBackupMenuOpen.set(false)">Importer (fusionner — garder les doublons locaux)</button>
+                    <button type="button" class="journal-backup-item" role="menuitem"
+                      (click)="triggerJournalImportMergePreferBackup(); journalBackupMenuOpen.set(false)">Importer (fusionner — priorité sauvegarde)</button>
+                  </div>
+                }
+              </div>
+              </div>
+              <input #journalImportInput type="file" accept=".zip,application/zip" class="journal-import-file-input"
+                (change)="onJournalImportFileSelected($event)" />
+              @if (journalUnifiedStatus()?.phase === 'error' && journalUnifiedStatus()?.frontierSessionUxAction) {
+                <button type="button" class="btn-journal-connect-frontier"
+                  (click)="onConnectFrontierForJournal()">
+                  {{ journalUnifiedStatus()?.frontierSessionUxAction === 'relogin' ? 'Reconnecter Frontier' : 'Connecter Frontier' }}
+                </button>
+              }
             </div>
             </div>
             </div>
@@ -1276,78 +1271,24 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .box-frontier-cmdr {
       display: flex;
       flex-direction: column;
+      min-height: 0;
       padding-bottom: 16px;
     }
     .frontier-cmdr-layout {
+      flex: 1;
       display: flex;
       flex-direction: row;
-      align-items: flex-start;
+      align-items: stretch;
       gap: 0.5rem;
       width: 100%;
+      min-height: 0;
     }
     .frontier-cmdr-main {
       flex: 1;
       min-width: 0;
+      min-height: 0;
       display: flex;
       flex-direction: column;
-    }
-    .btn-journal-parse {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 0.15rem;
-      width: 100%;
-      margin-top: 0.35rem;
-      padding: 0.3rem 0.5rem;
-      font-size: 0.58rem;
-      font-family: 'Orbitron', sans-serif;
-      background: rgba(0, 255, 136, 0.08);
-      border: 1px solid rgba(0, 255, 136, 0.25);
-      color: #00ff88;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .btn-journal-parse:hover:not(:disabled) {
-      background: rgba(0, 255, 136, 0.15);
-    }
-    .btn-journal-parse:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    .btn-journal-parse-text {
-      font-weight: 600;
-    }
-    .btn-journal-edsm-test {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      margin-top: 0.4rem;
-      padding: 0.35rem 0.65rem;
-      border: 1px solid rgba(0, 255, 200, 0.35);
-      border-radius: 6px;
-      background: rgba(0, 255, 200, 0.08);
-      color: rgba(0, 255, 200, 0.95);
-      font-family: 'Exo 2', sans-serif;
-      font-size: 0.7rem;
-      cursor: pointer;
-      width: 100%;
-      box-sizing: border-box;
-    }
-    .btn-journal-edsm-test:hover:not(:disabled) {
-      background: rgba(0, 255, 200, 0.14);
-      border-color: rgba(0, 255, 200, 0.55);
-    }
-    .btn-journal-edsm-test:disabled {
-      opacity: 0.55;
-      cursor: not-allowed;
-    }
-    .btn-journal-edsm-test-text {
-      font-weight: 600;
-    }
-    .btn-journal-parse-meta {
-      font-size: 0.5rem;
-      color: rgba(255, 255, 255, 0.55);
     }
     .frontier-cmdr-header {
       display: flex;
@@ -1421,16 +1362,17 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       flex-direction: column;
       gap: 0.5rem;
     }
-    .journal-sync-row {
+    .journal-cmdr-status {
       display: flex;
-      flex-direction: row;
-      align-items: stretch;
-      gap: 0.5rem;
-      width: 100%;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-size: 0.62rem;
+      font-family: 'Exo 2', sans-serif;
+      color: rgba(255, 255, 255, 0.72);
+      line-height: 1.35;
     }
-    .journal-sync-row .btn-journal-sync {
-      flex: 1;
-      min-width: 0;
+    .journal-cmdr-status-line {
+      word-break: break-word;
     }
     .btn-journal-sync {
       display: flex;
@@ -1464,45 +1406,114 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       font-size: 0.6rem;
       color: rgba(255, 255, 255, 0.7);
     }
-    .btn-journal-retry {
+    .btn-journal-sync--single {
+      flex-direction: row;
+      min-height: 2.35rem;
+      flex: 1;
+      min-width: 0;
+    }
+    .journal-sync-actions {
+      display: flex;
+      align-items: stretch;
+      gap: 0.35rem;
       width: 100%;
-      padding: 0.3rem 0.6rem;
-      font-size: 0.6rem;
+    }
+    .journal-backup-dropdown {
+      position: relative;
+      flex-shrink: 0;
+    }
+    .journal-backup-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 9996;
+    }
+    .btn-journal-more {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 2.35rem;
+      min-height: 2.35rem;
+      padding: 0;
+      font-size: 1.1rem;
+      line-height: 1;
+      color: #00d4ff;
+      background: rgba(0, 212, 255, 0.1);
+      border: 1px solid rgba(0, 212, 255, 0.35);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn-journal-more:hover:not(:disabled) {
+      background: rgba(0, 212, 255, 0.22);
+      border-color: rgba(0, 212, 255, 0.55);
+    }
+    .btn-journal-more:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .btn-journal-more-icon {
+      display: block;
+      transform: translateY(-1px);
+      font-weight: 700;
+    }
+    .journal-backup-menu {
+      position: absolute;
+      right: 0;
+      bottom: 100%;
+      margin-bottom: 0.28rem;
+      z-index: 9997;
+      min-width: 220px;
+      padding: 0.35rem;
+      background: rgba(6, 20, 35, 0.98);
+      border: 1px solid rgba(0, 212, 255, 0.38);
+      border-radius: 8px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .journal-backup-item {
+      padding: 0.4rem 0.55rem;
+      font-size: 0.58rem;
+      font-family: 'Exo 2', sans-serif;
+      line-height: 1.35;
+      text-align: left;
+      color: rgba(255, 255, 255, 0.92);
+      background: rgba(0, 212, 255, 0.08);
+      border: 1px solid rgba(0, 212, 255, 0.2);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .journal-backup-item:hover {
+      background: rgba(0, 212, 255, 0.18);
+      color: #00eaff;
+    }
+    .journal-import-file-input {
+      position: absolute;
+      width: 0;
+      height: 0;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .btn-journal-connect-frontier {
+      width: 100%;
+      margin-top: 0.35rem;
+      padding: 0.4rem 0.65rem;
+      font-size: 0.62rem;
       font-family: 'Orbitron', sans-serif;
-      background: rgba(255, 180, 100, 0.12);
-      border: 1px solid rgba(255, 180, 100, 0.35);
-      color: #ffb464;
+      font-weight: 600;
+      background: rgba(255, 140, 0, 0.18);
+      border: 1px solid rgba(255, 140, 0, 0.45);
+      color: #ffb347;
       border-radius: 4px;
       cursor: pointer;
       text-align: center;
-      transition: background 0.15s;
+      transition: background 0.15s, border-color 0.15s;
     }
-    .btn-journal-retry:hover {
-      background: rgba(255, 180, 100, 0.22);
-    }
-    .btn-journal-stop-icon {
-      display: flex;
-      flex-direction: row;
-      align-items: center;
-      justify-content: center;
-      gap: 0.35rem;
-      padding: 0.35rem 0.6rem;
-      font-size: 0.6rem;
-      font-family: 'Orbitron', sans-serif;
-      font-weight: 500;
-      background: #e53935;
-      border: 1px solid rgba(229, 57, 53, 0.8);
-      color: #fff;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background 0.15s, opacity 0.15s;
-    }
-    .btn-journal-stop-icon:hover:not(:disabled) {
-      background: #c62828;
-    }
-    .btn-journal-stop-icon:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
+    .btn-journal-connect-frontier:hover {
+      background: rgba(255, 140, 0, 0.28);
+      border-color: rgba(255, 180, 100, 0.65);
     }
     .box-cmdrs-header {
       display: flex;
@@ -1713,6 +1724,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
 })
 export class DashboardComponent implements OnInit, OnDestroy {
   @ViewChild('settingsModal') settingsModal!: SettingsModalComponent;
+  @ViewChild('journalImportInput') journalImportInput?: ElementRef<HTMLInputElement>;
 
   private readonly dashboardApi = inject(DashboardApiService);
   private readonly commandersApi = inject(CommandersApiService);
@@ -1721,15 +1733,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly syncHelpModal = inject(SyncHelpModalService);
   protected readonly frontierAuth = inject(FrontierAuthService);
   private readonly frontierJournalApi = inject(FrontierJournalApiService);
-  private readonly edsmJournalApi = inject(EdsmJournalApiService);
   protected readonly frontierMenuOpen = signal(false);
-  protected readonly journalBackfillRunning = signal(false);
-  protected readonly journalBackfillStatus = signal<FrontierJournalBackfillStatusDto | null>(null);
-  protected readonly journalRetryCount = signal(0);
-  /** Progression en temps réel pour l'état de synchronisation. */
+  /** Ligne affichée dans la zone logs sync pendant une synchro journal Frontier. */
   protected readonly journalBackfillProgress = signal<string | null>(null);
-  /** True pendant l'appel STOP (bouton désactivé, message "Arrêt demandé..."). */
-  protected readonly journalStopRequested = signal(false);
+  protected readonly journalUnifiedStatus = signal<FrontierJournalUnifiedSyncStatusDto | null>(null);
+  protected readonly journalUnifiedRunning = computed(() => this.journalUnifiedStatus()?.isRunning === true);
   /** Calques carte 3D (journal CMDR). */
   protected readonly journalMapLayerVisited = signal(false);
   protected readonly journalMapLayerDiscovered = signal(false);
@@ -1758,11 +1766,41 @@ export class DashboardComponent implements OnInit, OnDestroy {
   );
   /** faction = carte guilde + filtres BGS ; cmdr = points journal avec coords. */
   protected readonly mapViewMode = signal<'faction' | 'cmdr'>('faction');
-  protected readonly journalParseRunning = signal(false);
   protected readonly journalParseStatus = signal<FrontierJournalParseStatusDto | null>(null);
-  protected readonly edsmJournalTestRunning = signal(false);
-  private journalParsePollingRef: ReturnType<typeof setInterval> | null = null;
+  protected readonly journalFrontierStatusLines = computed((): string[] | null => {
+    const u = this.journalUnifiedStatus();
+    const ps = this.journalParseStatus();
+    if (!u && !ps) return null;
+    const lines: string[] = [];
+    const lastUtc = u?.lastSyncCompletedUtc;
+    if (lastUtc) lines.push(`Dernière synchro journal : ${this.formatJournalIsoUtc(lastUtc)}`);
+    if (u?.isRunning && u.lastMessage) {
+      lines.push(u.lastMessage);
+      return lines;
+    }
+    if (u?.phase === 'error') {
+      if (u.lastMessage) lines.push(u.lastMessage);
+      else if (u.lastError) lines.push(`Journal Frontier : erreur — ${u.lastError}`);
+      return lines;
+    }
+    const pending = u?.pendingParseDays ?? ps?.pendingDaysEstimate ?? 0;
+    if (pending > 0) {
+      lines.push(`Journal Frontier : ~${pending} jour(s) encore à parser`);
+    } else if ((ps?.systemsCount ?? 0) > 0 || (u?.fetchedSuccessDaysApprox ?? 0) > 0) {
+      const coords = ps?.systemsWithCoordsCount ?? u?.systemsWithCoordsCount ?? 0;
+      lines.push(`Journal Frontier : à jour — ${ps?.systemsCount ?? 0} syst., ${coords} sur la carte`);
+    } else {
+      lines.push('Journal Frontier : prêt — lancez une synchro pour télécharger l’historique');
+    }
+    return lines.length ? lines : null;
+  });
   protected readonly cmdrsMenuOpen = signal(false);
+  protected readonly journalBackupMenuOpen = signal(false);
+  /** Importer : 'replace' | merge + duplicatePolicy */
+  private readonly journalImportPending = signal<{
+    strategy: 'replace' | 'merge';
+    duplicatePolicy: 'skip' | 'import';
+  } | null>(null);
   protected readonly syncStatusMenuOpen = signal(false);
   protected readonly headerAvatarError = signal(false);
   protected readonly boxAvatarError = signal(false);
@@ -1774,6 +1812,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly AVATAR_DEFAULT_FALLBACK_URL = AVATAR_DEFAULT_FALLBACK_URL;
   protected readonly guildSystemsSync = inject(GuildSystemsSyncService);
   private readonly guildSystemsApi = inject(GuildSystemsApiService);
+  private journalUnifiedPollingRef: ReturnType<typeof setInterval> | null = null;
+  private journalUnifiedExpectComplete = false;
+  /** Évite les doublons dans les logs pour le même libellé de progression. */
+  private journalUnifiedLastLoggedMessage: string | null = null;
 
   /** Progression EDSM en direct pendant un import (ex: "EDSM : requêtes unitaires (47/173)"). */
   protected systemsImportProgress = signal<string | null>(null);
@@ -1788,14 +1830,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
       if (url) {
         this.headerAvatarError.set(false);
         this.boxAvatarError.set(false);
-      }
-    });
-    effect(() => {
-      const running = this.journalBackfillRunning();
-      const stopReq = this.journalStopRequested();
-      if (typeof console !== 'undefined' && console.log) {
-        console.log('[UI] backfill running =', running);
-        console.log('[UI] stop requested =', stopReq);
       }
     });
   }
@@ -1975,6 +2009,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
   }
 
+  /** Affiche une date UTC ISO en heure locale (bloc CMDR — dernière synchro journal). */
+  protected formatJournalIsoUtc(iso: string): string {
+    return this.formatSyncDate(new Date(iso));
+  }
+
   /** Texte des logs avec récap Inara en tête. */
   protected syncLogsWithRecap = computed(() => {
     const systems = this.lastSystemsSyncError() ?? (this.guildSettings.lastSystemsImportAt() ? this.formatLastSync(this.guildSettings.lastSystemsImportAt()!) : '—');
@@ -2108,152 +2147,145 @@ export class DashboardComponent implements OnInit, OnDestroy {
     window.open('/assets/scripts/inara-sync.user.js', '_blank', 'noopener,noreferrer');
   }
 
+  /** Depuis le bloc journal : ouvre le flux OAuth Frontier (même que le menu). */
+  protected onConnectFrontierForJournal(): void {
+    this.addLog('Connexion Frontier — suivez la fenêtre ou l’onglet pour autoriser l’accès.');
+    this.frontierAuth.login();
+  }
+
   protected onSyncJournalClick(): void {
-    if (this.journalBackfillRunning()) return;
-    this.frontierJournalApi.startBackfill(4).subscribe({
+    if (this.journalUnifiedRunning()) return;
+    this.frontierJournalApi.startUnifiedSync().subscribe({
       next: (res) => {
         this.addLog(res.message);
-        this.journalBackfillRunning.set(true);
-        this.startJournalStatusPolling();
+        this.startJournalUnifiedPolling(res.message);
       },
       error: (err) => {
         const msg = err?.error?.message ?? err?.message ?? 'Erreur démarrage sync journal';
         this.addLog(msg);
+        if (err?.status === 400) this.startJournalUnifiedPolling();
       },
     });
   }
 
-  protected onRetryErrorsClick(): void {
-    if (this.journalBackfillRunning()) return;
-    this.frontierJournalApi.startRetryErrors().subscribe({
-      next: (res) => {
-        this.addLog(res.message);
-        this.journalBackfillRunning.set(true);
-        this.startJournalStatusPolling();
+  protected onJournalExportClick(): void {
+    this.frontierJournalApi.exportJournalBlob().subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `frontier-journal-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.addLog('Journal Frontier : export ZIP téléchargé.');
       },
       error: (err) => {
-        const msg = err?.error?.message ?? err?.message ?? 'Erreur retry';
-        this.addLog(msg);
+        const msg = err?.error?.message ?? err?.message ?? 'Export impossible';
+        this.addLog(`Journal Frontier — export : ${msg}`);
       },
     });
   }
 
-  protected onStopJournalClick(): void {
-    if (this.journalStopRequested()) return;
-    this.journalStopRequested.set(true);
-    this.stopJournalStatusPolling();
-    this.journalBackfillProgress.set('Arrêt du backfill demandé...');
-    if (typeof console !== 'undefined' && console.log) {
-      console.log('[Backfill] STOP demandé par utilisateur');
-      console.log('[UI] stop requested =', true);
-    }
-    this.frontierJournalApi.stopBackfill().subscribe({
+  protected triggerJournalImportReplace(): void {
+    this.journalImportPending.set({ strategy: 'replace', duplicatePolicy: 'skip' });
+    queueMicrotask(() => this.journalImportInput?.nativeElement?.click());
+  }
+
+  protected triggerJournalImportMergeSkip(): void {
+    this.journalImportPending.set({ strategy: 'merge', duplicatePolicy: 'skip' });
+    queueMicrotask(() => this.journalImportInput?.nativeElement?.click());
+  }
+
+  protected triggerJournalImportMergePreferBackup(): void {
+    this.journalImportPending.set({ strategy: 'merge', duplicatePolicy: 'import' });
+    queueMicrotask(() => this.journalImportInput?.nativeElement?.click());
+  }
+
+  protected onJournalImportFileSelected(ev: Event): void {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    const pending = this.journalImportPending();
+    this.journalImportPending.set(null);
+    if (!file || !pending) return;
+
+    this.frontierJournalApi.importJournal(file, pending.strategy, pending.duplicatePolicy).subscribe({
       next: (res) => {
-        this.addLog(res.message);
-        this.journalStopRequested.set(false);
-        this.journalBackfillProgress.set(null);
-        this.journalBackfillRunning.set(false);
-        if (typeof console !== 'undefined' && console.log) {
-          console.log('[UI] status refresh after stop =', 'applying optimistic stop');
-        }
-        this.frontierJournalApi.getStatus().subscribe(st => {
-          this.journalBackfillStatus.set(st);
-          this.journalBackfillRunning.set(false);
-          if (typeof console !== 'undefined' && console.log) {
-            console.log('[UI] status refresh after stop =', { backendIsRunning: st.isRunning, totalDays: st.totalDaysProcessed, forcedRunningFalse: true });
-            console.log('[Backfill] Arrêt propre effectué à date=' + (st.currentDate ?? new Date().toISOString().slice(0, 10)));
-          }
-        });
+        if (res.message) this.addLog(`Journal Frontier — import : ${res.message}`);
+        this.refreshJournalParseAndDerived();
       },
       error: (err) => {
-        this.journalStopRequested.set(false);
-        this.journalBackfillProgress.set(null);
-        this.addLog('Impossible d\'arrêter le backfill');
-        if (typeof console !== 'undefined') {
-          console.error('[Backfill] Erreur STOP', err);
-          console.log('[UI] stop requested =', false, '(after error)');
-        }
-        this.frontierJournalApi.getStatus().subscribe(st => {
-          this.journalBackfillStatus.set(st);
-          this.journalBackfillRunning.set(st.isRunning);
-          if (typeof console !== 'undefined' && console.log) {
-            console.log('[UI] status refresh after stop (error path) =', { isRunning: st.isRunning });
-          }
-        });
+        const body = err?.error;
+        const msg =
+          typeof body?.message === 'string'
+            ? body.message
+            : typeof body === 'string'
+              ? body
+              : err?.message ?? 'Import échoué';
+        this.addLog(`Journal Frontier — import : ${msg}`);
       },
     });
   }
 
-  private journalStatusPollingRef: ReturnType<typeof setInterval> | null = null;
-
-  private startJournalStatusPolling(): void {
-    this.stopJournalStatusPolling();
-    const poll = () => {
-      this.frontierJournalApi.getStatus().subscribe({
+  private startJournalUnifiedPolling(alreadyLoggedStarter?: string | null): void {
+    this.stopJournalUnifiedPolling();
+    this.journalUnifiedExpectComplete = true;
+    this.journalUnifiedLastLoggedMessage = alreadyLoggedStarter ?? null;
+    const tick = () => {
+      this.frontierJournalApi.getUnifiedSyncStatus().subscribe({
         next: (st) => {
-          this.journalBackfillStatus.set(st);
+          this.journalUnifiedStatus.set(st);
           if (st.isRunning) {
-            const prog = `Journal Frontier : ${st.totalDaysProcessed} jour${st.totalDaysProcessed > 1 ? 's' : ''} · ${st.currentDate ?? '?'} · en cours`;
-            this.journalBackfillProgress.set(prog);
-          } else {
-            this.journalBackfillProgress.set(null);
-            if (st.completed && st.totalDaysProcessed > 0) {
-              this.addLog(`Journal Frontier : backfill terminé — ${st.totalDaysProcessed} jour${st.totalDaysProcessed > 1 ? 's' : ''} (${st.successCount} ok, ${st.emptyCount} vides, ${st.errorCount} erreurs)`);
+            if (st.lastMessage && st.lastMessage !== this.journalUnifiedLastLoggedMessage) {
+              this.journalUnifiedLastLoggedMessage = st.lastMessage;
+              this.addLog(st.lastMessage);
             }
+            if (st.lastMessage) this.journalBackfillProgress.set(st.lastMessage);
+            return;
           }
-          if (!st.isRunning) {
-            this.journalBackfillRunning.set(false);
-            this.stopJournalStatusPolling();
-            if (st.errorCount > 0) {
-              this.frontierJournalApi.getRetryErrorsCount().subscribe({
-                next: (r) => this.journalRetryCount.set(r.count),
-              });
+          this.journalBackfillProgress.set(null);
+          if (this.journalUnifiedExpectComplete) {
+            this.journalUnifiedExpectComplete = false;
+            this.stopJournalUnifiedPolling();
+            this.journalUnifiedLastLoggedMessage = null;
+            if (st.lastError) {
+              this.addLog(`Journal Frontier : erreur — ${st.lastError}`);
             } else {
-              this.journalRetryCount.set(0);
+              if (st.lastMessage) this.addLog(st.lastMessage);
+              const sm = st.summaryMessage as string | null | undefined;
+              if (sm) this.addLog(sm);
             }
+            this.refreshJournalParseAndDerived();
           }
         },
       });
     };
-    poll();
-    this.journalStatusPollingRef = setInterval(poll, 3000);
+    tick();
+    this.journalUnifiedPollingRef = setInterval(tick, 2000);
   }
 
-  private stopJournalStatusPolling(): void {
-    if (this.journalStatusPollingRef) {
-      clearInterval(this.journalStatusPollingRef);
-      this.journalStatusPollingRef = null;
+  private stopJournalUnifiedPolling(): void {
+    if (this.journalUnifiedPollingRef != null) {
+      clearInterval(this.journalUnifiedPollingRef);
+      this.journalUnifiedPollingRef = null;
     }
-    this.journalBackfillProgress.set(null);
   }
 
-    private fetchJournalStatus(): void {
-    this.frontierJournalApi.getStatus().subscribe({
+  private loadJournalUnifiedStatus(): void {
+    this.frontierJournalApi.getUnifiedSyncStatus().subscribe({
       next: (st) => {
-        this.journalBackfillStatus.set(st);
-        this.journalBackfillRunning.set(st.isRunning);
+        this.journalUnifiedStatus.set(st);
         if (st.isRunning) {
-          this.journalBackfillProgress.set(`Journal Frontier : ${st.totalDaysProcessed} jour${st.totalDaysProcessed > 1 ? 's' : ''} · ${st.currentDate ?? '?'} · en cours`);
-          this.startJournalStatusPolling();
-        } else {
-          this.journalBackfillProgress.set(null);
+          if (st.lastMessage) this.journalBackfillProgress.set(st.lastMessage);
+          this.startJournalUnifiedPolling();
         }
       },
-    });
-    this.frontierJournalApi.getRetryErrorsCount().subscribe({
-      next: (r) => this.journalRetryCount.set(r.count),
     });
   }
 
   private refreshJournalParseAndDerived(): void {
     this.frontierJournalApi.getParseStatus().subscribe({
-      next: (st) => {
-        this.journalParseStatus.set(st);
-        if (st.isRunning) {
-          this.journalParseRunning.set(true);
-          this.startJournalParsePolling();
-        }
-      },
+      next: (st) => this.journalParseStatus.set(st),
     });
     this.loadJournalDerived();
   }
@@ -2278,86 +2310,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  protected onEdsmJournalTestClick(): void {
-    this.edsmJournalTestRunning.set(true);
-    this.edsmJournalApi.testUpload({}).subscribe({
-      next: (r) => {
-        this.edsmJournalTestRunning.set(false);
-        if (r.error && r.msgNum == null && r.httpStatus == null) {
-          this.addLog(`EDSM test : ${r.error}`);
-          return;
-        }
-        const code = r.msgNum != null ? ` msgnum=${r.msgNum}` : '';
-        const sys = r.starSystem ? ` · ${r.starSystem}` : '';
-        this.addLog(
-          r.success
-            ? `EDSM test OK${code} — ${r.msg ?? 'OK'}${sys}${r.detail ? ` (${r.detail})` : ''}`
-            : `EDSM test : HTTP ${r.httpStatus ?? '?'}${code} — ${r.msg ?? r.error ?? 'erreur'}${sys}`,
-        );
-      },
-      error: (err) => {
-        this.edsmJournalTestRunning.set(false);
-        const b = err?.error;
-        if (b && typeof b === 'object' && typeof (b as { error?: string }).error === 'string') {
-          this.addLog(`EDSM test : ${(b as { error: string }).error}`);
-          return;
-        }
-        const msg = b?.message ?? err?.message ?? 'Erreur réseau';
-        this.addLog(`EDSM test : ${msg}`);
-      },
-    });
-  }
-
-  protected onParseJournalClick(): void {
-    this.frontierJournalApi.startIncrementalParse(40).subscribe({
-      next: () => {
-        this.addLog('Parsing journal incrémental démarré…');
-        this.journalParseRunning.set(true);
-        this.startJournalParsePolling();
-      },
-      error: (err) => {
-        const msg = err?.error?.message ?? err?.message ?? 'Erreur parsing journal';
-        this.addLog(msg);
-      },
-    });
-  }
-
-  private startJournalParsePolling(): void {
-    this.stopJournalParsePolling();
-    const poll = () => {
-      this.frontierJournalApi.getParseStatus().subscribe({
-        next: (st) => {
-          this.journalParseStatus.set(st);
-          if (!st.isRunning) {
-            this.journalParseRunning.set(false);
-            this.stopJournalParsePolling();
-            this.loadJournalDerived();
-            const d = st.parsedDaysCount;
-            this.addLog(
-              `Parsing journal : lot terminé — ${d} jour${d > 1 ? 's' : ''} parsé${d > 1 ? 's' : ''} au total (voir aussi le bouton Parser → carte).`,
-            );
-          }
-        },
-      });
-    };
-    poll();
-    this.journalParsePollingRef = setInterval(poll, 1500);
-  }
-
-  private stopJournalParsePolling(): void {
-    if (this.journalParsePollingRef) {
-      clearInterval(this.journalParsePollingRef);
-      this.journalParsePollingRef = null;
-    }
-  }
-
   ngOnInit(): void {
     this.addLog('Dashboard initialisé');
     this.addLog('Prêt — utilisez les boutons sync pour importer depuis Inara');
     this.guildSettings.load();
     this.inaraBridge.check();
     if (this.frontierAuth.isConnected()) {
-      this.fetchJournalStatus();
+      this.loadJournalUnifiedStatus();
     }
     this.refreshJournalParseAndDerived();
     if (typeof document !== 'undefined') {
@@ -2600,7 +2559,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.stopJournalStatusPolling();
-    this.stopJournalParsePolling();
+    this.stopJournalUnifiedPolling();
   }
 }

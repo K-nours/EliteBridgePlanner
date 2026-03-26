@@ -174,46 +174,24 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     });
   }
 
-  /** true si aucun point à afficher (message selon la vue). */
+  /**
+   * Vue Faction : pas de points si aucun système guilde n’a de coords EDSM.
+   * Vue Cmdr : pas de points si le journal parsé n’a aucune coordonnée StarPos.
+   */
   hasNoCoords(): boolean {
-    if (this.mapViewMode === 'cmdr') {
-      return this.journalCmdrPoints.length === 0;
-    }
-    const list = this.systemsWithCoords;
-    const hasAny = this.totalSystemsCount > 0;
-    return hasAny && list.length === 0;
+    return this.buildMapPointsList().length === 0;
   }
 
-  private get totalSystemsCount(): number {
-    const s = this.systems;
-    const ids = new Set<number>();
-    for (const arr of [s.origin, s.headquarter, s.surveillance, s.conflicts, s.critical, s.low, s.healthy, s.others]) {
-      for (const sys of arr ?? []) ids.add(sys.id);
+  /** Points affichés sur la carte selon la vue (sources strictement séparées). */
+  private buildMapPointsList(): MapSystem[] {
+    if (this.mapViewMode === 'faction') {
+      return guildInputToFactionMapSystems(this.systems);
     }
-    return ids.size;
-  }
-
-  private get systemsWithCoords(): MapSystem[] {
-    if (this.mapViewMode === 'cmdr') {
-      return this.journalCmdrPoints.map((p) => journalDtoToMapSystem(p));
-    }
-    const byId = new Map<number, MapSystem>();
-    const append = (arr: GuildSystemBgsDto[], cat: MapCategoryKey) => {
-      for (const s of arr ?? []) {
-        if (s.coordsX != null && s.coordsY != null && s.coordsZ != null && !byId.has(s.id)) {
-          byId.set(s.id, { ...s, mapCategory: cat });
-        }
-      }
-    };
-    append(this.systems.origin, 'origin');
-    append(this.systems.headquarter, 'headquarter');
-    append(this.systems.surveillance, 'surveillance');
-    append(this.systems.conflicts, 'conflicts');
-    append(this.systems.critical, 'critical');
-    append(this.systems.low, 'low');
-    append(this.systems.healthy, 'healthy');
-    append(this.systems.others, 'others');
-    return Array.from(byId.values());
+    const withCoords = this.journalCmdrPoints.filter(
+      (p) => p.coordsX != null && p.coordsY != null && p.coordsZ != null,
+    );
+    if (withCoords.length === 0) return [];
+    return withCoords.map((p) => journalDtoToMapSystemMerged(p, this.systems));
   }
 
   ngOnInit(): void {}
@@ -355,7 +333,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     for (const glow of this.systemHaloById.values()) this.scene!.remove(glow);
     this.systemHaloById.clear();
 
-    const list = this.systemsWithCoords;
+    const list = this.buildMapPointsList();
     if (list.length === 0) return;
 
     let sumX = 0, sumY = 0, sumZ = 0;
@@ -419,12 +397,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const defaultViewDir = new THREE.Vector3(1, 1, 1).normalize();
 
     const hqSys = list.find(
-      (s) =>
-        !s.isJournalCmdrPoint &&
-        s.mapCategory === 'headquarter' &&
-        s.coordsX != null &&
-        s.coordsY != null &&
-        s.coordsZ != null,
+      (s) => s.mapCategory === 'headquarter' && s.coordsX != null && s.coordsY != null && s.coordsZ != null,
     );
 
     if (hqSys) {
@@ -813,24 +786,83 @@ function syntheticJournalId(systemName: string): number {
   return h <= 0 ? h - 1 : -h;
 }
 
-function journalDtoToMapSystem(dto: FrontierJournalSystemDerivedDto): MapSystem {
+const GUILD_CATEGORY_SCAN_ORDER: { cat: MapCategoryKey; key: keyof GuildSystemsResponseInput }[] = [
+  { cat: 'origin', key: 'origin' },
+  { cat: 'headquarter', key: 'headquarter' },
+  { cat: 'surveillance', key: 'surveillance' },
+  { cat: 'conflicts', key: 'conflicts' },
+  { cat: 'critical', key: 'critical' },
+  { cat: 'low', key: 'low' },
+  { cat: 'healthy', key: 'healthy' },
+  { cat: 'others', key: 'others' },
+];
+
+function findGuildMatchForJournalName(
+  name: string,
+  systems: GuildSystemsResponseInput,
+): { sys: GuildSystemBgsDto; cat: MapCategoryKey } | null {
+  const key = name.trim().toUpperCase();
+  for (const { cat, key: arrKey } of GUILD_CATEGORY_SCAN_ORDER) {
+    for (const s of systems[arrKey] ?? []) {
+      if (s.name.trim().toUpperCase() === key) return { sys: s, cat };
+    }
+  }
+  return null;
+}
+
+/** Positions = journal CAPI (StarPos) ; métadonnées BGS = guilde si le nom correspond. */
+function journalDtoToMapSystemMerged(
+  dto: FrontierJournalSystemDerivedDto,
+  systems: GuildSystemsResponseInput,
+): MapSystem {
+  const m = findGuildMatchForJournalName(dto.systemName, systems);
+  if (!m) {
+    return {
+      id: syntheticJournalId(dto.systemName),
+      name: dto.systemName,
+      influencePercent: 0,
+      isThreatened: false,
+      isExpansionCandidate: false,
+      isHeadquarter: false,
+      isUnderSurveillance: false,
+      isClean: true,
+      category: 'Journal CAPI',
+      isFromSeed: false,
+      coordsX: dto.coordsX!,
+      coordsY: dto.coordsY!,
+      coordsZ: dto.coordsZ!,
+      mapCategory: 'others',
+      isJournalCmdrPoint: true,
+    };
+  }
+  const { sys, cat } = m;
   return {
-    id: syntheticJournalId(dto.systemName),
-    name: dto.systemName,
-    influencePercent: 0,
-    isThreatened: false,
-    isExpansionCandidate: false,
-    isHeadquarter: false,
-    isUnderSurveillance: false,
-    isClean: true,
-    category: 'Journal CMDR',
-    isFromSeed: false,
+    ...sys,
     coordsX: dto.coordsX!,
     coordsY: dto.coordsY!,
     coordsZ: dto.coordsZ!,
-    mapCategory: 'others',
-    isJournalCmdrPoint: true,
+    mapCategory: cat,
+    isJournalCmdrPoint: false,
   };
+}
+
+/** Vue Faction uniquement : systèmes guilde enrichis (coords EDSM), sans passer par le journal CMDR. */
+function guildInputToFactionMapSystems(input: GuildSystemsResponseInput): MapSystem[] {
+  const list: MapSystem[] = [];
+  for (const { cat, key: arrKey } of GUILD_CATEGORY_SCAN_ORDER) {
+    for (const s of input[arrKey] ?? []) {
+      if (s.coordsX == null || s.coordsY == null || s.coordsZ == null) continue;
+      list.push({
+        ...s,
+        coordsX: s.coordsX,
+        coordsY: s.coordsY,
+        coordsZ: s.coordsZ,
+        mapCategory: cat,
+        isJournalCmdrPoint: false,
+      });
+    }
+  }
+  return list;
 }
 
 function emptyInput(): GuildSystemsResponseInput {

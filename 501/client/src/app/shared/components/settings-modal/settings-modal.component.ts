@@ -1,8 +1,7 @@
 import { Component, inject, signal, computed, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { catchError, forkJoin, of } from 'rxjs';
+import { catchError, of } from 'rxjs';
 import { GuildSettingsService } from '../../../core/services/guild-settings.service';
-import { EdsmJournalApiService } from '../../../core/services/edsm-journal-api.service';
 import type { GuildSettingsUpdateDto } from '../../../core/models/guild-settings.model';
 
 @Component({
@@ -86,48 +85,6 @@ import type { GuildSettingsUpdateDto } from '../../../core/models/guild-settings
               }
               <span class="form-hint">
                 Sert aux appels inapi/v1 (ex. profil CMDR) et à l’en-tête roster. Laisser vide pour ne pas changer. Fichier serveur (hors git) : Data/inara-api-user.json
-              </span>
-            </div>
-            <div class="form-group form-group--edsm">
-              <div class="form-label-row">
-                <label for="edsm-cmdr">EDSM — Nom du commandant</label>
-                <span class="info-i-wrap" [attr.title]="helpEdsmCommander" role="img" [attr.aria-label]="helpEdsmCommander">
-                  <svg class="info-i-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 16v-4M12 8h.01"/></svg>
-                </span>
-              </div>
-              <input
-                id="edsm-cmdr"
-                type="text"
-                class="form-input"
-                [class.form-input--error]="edsmError()"
-                autocomplete="username"
-                placeholder="Exactement comme sur edsm.net"
-                [(ngModel)]="edsmCommanderName"
-                name="edsmCommanderName"
-              />
-              <div class="form-label-row label-second">
-                <label for="edsm-key">EDSM — Clé API</label>
-                <span class="info-i-wrap" [attr.title]="helpEdsmApiKey" role="img" [attr.aria-label]="helpEdsmApiKey">
-                  <svg class="info-i-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 16v-4M12 8h.01"/></svg>
-                </span>
-              </div>
-              <input
-                id="edsm-key"
-                type="password"
-                class="form-input"
-                [class.form-input--error]="edsmError()"
-                autocomplete="new-password"
-                [placeholder]="edsmApiKeyPlaceholder()"
-                [(ngModel)]="edsmApiKey"
-                name="edsmApiKey"
-              />
-              @if (edsmError()) {
-                <span class="form-error">{{ edsmError() }}</span>
-              }
-              <span class="form-hint">
-                Paramètres EDSM →
-                <a href="https://www.edsm.net/en_GB/settings/api" target="_blank" rel="noopener noreferrer" class="link-inline">Ma clé API</a>.
-                Laisser la clé vide pour ne pas la modifier. Fichier serveur (hors git) : Data/edsm-journal-user.json
               </span>
             </div>
             <div class="form-group form-group--script">
@@ -265,18 +222,6 @@ import type { GuildSettingsUpdateDto } from '../../../core/models/guild-settings
       padding-top: 1rem;
       border-top: 1px solid rgba(0, 212, 255, 0.14);
     }
-    .form-group--edsm {
-      margin-top: 1.25rem;
-      padding-top: 1rem;
-      border-top: 1px solid rgba(0, 255, 200, 0.2);
-    }
-    .link-inline {
-      color: #00e5ff;
-      text-decoration: none;
-    }
-    .link-inline:hover {
-      text-decoration: underline;
-    }
     .form-group--script {
       margin-top: 1.25rem;
       padding-top: 1rem;
@@ -322,7 +267,6 @@ import type { GuildSettingsUpdateDto } from '../../../core/models/guild-settings
 })
 export class SettingsModalComponent {
   private readonly settings = inject(GuildSettingsService);
-  private readonly edsmJournalApi = inject(EdsmJournalApiService);
 
   readonly closed = output<void>();
   scriptUrl = '/assets/scripts/inara-sync.user.js';
@@ -331,28 +275,19 @@ export class SettingsModalComponent {
   readonly factionError = signal<string | null>(null);
   readonly squadronError = signal<string | null>(null);
   readonly cmdrError = signal<string | null>(null);
-  readonly edsmError = signal<string | null>(null);
   readonly inaraApiError = signal<string | null>(null);
-  readonly edsmApiKeyConfigured = signal(false);
   readonly inaraApiKeyConfigured = signal(false);
-  readonly edsmApiKeyPlaceholder = computed(() =>
-    this.edsmApiKeyConfigured() ? '•••• laisser vide pour conserver la clé enregistrée' : 'Coller la clé API EDSM',
-  );
   readonly inaraApiKeyPlaceholder = computed(() =>
     this.inaraApiKeyConfigured() ? '•••• laisser vide pour conserver la clé enregistrée' : 'Coller la clé API Inara (INAPI)',
   );
 
   /** Textes du survol (i) — pas de secrets. */
   readonly helpInaraApiKey = `Clé API Inara (INAPI, inapi/v1) : utilisée pour les requêtes type getCommanderProfile et pour retenter l’accès à la page roster HTML avec l’en-tête X-Inara-ApiKey. Optionnelle si le roster est public.`;
-  readonly helpEdsmCommander = `Nom du commandant exactement comme enregistré sur edsm.net. Requis pour envoyer des lignes du journal de vol vers EDSM.`;
-  readonly helpEdsmApiKey = `Clé API EDSM (Paramètres → Ma clé API) : authentifie l’envoi du journal vers Elite Dangerous Star Map (API Journal v1).`;
 
   factionUrl = '';
   squadronUrl = '';
   cmdrUrl = '';
   inaraApiKey = '';
-  edsmCommanderName = '';
-  edsmApiKey = '';
 
   open(): void {
     const s = this.settings.settings();
@@ -362,23 +297,19 @@ export class SettingsModalComponent {
     this.factionError.set(null);
     this.squadronError.set(null);
     this.cmdrError.set(null);
-    this.edsmError.set(null);
     this.inaraApiError.set(null);
-    this.edsmApiKey = '';
     this.inaraApiKey = '';
-    forkJoin({
-      edsm: this.edsmJournalApi.getJournalSettings().pipe(
-        catchError(() => of({ commanderName: '', apiKeyConfigured: false })),
-      ),
-      inaraApi: this.settings.getInaraApiSettings().pipe(catchError(() => of({ apiKeyConfigured: false }))),
-    }).subscribe({
-      next: ({ edsm, inaraApi }) => {
-        this.edsmCommanderName = edsm.commanderName ?? '';
-        this.edsmApiKeyConfigured.set(!!edsm.apiKeyConfigured);
+    this.visible.set(false);
+    this.settings.getInaraApiSettings().pipe(catchError(() => of({ apiKeyConfigured: false }))).subscribe({
+      next: (inaraApi) => {
         this.inaraApiKeyConfigured.set(!!inaraApi.apiKeyConfigured);
+        this.visible.set(true);
+      },
+      error: () => {
+        this.inaraApiKeyConfigured.set(false);
+        this.visible.set(true);
       },
     });
-    this.visible.set(true);
   }
 
   close(): void {
@@ -390,7 +321,6 @@ export class SettingsModalComponent {
     this.factionError.set(null);
     this.squadronError.set(null);
     this.cmdrError.set(null);
-    this.edsmError.set(null);
     this.inaraApiError.set(null);
 
     const payload: GuildSettingsUpdateDto = {
@@ -400,35 +330,24 @@ export class SettingsModalComponent {
     };
 
     this.saving.set(true);
+
     this.settings.update(payload).subscribe({
       next: () => {
-        const edsmBody: { commanderName: string; apiKey?: string } = { commanderName: this.edsmCommanderName.trim() };
-        const k = this.edsmApiKey.trim();
-        if (k) edsmBody.apiKey = k;
-        this.edsmJournalApi.putJournalSettings(edsmBody).subscribe({
-          next: () => {
-            const finish = () => {
-              this.saving.set(false);
-              this.close();
-            };
-            const inaraK = this.inaraApiKey.trim();
-            if (!inaraK) {
-              finish();
-              return;
-            }
-            this.settings.putInaraApiSettings({ apiKey: inaraK }).subscribe({
-              next: () => finish(),
-              error: (err) => {
-                this.saving.set(false);
-                const msg = (err?.error?.error ?? err?.error?.message ?? err?.message ?? 'Erreur clé Inara') as string;
-                this.inaraApiError.set(msg);
-              },
-            });
-          },
+        const finish = () => {
+          this.saving.set(false);
+          this.close();
+        };
+        const inaraK = this.inaraApiKey.trim();
+        if (!inaraK) {
+          finish();
+          return;
+        }
+        this.settings.putInaraApiSettings({ apiKey: inaraK }).subscribe({
+          next: () => finish(),
           error: (err) => {
             this.saving.set(false);
-            const msg = (err?.error?.error ?? err?.error?.message ?? err?.message ?? 'Erreur EDSM') as string;
-            this.edsmError.set(msg);
+            const msg = (err?.error?.error ?? err?.error?.message ?? err?.message ?? 'Erreur clé Inara') as string;
+            this.inaraApiError.set(msg);
           },
         });
       },
