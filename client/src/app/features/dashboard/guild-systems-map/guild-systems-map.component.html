@@ -57,9 +57,11 @@
       @if (mapViewMode === 'faction') {
         <span>Aucun système de guilde avec coordonnées sur la carte</span>
         <span class="map-empty-hint-sub">Importez les systèmes (Inara) puis lancez l’enrichissement EDSM des coordonnées pour la vue Faction.</span>
-      } @else {
+      } @else if (mapViewMode === 'cmdr') {
         <span>Aucun système avec coordonnées dans le journal Frontier parsé</span>
         <span class="map-empty-hint-sub">Utilisez « Synchronisation du journal » dans le bloc CMDR connecté pour télécharger et parser le journal CAPI.</span>
+      } @else {
+        <span>Aucun pont planifié actuellement</span>
       }
     </div>
   }
