@@ -118,8 +118,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   @Input() systems: GuildSystemsResponseInput = emptyInput();
   @Input() selectedSystemId: number | null = null;
   @Input() systemsFilter: SystemsFilterValue = 'all';
-  /** Vue Faction : systèmes guilde ; Vue Cmdr : points journal avec coordonnées StarPos. */
-  @Input() mapViewMode: 'faction' | 'cmdr' = 'faction';
+  /** Vue Faction : systèmes guilde ; Vue Cmdr : points journal ; Pont galactique : ponts planifiés (placeholder). */
+  @Input() mapViewMode: 'faction' | 'cmdr' | 'galacticBridge' = 'faction';
   /** Systèmes dérivés du journal ayant coordsX/Y/Z (passé par le parent). */
   @Input() journalCmdrPoints: FrontierJournalSystemDerivedDto[] = [];
 
@@ -184,6 +184,9 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
 
   /** Points affichés sur la carte selon la vue (sources strictement séparées). */
   private buildMapPointsList(): MapSystem[] {
+    if (this.mapViewMode === 'galacticBridge') {
+      return [];
+    }
     if (this.mapViewMode === 'faction') {
       return guildInputToFactionMapSystems(this.systems);
     }
@@ -202,12 +205,14 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (
-      changes['systems'] ||
-      changes['mapViewMode'] ||
-      changes['journalCmdrPoints']
-    ) {
-      if (this.scene) this.updatePoints();
+    const systemsCh = !!changes['systems'];
+    const modeCh = !!changes['mapViewMode'];
+    const journalCh = !!changes['journalCmdrPoints'];
+    /** Changement Faction / Cmdr / Pont uniquement : ne pas recadrer la caméra. */
+    const preserveCamera = modeCh && !systemsCh && !journalCh;
+
+    if (systemsCh || modeCh || journalCh) {
+      if (this.scene) this.updatePoints(preserveCamera);
     } else if (
       (changes['systemsFilter'] ||
         changes['journalLayerVisited'] ||
@@ -262,7 +267,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.renderer.domElement.addEventListener('click', (e) => this.onClick(e));
 
     window.addEventListener('resize', () => this.onResize());
-    this.updatePoints();
+    this.updatePoints(false);
   }
 
   private addStarfield(): void {
@@ -318,7 +323,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     }
   }
 
-  private updatePoints(): void {
+  private updatePoints(preserveCamera = false): void {
     if (!this.scene || !this.camera || !this.controls) return;
 
     this.clearHoverFocus();
@@ -406,10 +411,16 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
       this.viewCenter.set(cx, cy, cz);
     }
 
-    this.controls.target.copy(this.viewCenter);
-    this.zoomLevel = zoomLevelForViewDistance(defaultDist);
-    this.viewDistance = defaultDist;
-    this.camera.position.copy(this.viewCenter).add(defaultViewDir.clone().multiplyScalar(defaultDist));
+    if (!preserveCamera) {
+      this.controls.target.copy(this.viewCenter);
+      this.zoomLevel = zoomLevelForViewDistance(defaultDist);
+      this.viewDistance = defaultDist;
+      this.camera.position.copy(this.viewCenter).add(defaultViewDir.clone().multiplyScalar(defaultDist));
+    } else {
+      const dist = this.camera.position.distanceTo(this.controls.target);
+      this.viewDistance = dist;
+      this.zoomLevel = zoomLevelForViewDistance(dist);
+    }
   }
 
   /** Noyau : rayon minR → maxR selon influence 1–80 % (écart large pour lisibilité). */

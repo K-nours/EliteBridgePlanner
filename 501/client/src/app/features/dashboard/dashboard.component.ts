@@ -132,6 +132,9 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                   <button type="button" class="map-view-toggle-btn"
                     [class.map-view-toggle-btn--active]="mapViewMode() === 'cmdr'"
                     (click)="onMapViewCmdr()">Vue Cmdr</button>
+                  <button type="button" class="map-view-toggle-btn"
+                    [class.map-view-toggle-btn--active]="mapViewMode() === 'galacticBridge'"
+                    (click)="onMapViewGalacticBridge()">Vue Pont galactique</button>
                 </div>
               </div>
               <div class="map-3d-wrapper">
@@ -1076,6 +1079,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .map-view-toggle {
       display: inline-flex;
+      flex-wrap: wrap;
       align-items: stretch;
       border-radius: 4px;
       border: 1px solid rgba(0, 212, 255, 0.25);
@@ -1764,8 +1768,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly journalCmdrCountFullScan = computed(
     () => this.journalCmdrMapPoints().filter((s) => s.isFullScanned).length,
   );
-  /** faction = carte guilde + filtres BGS ; cmdr = points journal avec coords. */
-  protected readonly mapViewMode = signal<'faction' | 'cmdr'>('faction');
+  /** faction = carte guilde + filtres BGS ; cmdr = points journal ; galacticBridge = ponts planifiés. */
+  protected readonly mapViewMode = signal<'faction' | 'cmdr' | 'galacticBridge'>('faction');
   protected readonly journalParseStatus = signal<FrontierJournalParseStatusDto | null>(null);
   protected readonly journalFrontierStatusLines = computed((): string[] | null => {
     const u = this.journalUnifiedStatus();
@@ -1938,6 +1942,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected onMapViewCmdr(): void {
     this.mapViewMode.set('cmdr');
     this.guildSystemsSync.systemsFilter.set('all');
+  }
+
+  protected onMapViewGalacticBridge(): void {
+    this.mapViewMode.set('galacticBridge');
+    this.guildSystemsSync.systemsFilter.set('all');
+    this.journalMapLayerVisited.set(false);
+    this.journalMapLayerDiscovered.set(false);
+    this.journalMapLayerFullScan.set(false);
   }
 
   /** Calques journal exclusifs ; reclic sur l’actif désactive. Réinitialise le filtre Faction sur « Total ». */
