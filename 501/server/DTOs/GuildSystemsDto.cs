@@ -18,7 +18,8 @@ public record GuildSystemBgsDto(
     string? InaraUrl = null,
     double? CoordsX = null,
     double? CoordsY = null,
-    double? CoordsZ = null
+    double? CoordsZ = null,
+    string? PrimaryStarClass = null
 );
 
 /// <summary>Seuils d'influence (source unique backend).</summary>

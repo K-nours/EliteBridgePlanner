@@ -92,17 +92,22 @@ public class EdsmApiService
 
     public record EdsmSystemInfo(string? Faction, string? FactionState);
 
-    /// <summary>Récupère les coordonnées galactiques des systèmes en batch (EDSM showCoordinates=1).</summary>
-    /// <returns>Dictionnaire Name → (X, Y, Z). Systèmes sans coords ou non trouvés absents.</returns>
-    public async Task<IReadOnlyDictionary<string, (double X, double Y, double Z)>> GetSystemsCoordsBatchAsync(
+    /// <summary>
+    /// Coordonnées + type d'étoile principale (brut EDSM) en batch.
+    /// <c>showCoordinates=1</c> et <c>showInformation=1</c> pour inclure <c>primaryStar.type</c>.
+    /// </summary>
+    public record EdsmCoordsStarBatchEntry(double? X, double? Y, double? Z, string? PrimaryStarTypeRaw);
+
+    /// <summary>Récupère coords et infos étoile en batch.</summary>
+    public async Task<IReadOnlyDictionary<string, EdsmCoordsStarBatchEntry>> GetSystemsCoordsBatchAsync(
         IReadOnlyList<string> systemNames,
         CancellationToken ct = default)
     {
         if (systemNames.Count == 0)
-            return new Dictionary<string, (double, double, double)>();
+            return new Dictionary<string, EdsmCoordsStarBatchEntry>();
 
         var query = string.Join("&", systemNames.Select(n => "systemName[]=" + Uri.EscapeDataString(n)));
-        var url = $"{BaseUrl}?{query}&showCoordinates=1";
+        var url = $"{BaseUrl}?{query}&showCoordinates=1&showInformation=1";
 
         try
         {
@@ -110,22 +115,30 @@ public class EdsmApiService
             if (!response.IsSuccessStatusCode)
             {
                 _log.LogWarning("[Edsm] Coords HTTP {Code} for {Url}", response.StatusCode, url);
-                return new Dictionary<string, (double, double, double)>();
+                return new Dictionary<string, EdsmCoordsStarBatchEntry>();
             }
 
             var json = await response.Content.ReadAsStringAsync(ct);
             var list = JsonSerializer.Deserialize<List<EdsmCoordsResponse>>(json, JsonOptions);
 
             if (list == null || list.Count == 0)
-                return new Dictionary<string, (double, double, double)>();
+                return new Dictionary<string, EdsmCoordsStarBatchEntry>();
 
-            var result = new Dictionary<string, (double X, double Y, double Z)>(StringComparer.OrdinalIgnoreCase);
+            var result = new Dictionary<string, EdsmCoordsStarBatchEntry>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in list)
             {
-                if (string.IsNullOrEmpty(item.Name) || item.Coords == null)
+                if (string.IsNullOrEmpty(item.Name))
                     continue;
-                var c = item.Coords;
-                result[item.Name] = (c.X, c.Y, c.Z);
+                double? x = null, y = null, z = null;
+                if (item.Coords != null)
+                {
+                    x = item.Coords.X;
+                    y = item.Coords.Y;
+                    z = item.Coords.Z;
+                }
+
+                var rawType = item.PrimaryStar?.Type;
+                result[item.Name] = new EdsmCoordsStarBatchEntry(x, y, z, rawType);
             }
             return result;
         }
@@ -143,6 +156,15 @@ public class EdsmApiService
 
         [JsonPropertyName("coords")]
         public EdsmCoords? Coords { get; set; }
+
+        [JsonPropertyName("primaryStar")]
+        public EdsmPrimaryStar? PrimaryStar { get; set; }
+    }
+
+    private class EdsmPrimaryStar
+    {
+        [JsonPropertyName("type")]
+        public string? Type { get; set; }
     }
 
     private class EdsmCoords

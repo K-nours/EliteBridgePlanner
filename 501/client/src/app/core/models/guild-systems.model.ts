@@ -21,6 +21,8 @@ export interface GuildSystemBgsDto {
   coordsX?: number | null;
   coordsY?: number | null;
   coordsZ?: number | null;
+  /** Classe spectrale du corps principal (ex. « K », « M », « F ») — carte 3D si exposé par l’API. */
+  primaryStarClass?: string | null;
 }
 
 export type GuildSystemsDataSource = 'seed' | 'cached';

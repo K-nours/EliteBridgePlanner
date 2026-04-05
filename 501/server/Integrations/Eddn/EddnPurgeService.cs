@@ -22,7 +22,18 @@ public class EddnPurgeService : BackgroundService
     {
         _log.LogInformation("EDDN purge démarrée — rétention {Days} jours, intervalle {Interval}h", RetentionDays, Interval.TotalHours);
 
-        await PurgeAsync(stoppingToken);
+        try
+        {
+            await PurgeAsync(stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            _log.LogError(ex, "EDDN purge erreur (premier passage)");
+        }
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -51,6 +62,7 @@ public class EddnPurgeService : BackgroundService
 
         using var scope = _services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<GuildDashboardDbContext>();
+        db.Database.SetCommandTimeout(300);
 
         var toDelete = await db.EddnRawMessages
             .Where(m => m.ReceivedAt < cutoff)

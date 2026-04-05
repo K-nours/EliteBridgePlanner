@@ -2,8 +2,14 @@ using GuildDashboard.Server.Data;
 using GuildDashboard.Server.Integrations.Eddn;
 using GuildDashboard.Server.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.Configure<HostOptions>(o =>
+{
+    o.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore;
+});
 
 var connStr = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "Server=localhost,1434;Database=GuildDashboardDb;User Id=sa;Password=YourStrong!Passw0rd;TrustServerCertificate=True;Encrypt=False";
