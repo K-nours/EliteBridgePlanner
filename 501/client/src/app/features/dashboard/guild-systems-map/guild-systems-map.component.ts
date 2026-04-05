@@ -56,11 +56,30 @@ const GALACTIC_LANDMARKS = [
   { id: 'sagA', name: 'Centre galactique', x: 25.22, y: -20.91, z: 25899.97, color: 0x9944ff },
   { id: 'colonia', name: 'Colonia', x: -9530.5, y: -910.28, z: 19808.13, region: 'Colonia', primaryStarClass: 'F' }, // classe F (Inara)
   { id: 'onoros', name: 'Onoros', x: 389.72, y: -379.94, z: -724.16, region: 'Witch Head', primaryStarClass: 'K' }, // K (Yellow-Orange) Star
+  /** Coords EDSM (coordsLocked) ; K (Yellow-Orange) Star */
+  {
+    id: 'beaglePoint',
+    name: 'Beagle Point',
+    x: -1111.5625,
+    y: -134.21875,
+    z: 65269.75,
+    region: 'Bordure galactique',
+    primaryStarClass: 'K',
+  },
 ] as const;
+
+/** Distance euclidienne au Sol (0, 0, 0) en coordonnées ED, en années-lumière. */
+function landmarkDistanceFromSolLy(lm: { x: number; y: number; z: number }): number {
+  return Math.hypot(lm.x, lm.y, lm.z);
+}
+
 /** Convention ED : X inversé pour que Colonia soit à gauche du centre galactique vu depuis Sol. */
 const ED_TO_SCENE_X = (x: number) => -x;
 /** Facteur de scale au survol. */
 const HOVER_SCALE = 1.3;
+
+/** Décalage vertical (px) des libellés repères : sous le point projeté pour ne pas masquer l’étoile / le système. */
+const LANDMARK_LABEL_OFFSET_Y_PX = 40;
 
 /** Distance caméra ↔ cible : molette OrbitControls et curseur identiques. */
 const MAP_ZOOM_DISTANCE_MIN = 5;
@@ -81,12 +100,48 @@ interface MapSystem extends GuildSystemBgsDto {
   isJournalCmdrPoint?: boolean;
 }
 
+/** Repère galactique rendu comme un système carte (billboards + glow), id négatif dédié. */
+function createSyntheticLandmarkMapSystem(lm: (typeof GALACTIC_LANDMARKS)[number], index: number): MapSystem {
+  return {
+    id: -1000 - index,
+    name: lm.name,
+    influencePercent: 0,
+    isThreatened: false,
+    isExpansionCandidate: false,
+    isHeadquarter: false,
+    isUnderSurveillance: false,
+    isClean: true,
+    category: 'Repère',
+    isFromSeed: false,
+    coordsX: lm.x,
+    coordsY: lm.y,
+    coordsZ: lm.z,
+    primaryStarClass: 'primaryStarClass' in lm ? lm.primaryStarClass : null,
+    mapCategory: 'others',
+    isJournalCmdrPoint: false,
+  };
+}
+
 /** Rayon de référence vue Cmdr (journal) — même hiérarchie visuelle que la vue Faction. */
 const CMDR_JOURNAL_CORE_RADIUS = 2.85;
+
+/**
+ * Rayon de base carte (anneaux + noyau) quand la faction n’a pas d’influence dans le système :
+ * pas de disque d’influence BGS, seulement l’étoile + marqueurs catégorie (HQ, etc.).
+ */
+const STAR_MAP_NO_FACTION_BASE_R = 0.5;
+
+/** Disque d’influence : affiché seulement si la faction a une influence &gt; 0 (présence Inara / sync). */
+function hasFactionInfluenceOnMap(sys: Pick<GuildSystemBgsDto, 'influencePercent'>): boolean {
+  const p = sys.influencePercent;
+  return typeof p === 'number' && !Number.isNaN(p) && p > 0;
+}
 
 /** Multiplicateur global sur l’alpha des shaders radiaux (étoile / influence). */
 const STAR_ALPHA_SCALE = 1.0;
 const INFLUENCE_DISK_OPACITY = 0.22;
+/** Au survol : opacité du grand disque d’influence (uniforme `uAlphaScale` du shader). */
+const INFLUENCE_DISK_HOVER_OPACITY = 0.8;
 const RING_PRIMARY_OPACITY = 0.88;
 /** Anneau catégorie extérieur — plus discret (demi-largeur radiale vs ancienne version). */
 const RING_SECONDARY_OPACITY = 0.14;
@@ -201,6 +256,7 @@ const KNOWN_SPECTRAL_LETTER_BY_SYSTEM_NAME: Record<string, string> = {
   SOL: 'G',
   COLONIA: 'F',
   ONOROS: 'K',
+  'BEAGLE POINT': 'K',
 };
 
 /** Noyau stellaire + teinte du disque d’influence (plus pâle / désaturée). */
@@ -245,12 +301,6 @@ function hoverStarCoreHex(spectralCoreHex: number): number {
   const c = new THREE.Color(spectralCoreHex);
   c.lerp(new THREE.Color(0xffffff), 0.4);
   return c.getHex();
-}
-
-/** Sphère repère : couleur fixe (ex. Sag A*) ou noyau spectral comme le reste de la carte. */
-function landmarkSphereHex(lm: { name: string; color?: number; primaryStarClass?: string | null }): number {
-  if (lm.color !== undefined) return lm.color;
-  return inferStarPalette(lm.primaryStarClass, lm.name, false).core;
 }
 
 /** Assombrit légèrement une couleur néon pour le disque d’influence (lisibilité, pas un pâté opaque). */
@@ -325,11 +375,22 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   landmarksVisible = true;
 
   /** Positions 2D des labels pour le rendu (mis à jour dans animate). */
-  landmarkLabels: { id: string; name: string; region?: string; x: number; y: number; visible: boolean }[] = [];
+  landmarkLabels: {
+    id: string;
+    name: string;
+    region?: string;
+    distanceFromSolLy: number;
+    x: number;
+    y: number;
+    visible: boolean;
+  }[] = [];
 
   private panInterval: ReturnType<typeof setInterval> | null = null;
   private zoomInterval: ReturnType<typeof setInterval> | null = null;
-  private landmarkMeshes: THREE.Mesh[] = [];
+  /** Repères : même pipeline 3D que les systèmes (glow radial), pas des sphères unies. */
+  private landmarkGroups: THREE.Group[] = [];
+  private landmarkHitMeshes: THREE.Mesh[] = [];
+  private landmarkLayers: SystemVisualLayers[] = [];
   private landmarkPositions: THREE.Vector3[] = [];
 
   constructor() {
@@ -460,33 +521,63 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
 
   private addLandmarks(): void {
     if (!this.scene) return;
-    for (const m of this.landmarkMeshes) this.scene.remove(m);
-    this.landmarkMeshes = [];
+    for (const g of this.landmarkGroups) this.scene.remove(g);
+    for (const h of this.landmarkHitMeshes) this.scene.remove(h);
+    this.landmarkGroups = [];
+    this.landmarkHitMeshes = [];
+    this.landmarkLayers = [];
     this.landmarkPositions = [];
-    for (const lm of GALACTIC_LANDMARKS) {
+
+    GALACTIC_LANDMARKS.forEach((lm, i) => {
       const pos = new THREE.Vector3(ED_TO_SCENE_X(lm.x), lm.y, lm.z);
       this.landmarkPositions.push(pos);
-      const r = 6;
-      const geom = new THREE.SphereGeometry(r, 12, 10);
-      const mat = new THREE.MeshBasicMaterial({
-        color: landmarkSphereHex(lm),
-        transparent: true,
-        opacity: 0.9,
-      });
-      const mesh = new THREE.Mesh(geom, mat);
-      mesh.position.copy(pos);
-      mesh.name = `landmark-${lm.id}`;
-      mesh.renderOrder = 5;
-      mesh.visible = this.landmarksVisible;
-      this.scene.add(mesh);
-      this.landmarkMeshes.push(mesh);
+      const sys = createSyntheticLandmarkMapSystem(lm, i);
+      const paletteOpts =
+        'color' in lm && lm.color !== undefined
+          ? { palette: { core: lm.color, influence: tintForInfluenceDisk(lm.color) } }
+          : undefined;
+      const { group, layers, hitMesh } = this.buildSystemVisualGroup(
+        sys,
+        STAR_MAP_NO_FACTION_BASE_R,
+        pos,
+        paletteOpts,
+      );
+      group.name = `landmark-group-${lm.id}`;
+      hitMesh.name = `landmark-${lm.id}`;
+      (hitMesh as THREE.Mesh & { systemData?: MapSystem }).systemData = sys;
+      group.visible = this.landmarksVisible;
+      hitMesh.visible = this.landmarksVisible;
+      group.renderOrder = 5;
+      this.scene!.add(group);
+      this.scene!.add(hitMesh);
+      this.landmarkGroups.push(group);
+      this.landmarkHitMeshes.push(hitMesh);
+      this.landmarkLayers.push(layers);
+    });
+    this.syncLandmarkMeshesWithFactionSystems();
+  }
+
+  /**
+   * Si un repère a le même nom qu’un système déjà rendu comme point faction/journal, on masque le groupe repère
+   * pour éviter Sol « double ».
+   */
+  private syncLandmarkMeshesWithFactionSystems(): void {
+    const list = this.buildMapPointsList();
+    const names = new Set(list.map((s) => s.name.trim().toUpperCase()));
+    for (let i = 0; i < GALACTIC_LANDMARKS.length; i++) {
+      const lm = GALACTIC_LANDMARKS[i];
+      const g = this.landmarkGroups[i];
+      const h = this.landmarkHitMeshes[i];
+      if (!g || !h) continue;
+      const duplicate = names.has(lm.name.trim().toUpperCase());
+      const show = this.landmarksVisible && !duplicate;
+      g.visible = show;
+      h.visible = show;
     }
   }
 
   private updateLandmarksVisibility(): void {
-    for (const m of this.landmarkMeshes) {
-      m.visible = this.landmarksVisible;
-    }
+    this.syncLandmarkMeshesWithFactionSystems();
   }
 
   private updatePoints(preserveCamera = false): void {
@@ -504,6 +595,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.hitMeshMap.clear();
 
     const list = this.buildMapPointsList();
+    this.syncLandmarkMeshesWithFactionSystems();
     if (list.length === 0) return;
 
     let sumX = 0, sumY = 0, sumZ = 0;
@@ -518,7 +610,11 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const cz = sumZ / n;
 
     for (const sys of list) {
-      const baseR = sys.isJournalCmdrPoint ? CMDR_JOURNAL_CORE_RADIUS : this.radiusFromInfluence(sys.influencePercent);
+      const baseR = sys.isJournalCmdrPoint
+        ? CMDR_JOURNAL_CORE_RADIUS
+        : hasFactionInfluenceOnMap(sys)
+          ? this.radiusFromInfluence(sys.influencePercent)
+          : STAR_MAP_NO_FACTION_BASE_R;
       const pos = new THREE.Vector3(ED_TO_SCENE_X(sys.coordsX!), sys.coordsY!, sys.coordsZ!);
       const { group, layers, hitMesh } = this.buildSystemVisualGroup(sys, baseR, pos);
       this.scene.add(group);
@@ -573,13 +669,15 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     sys: MapSystem,
     baseR: number,
     pos: THREE.Vector3,
+    opts?: { palette?: { core: number; influence: number } },
   ): { group: THREE.Group; layers: SystemVisualLayers; hitMesh: THREE.Mesh } {
     const group = new THREE.Group();
     group.position.copy(pos);
     group.userData['systemData'] = sys;
     group.name = `sys-${sys.id}`;
 
-    const palette = inferStarPalette(sys.primaryStarClass, sys.name, !!sys.isJournalCmdrPoint);
+    const palette =
+      opts?.palette ?? inferStarPalette(sys.primaryStarClass, sys.name, !!sys.isJournalCmdrPoint);
     const coreR = Math.max(0.12, baseR * 0.12);
     /** Cercle billboard : le dégradé UV va à 0 sur le bord — pas de disque dur. */
     const starBillboardR = coreR * 2.5;
@@ -597,6 +695,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const diskMat = createInfluenceRadialMaterial(palette.influence, INFLUENCE_DISK_OPACITY);
     const influenceDisk = new THREE.Mesh(diskGeom, diskMat);
     influenceDisk.renderOrder = 2;
+    const showInfDisk = hasFactionInfluenceOnMap(sys);
+    influenceDisk.visible = showInfDisk;
 
     const cat = CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED;
     const ring1Geom = new THREE.RingGeometry(ring1Inner, ring1Outer, 64);
@@ -819,8 +919,9 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     sm.uniforms['uCoreColor'].value.setHex(hoverCore);
     sm.uniforms['uAlphaScale'].value = Math.min(1.25, STAR_ALPHA_SCALE + 0.22);
     sm.depthTest = false;
-    const curInf = dm.uniforms['uAlphaScale'].value as number;
-    dm.uniforms['uAlphaScale'].value = Math.min(0.42, curInf * 1.35);
+    if (sys && hasFactionInfluenceOnMap(sys)) {
+      dm.uniforms['uAlphaScale'].value = INFLUENCE_DISK_HOVER_OPACITY;
+    }
     r1.opacity = Math.min(1, RING_PRIMARY_OPACITY + 0.1);
     r2.opacity = Math.min(0.28, RING_SECONDARY_OPACITY + 0.08);
   }
@@ -855,20 +956,34 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const ny = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(new THREE.Vector2(nx, ny), this.camera);
     const hitMeshes = Array.from(this.hitMeshMap.values());
-    const hits = this.raycaster.intersectObjects(hitMeshes);
+    const landmarkPick = this.landmarkHitMeshes.filter((m) => m.visible);
+    const hits = this.raycaster.intersectObjects([...hitMeshes, ...landmarkPick], false);
     const hit = hits[0];
-    const sys: MapSystem | null = hit?.object
-      ? ((hit.object as THREE.Mesh & { systemData?: MapSystem }).systemData ?? null)
-      : null;
+    if (!hit?.object) return;
+    const obj = hit.object;
+    if (obj.name.startsWith('landmark-')) {
+      this.centerCameraOnWorldPosition((obj as THREE.Mesh).position);
+      return;
+    }
+    const sys: MapSystem | null = (obj as THREE.Mesh & { systemData?: MapSystem }).systemData ?? null;
     if (!sys) return;
     this.centerCameraOnSystem(sys.id);
   }
 
-  /** Pivot Orbit + caméra sur le système (même recul que le focus synchronisé panneau). */
-  private centerCameraOnSystem(id: number): void {
-    const group = this.systemGroups.get(id);
-    if (!group || !this.camera || !this.controls) return;
-    const pos = group.position.clone();
+  /** Double-clic sur le panneau libellé (overlay) : même centrage que le double-clic sur le repère 3D. */
+  centerMapOnLandmark(landmarkId: string, event?: MouseEvent): void {
+    event?.preventDefault();
+    event?.stopPropagation();
+    const idx = GALACTIC_LANDMARKS.findIndex((lm) => lm.id === landmarkId);
+    if (idx < 0) return;
+    const pos = this.landmarkPositions[idx];
+    if (!pos) return;
+    this.centerCameraOnWorldPosition(pos.clone());
+  }
+
+  /** Pivot Orbit + caméra sur un point monde (repères galactiques, etc.). */
+  private centerCameraOnWorldPosition(pos: THREE.Vector3): void {
+    if (!this.camera || !this.controls) return;
     this.controls.target.copy(pos);
     const dist = 80;
     this.camera.position.set(pos.x + dist, pos.y + dist, pos.z + dist);
@@ -876,6 +991,13 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.viewDistance = orbitDist;
     this.zoomLevel = zoomLevelForViewDistance(orbitDist);
     this.cdr.markForCheck();
+  }
+
+  /** Pivot Orbit + caméra sur le système (même recul que le focus synchronisé panneau). */
+  private centerCameraOnSystem(id: number): void {
+    const group = this.systemGroups.get(id);
+    if (!group) return;
+    this.centerCameraOnWorldPosition(group.position);
   }
 
   private onMouseLeave(): void {
@@ -1002,9 +1124,17 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.animationId = requestAnimationFrame(this.animate);
     this.controls?.update();
     this.syncZoomSliderFromOrbit();
-    if (this.camera && this.systemLayers.size > 0) {
+    if (this.camera) {
       const camPos = this.camera.position;
-      for (const layers of this.systemLayers.values()) {
+      if (this.systemLayers.size > 0) {
+        for (const layers of this.systemLayers.values()) {
+          layers.starCore.lookAt(camPos);
+          layers.influenceDisk.lookAt(camPos);
+          layers.ringPrimary.lookAt(camPos);
+          layers.ringSecondary.lookAt(camPos);
+        }
+      }
+      for (const layers of this.landmarkLayers) {
         layers.starCore.lookAt(camPos);
         layers.influenceDisk.lookAt(camPos);
         layers.ringPrimary.lookAt(camPos);
@@ -1015,16 +1145,33 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
       const rect = this.renderer.domElement.getBoundingClientRect();
       const w = rect.width;
       const h = rect.height;
-      const labels: { id: string; name: string; region?: string; x: number; y: number; visible: boolean }[] = [];
+      const labels: {
+        id: string;
+        name: string;
+        region?: string;
+        distanceFromSolLy: number;
+        x: number;
+        y: number;
+        visible: boolean;
+      }[] = [];
       const v = new THREE.Vector3();
       for (let i = 0; i < GALACTIC_LANDMARKS.length; i++) {
         v.copy(this.landmarkPositions[i]);
         v.project(this.camera!);
-        const visible = v.z < 1 && v.x >= -1 && v.x <= 1 && v.y >= -1 && v.y <= 1;
+        const frustumOk = v.z < 1 && v.x >= -1 && v.x <= 1 && v.y >= -1 && v.y <= 1;
+        const meshShown = this.landmarkHitMeshes[i]?.visible === true;
         const x = ((v.x + 1) / 2) * w + rect.left;
-        const y = ((1 - v.y) / 2) * h + rect.top;
+        const y = ((1 - v.y) / 2) * h + rect.top + LANDMARK_LABEL_OFFSET_Y_PX;
         const lm = GALACTIC_LANDMARKS[i];
-        labels.push({ id: lm.id, name: lm.name, region: 'region' in lm ? lm.region : undefined, x, y, visible });
+        labels.push({
+          id: lm.id,
+          name: lm.name,
+          region: 'region' in lm ? lm.region : undefined,
+          distanceFromSolLy: landmarkDistanceFromSolLy(lm),
+          x,
+          y,
+          visible: frustumOk && meshShown,
+        });
       }
       this.landmarkLabels = labels;
       this.cdr.markForCheck();
@@ -1034,6 +1181,12 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     }
     this.renderer?.render(this.scene!, this.camera!);
   };
+
+  /** Distance au Sol (AL), libellé pour le panneau repère. */
+  formatLandmarkDistanceFromSol(ly: number): string {
+    const n = Math.round(ly);
+    return `${n.toLocaleString('fr-FR')} AL depuis Sol`;
+  }
 
   hasSignificantDelta(delta?: number | null): boolean {
     if (delta == null) return false;

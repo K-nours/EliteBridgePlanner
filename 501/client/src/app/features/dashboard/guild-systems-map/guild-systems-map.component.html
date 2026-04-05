@@ -68,11 +68,14 @@
   @if (landmarksVisible && landmarkLabels.length > 0) {
     @for (lb of landmarkLabels; track lb.id) {
       @if (lb.visible) {
-        <div class="map-landmark-label" [style.left.px]="lb.x" [style.top.px]="lb.y">
+        <div class="map-landmark-label" [style.left.px]="lb.x" [style.top.px]="lb.y"
+          title="Double-cliquer pour centrer la carte sur ce repère"
+          (dblclick)="centerMapOnLandmark(lb.id, $event)">
           <span class="map-landmark-name">{{ lb.name }}</span>
           @if (lb.region) {
             <span class="map-landmark-region">{{ lb.region }}</span>
           }
+          <span class="map-landmark-distance">{{ formatLandmarkDistanceFromSol(lb.distanceFromSolLy) }}</span>
         </div>
       }
     }
