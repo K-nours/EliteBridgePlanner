@@ -1,5 +1,6 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { Observable, tap } from 'rxjs';
 import type { FrontierAuthState, FrontierAuthStatus, FrontierMeResponse, FrontierProfileDto } from '../models/frontier-auth.model';
 
 @Injectable({ providedIn: 'root' })
@@ -41,7 +42,7 @@ export class FrontierAuthService {
     const handler = (e: MessageEvent) => {
       if (e.origin !== origin || e.data?.type !== 'frontier-oauth-done') return;
       window.removeEventListener('message', handler);
-      if (e.data.success) this.checkAndLoadProfile();
+      if (e.data.success) this.checkAndLoadProfile().subscribe();
       else this.setError(e.data.message ?? 'Erreur');
     };
     window.addEventListener('message', handler);
@@ -54,37 +55,39 @@ export class FrontierAuthService {
   }
 
   /** Vérifie l'état de connexion via /me. Appelé au chargement et après callback. */
-  checkAndLoadProfile(): void {
+  checkAndLoadProfile(): Observable<FrontierMeResponse> {
     this._loading.set(true);
     this._errorMessage.set(null);
 
-    this.http.get<FrontierMeResponse>('/api/user/me').subscribe({
-      next: (res) => {
-        this._loading.set(false);
-        if (res.connected) {
-          this._profile.set({
-            frontierCustomerId: res.customerId ?? '',
-            commanderName: res.commander ?? '',
-            squadronName: res.squadron ?? null,
-            lastSystemName: null,
-            shipName: null,
-            guildId: res.guildId ?? null,
-            guildName: res.guildName ?? null,
-            lastFetchedAt: new Date().toISOString(),
-            avatarUrl: res.avatarUrl ?? null,
-          });
-          this._state.set('connected');
-        } else {
-          this._profile.set(null);
-          this._state.set('not-connected');
-        }
-      },
-      error: (err) => {
-        this._loading.set(false);
-        this._state.set('error');
-        this._errorMessage.set(err?.error?.message ?? err?.message ?? 'Erreur');
-      },
-    });
+    return this.http.get<FrontierMeResponse>('/api/user/me').pipe(
+      tap({
+        next: (res) => {
+          this._loading.set(false);
+          if (res.connected) {
+            this._profile.set({
+              frontierCustomerId: res.customerId ?? '',
+              commanderName: res.commander ?? '',
+              squadronName: res.squadron ?? null,
+              lastSystemName: null,
+              shipName: null,
+              guildId: res.guildId ?? null,
+              guildName: res.guildName ?? null,
+              lastFetchedAt: new Date().toISOString(),
+              avatarUrl: res.avatarUrl ?? null,
+            });
+            this._state.set('connected');
+          } else {
+            this._profile.set(null);
+            this._state.set('not-connected');
+          }
+        },
+        error: (err) => {
+          this._loading.set(false);
+          this._state.set('error');
+          this._errorMessage.set(err?.error?.message ?? err?.message ?? 'Erreur');
+        },
+      }),
+    );
   }
 
   /** Déconnexion Frontier : efface le token côté backend et l'état local. */

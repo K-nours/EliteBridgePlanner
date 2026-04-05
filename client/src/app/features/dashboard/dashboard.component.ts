@@ -1836,6 +1836,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.boxAvatarError.set(false);
       }
     });
+    /** Journal CMDR : rechargé quand Frontier passe à « connecté » (après /api/user/me), pas seulement au 1er tick où l’état était encore déconnecté. */
+    effect(() => {
+      if (this.frontierAuth.isConnected()) {
+        this.refreshJournalParseAndDerived();
+        this.loadJournalUnifiedStatus();
+      }
+    });
   }
   protected strokeDashOffset = computed(() => this.strokeCircumference * (1 - this.refreshProgress() / 100));
 
@@ -2327,10 +2334,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.addLog('Prêt — utilisez les boutons sync pour importer depuis Inara');
     this.guildSettings.load();
     this.inaraBridge.check();
-    if (this.frontierAuth.isConnected()) {
-      this.loadJournalUnifiedStatus();
-    }
-    this.refreshJournalParseAndDerived();
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') this.guildSettings.load();
@@ -2429,7 +2432,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
         skipFrontierCheck = true;
       }
     }
-    if (!skipFrontierCheck) this.frontierAuth.checkAndLoadProfile();
+    if (!skipFrontierCheck) {
+      this.frontierAuth.checkAndLoadProfile().subscribe({
+        error: () => this.refreshJournalParseAndDerived(),
+      });
+    }
     this.dashboardApi.getDashboard(null).subscribe({
       next: (d) => this.dashboard.set(d),
       error: (err) => this.addLog('Erreur chargement dashboard : ' + (err?.error?.error ?? err?.message ?? 'Erreur serveur')),
