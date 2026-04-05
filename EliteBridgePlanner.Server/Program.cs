@@ -135,6 +135,19 @@ using (var scope = app.Services.CreateScope())
 }
 
 // ── Pipeline HTTP ─────────────────────────────────────────────────────────
+// Anciens clients (cache navigateur) : proxy ng serve utilisait /spansh-api/api/* → même cible que SpanshProxyController.
+const string legacySpanshPrefix = "/spansh-api/api";
+app.Use((context, next) =>
+{
+    var path = context.Request.Path.Value;
+    if (path is not null && path.StartsWith(legacySpanshPrefix, StringComparison.Ordinal))
+    {
+        var tail = path.Length > legacySpanshPrefix.Length ? path[legacySpanshPrefix.Length..] : "";
+        context.Request.Path = "/api/spansh" + tail;
+    }
+    return next();
+});
+
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseMiddleware<LocalizationMiddleware>();
 

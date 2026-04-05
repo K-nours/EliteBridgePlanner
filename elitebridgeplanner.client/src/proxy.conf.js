@@ -13,16 +13,6 @@ const PROXY_CONFIG = [
     secure: false,
     changeOrigin: true,
     logLevel: "debug"
-  },
-  {
-    context: ["/spansh-api"],
-    target: "https://www.spansh.co.uk",
-    secure: true,
-    changeOrigin: true,
-    pathRewrite: {
-      "^/spansh-api": ""
-    },
-    logLevel: "debug"
   }
 ];
 
