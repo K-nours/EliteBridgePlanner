@@ -4,8 +4,8 @@ using Microsoft.EntityFrameworkCore;
 namespace GuildDashboard.Server.Services;
 
 /// <summary>
-/// Enrichissement coordonnées galactiques via EDSM (api-v1/systems?showCoordinates=1).
-/// Séparé du flux Inara, non bloquant. Peut être lancé après import réussi.
+/// Enrichissement coordonnées galactiques + classe spectrale principale via EDSM
+/// (<c>showCoordinates=1</c> + <c>showInformation=1</c>, champ <c>primaryStar.type</c>).
 /// </summary>
 public class EdsmCoordsEnrichmentService
 {
@@ -27,10 +27,9 @@ public class EdsmCoordsEnrichmentService
     }
 
     /// <summary>
-    /// Enrichit les GuildSystems avec les coordonnées EDSM. Mode batché.
-    /// Ne requête EDSM que pour les systèmes n'ayant pas encore de coords en base.
+    /// Enrichit les GuildSystems : coords et/ou PrimaryStarClass. Mode batché.
+    /// Ne requête EDSM que pour les systèmes sans coords complètes ou sans classe stellaire.
     /// </summary>
-    /// <param name="onProgress">(processed, total, status).</param>
     public async Task<EdsmCoordsEnrichmentResult> EnrichAfterImportAsync(
         int guildId,
         IReadOnlyList<string> systemNames,
@@ -40,21 +39,33 @@ public class EdsmCoordsEnrichmentService
         if (systemNames.Count == 0)
             return new EdsmCoordsEnrichmentResult(0, 0, null);
 
-        var distinctNames = systemNames.Distinct().ToList();
-        var alreadyHaveCoords = await _db.GuildSystems
+        var distinctNames = systemNames.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        var completeNames = await _db.GuildSystems
             .AsNoTracking()
-            .Where(s => s.GuildId == guildId && distinctNames.Contains(s.Name) && s.CoordsX != null && s.CoordsY != null && s.CoordsZ != null)
+            .Where(s =>
+                s.GuildId == guildId
+                && distinctNames.Contains(s.Name)
+                && s.CoordsX != null
+                && s.CoordsY != null
+                && s.CoordsZ != null
+                && s.PrimaryStarClass != null
+                && s.PrimaryStarClass != "")
             .Select(s => s.Name)
             .ToListAsync(ct);
-        var toFetch = distinctNames.Except(alreadyHaveCoords).ToList();
+
+        var complete = new HashSet<string>(completeNames, StringComparer.OrdinalIgnoreCase);
+        var toFetch = distinctNames.Where(n => !complete.Contains(n)).ToList();
+
         if (toFetch.Count == 0)
         {
-            _log.LogInformation("[EdsmCoords] Tous les systèmes ont déjà des coordonnées, skip");
-            return new EdsmCoordsEnrichmentResult(alreadyHaveCoords.Count, distinctNames.Count, null);
+            _log.LogInformation("[EdsmCoords] Tous les systèmes ont coords + PrimaryStarClass, skip");
+            await LogStarClassCoverageAsync(guildId, distinctNames, ct);
+            var n = await CountWithCoordsAsync(guildId, distinctNames, ct);
+            return new EdsmCoordsEnrichmentResult(n, distinctNames.Count, null);
         }
 
         var total = toFetch.Count;
-        var enriched = 0;
         Exception? lastEx = null;
         var batches = toFetch.Chunk(BatchSize).ToList();
         var processed = 0;
@@ -69,7 +80,7 @@ public class EdsmCoordsEnrichmentService
 
             try
             {
-                var coordsData = await _edsm.GetSystemsCoordsBatchAsync(batch, ct);
+                var data = await _edsm.GetSystemsCoordsBatchAsync(batch, ct);
                 processed += batch.Count;
 
                 onProgress?.Invoke(processed, total, "mise à jour");
@@ -79,16 +90,28 @@ public class EdsmCoordsEnrichmentService
                     .ToListAsync(ct);
                 var byName = guildSystemsByName.ToDictionary(s => s.Name, s => s, StringComparer.OrdinalIgnoreCase);
 
-                foreach (var (systemName, (x, y, z)) in coordsData)
+                foreach (var kv in data)
                 {
-                    if (byName.TryGetValue(systemName, out var gs))
+                    var systemName = kv.Key;
+                    var row = kv.Value;
+                    if (!byName.TryGetValue(systemName, out var gs))
+                        continue;
+
+                    if (row.X.HasValue && row.Y.HasValue && row.Z.HasValue)
                     {
-                        gs.CoordsX = x;
-                        gs.CoordsY = y;
-                        gs.CoordsZ = z;
-                        enriched++;
+                        if (gs.CoordsX == null || gs.CoordsY == null || gs.CoordsZ == null)
+                        {
+                            gs.CoordsX = row.X;
+                            gs.CoordsY = row.Y;
+                            gs.CoordsZ = row.Z;
+                        }
                     }
+
+                    var norm = EdsmStarClassNormalizer.Normalize(row.PrimaryStarTypeRaw);
+                    if (norm != null)
+                        gs.PrimaryStarClass = norm;
                 }
+
                 await _db.SaveChangesAsync(ct);
             }
             catch (Exception ex)
@@ -98,9 +121,41 @@ public class EdsmCoordsEnrichmentService
             }
         }
 
+        await LogStarClassCoverageAsync(guildId, distinctNames, ct);
+
         var error = lastEx?.Message;
-        var totalWithCoords = enriched + alreadyHaveCoords.Count;
-        return new EdsmCoordsEnrichmentResult(totalWithCoords, distinctNames.Count, error);
+        var finalWithCoords = await CountWithCoordsAsync(guildId, distinctNames, ct);
+        return new EdsmCoordsEnrichmentResult(finalWithCoords, distinctNames.Count, error);
+    }
+
+    private async Task<int> CountWithCoordsAsync(int guildId, IReadOnlyList<string> distinctNames, CancellationToken ct)
+    {
+        return await _db.GuildSystems
+            .AsNoTracking()
+            .CountAsync(s =>
+                s.GuildId == guildId
+                && distinctNames.Contains(s.Name)
+                && s.CoordsX != null
+                && s.CoordsY != null
+                && s.CoordsZ != null,
+                ct);
+    }
+
+    private async Task LogStarClassCoverageAsync(int guildId, IReadOnlyList<string> distinctNames, CancellationToken ct)
+    {
+        var total = await _db.GuildSystems
+            .AsNoTracking()
+            .CountAsync(s => s.GuildId == guildId && distinctNames.Contains(s.Name), ct);
+        var withStar = await _db.GuildSystems
+            .AsNoTracking()
+            .CountAsync(s =>
+                s.GuildId == guildId
+                && distinctNames.Contains(s.Name)
+                && s.PrimaryStarClass != null
+                && s.PrimaryStarClass != "",
+                ct);
+        var pct = total == 0 ? 0 : 100.0 * withStar / total;
+        _log.LogInformation("[StarClass] total={Total} withPrimaryStarClass={With} pct={Pct:F2}", total, withStar, pct);
     }
 }
 

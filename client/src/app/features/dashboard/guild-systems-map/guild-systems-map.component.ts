@@ -34,12 +34,6 @@ const JOURNAL_COLOR_VISITED = 0x00fff0;
 const JOURNAL_COLOR_DISCOVERED = 0xff3df2;
 const JOURNAL_COLOR_FULLSCAN = 0xfffc40;
 
-/** Halo additif (MeshBasicMaterial.opacity) — Cmdr & Faction identiques. */
-const HALO_OPACITY_INITIAL = 0.25;
-const HALO_OPACITY_VISIBLE = 0.25;
-const HALO_OPACITY_DIMMED = 0.05;
-const HALO_OPACITY_HOVER = 0.5;
-
 /** Low / others : même néon que « Visités » journal (distinct des pastels du panneau influence). */
 const CATEGORY_COLORS: Record<MapCategoryKey, number> = {
   origin: 0x00d4ff,
@@ -52,18 +46,19 @@ const CATEGORY_COLORS: Record<MapCategoryKey, number> = {
   others: JOURNAL_COLOR_VISITED,
 };
 
-/** Repères galactiques (coordonnées ED en années-lumière). */
+/**
+ * Repères galactiques (coordonnées ED en années-lumière).
+ * Couleurs stellaires : même logique que les systèmes (`inferStarPalette`), lettres spectrales
+ * alignées sur EDSM / fiche système ; **Sol = G, Colonia = F** vérifiés sur Inara.
+ */
 const GALACTIC_LANDMARKS = [
-  { id: 'sol', name: 'Sol', x: 0, y: 0, z: 0, color: 0xffdd44, region: 'Bulle' },
-  { id: 'ngc6357', name: 'NGC 6357 Sector KC-V c2-47', x: 946.81, y: 122.78, z: 8095.34, color: 0xffdd44, region: 'NGC 6357' },
+  { id: 'sol', name: 'Sol', x: 0, y: 0, z: 0, region: 'Bulle', primaryStarClass: 'G' }, // classe G (Inara)
   { id: 'sagA', name: 'Centre galactique', x: 25.22, y: -20.91, z: 25899.97, color: 0x9944ff },
-  { id: 'colonia', name: 'Colonia', x: -9530.5, y: -910.28, z: 19808.13, color: 0x00cc99, region: 'Colonia' },
-  { id: 'onoros', name: 'Onoros', x: 389.72, y: -379.94, z: -724.16, color: 0xddbb44, region: 'Witch Head' },
+  { id: 'colonia', name: 'Colonia', x: -9530.5, y: -910.28, z: 19808.13, region: 'Colonia', primaryStarClass: 'F' }, // classe F (Inara)
+  { id: 'onoros', name: 'Onoros', x: 389.72, y: -379.94, z: -724.16, region: 'Witch Head', primaryStarClass: 'K' }, // K (Yellow-Orange) Star
 ] as const;
 /** Convention ED : X inversé pour que Colonia soit à gauche du centre galactique vu depuis Sol. */
 const ED_TO_SCENE_X = (x: number) => -x;
-/** Facteur de tolérance pour le raycast (hit area = rayon_visuel * HIT_TOLERANCE). */
-const HIT_TOLERANCE = 2;
 /** Facteur de scale au survol. */
 const HOVER_SCALE = 1.3;
 
@@ -86,14 +81,184 @@ interface MapSystem extends GuildSystemBgsDto {
   isJournalCmdrPoint?: boolean;
 }
 
-/** Rayon du noyau (parsecs affichés) — plus large que l’ancien 1.15 pour la lisibilité. */
+/** Rayon de référence vue Cmdr (journal) — même hiérarchie visuelle que la vue Faction. */
 const CMDR_JOURNAL_CORE_RADIUS = 2.85;
-/** Halo additif (vue Faction & Cmdr) : rayon = noyau × ce facteur. */
-const MAP_SYSTEM_HALO_FACTOR = 1.35;
-/** Noyau : légère transparence pour laisser un peu voir au travers (halo / profondeur). */
-const MAP_SYSTEM_CORE_OPACITY = 0.92;
+
+/** Multiplicateur global sur l’alpha des shaders radiaux (étoile / influence). */
+const STAR_ALPHA_SCALE = 1.0;
+const INFLUENCE_DISK_OPACITY = 0.22;
+const RING_PRIMARY_OPACITY = 0.88;
+/** Anneau catégorie extérieur — plus discret (demi-largeur radiale vs ancienne version). */
+const RING_SECONDARY_OPACITY = 0.14;
+const DIM_FACTOR_CORE = 0.28;
+const DIM_FACTOR_INFLUENCE = 0.12;
+const DIM_FACTOR_RING1 = 0.35;
+const DIM_FACTOR_RING2 = 0.08;
+
+/** Épaisseur relative de la bordure filtre (≈ lisibilité « 2px » à l’échelle du disque). */
+const RING_PRIMARY_BORDER_FRAC = 0.022;
+
+/**
+ * Rayon extérieur du disque visuel (anneau secondaire / halo catégorie), aligné sur `buildSystemVisualGroup`.
+ * Sert au rayon de la sphère de picking : moitié de ce rayon pour limiter les chevauchements entre systèmes voisins.
+ */
+function visualSystemDiskOuterRadius(baseR: number): number {
+  const borderW = Math.max(0.04, baseR * RING_PRIMARY_BORDER_FRAC);
+  const ring1Outer = baseR + borderW;
+  const r2Inner = ring1Outer + borderW * 0.25;
+  const r2OuterFull = baseR * 1.28;
+  return r2Inner + (r2OuterFull - r2Inner) * 0.5;
+}
+
 /** Couleur par défaut si pas de calque : glaçage clair (pas gris terne). */
 const CMDR_JOURNAL_FALLBACK = 0x8effff;
+
+interface SystemVisualLayers {
+  /** Billboards : ShaderMaterial radial (étoile + disque influence). */
+  starCore: THREE.Mesh;
+  influenceDisk: THREE.Mesh;
+  ringPrimary: THREE.Mesh;
+  ringSecondary: THREE.Mesh;
+}
+
+const RADIAL_BILLBOARD_VERT = `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+/** Centre quasi blanc / saturé, dissipation progressive — pas de bord net. */
+const STAR_RADIAL_FRAG = `
+varying vec2 vUv;
+uniform vec3 uCoreColor;
+uniform float uAlphaScale;
+
+void main() {
+  vec2 p = vUv - 0.5;
+  float d = length(p) * 2.0;
+  vec3 col = mix(vec3(1.0), uCoreColor, smoothstep(0.0, 0.38, d));
+  float a = 1.0 - smoothstep(0.1, 0.995, d);
+  a *= smoothstep(1.0, 0.9, d);
+  a = pow(max(a, 0.0), 0.88);
+  gl_FragColor = vec4(col, a * uAlphaScale);
+}
+`;
+
+/** Influence : alpha fort au centre, fade jusqu’à quasi 0 sur le bord extérieur. */
+const INFLUENCE_RADIAL_FRAG = `
+varying vec2 vUv;
+uniform vec3 uTint;
+uniform float uAlphaScale;
+
+void main() {
+  vec2 p = vUv - 0.5;
+  float d = length(p) * 2.0;
+  float a = (1.0 - smoothstep(0.0, 0.99, d)) * uAlphaScale;
+  a *= 1.0 - smoothstep(0.68, 1.0, d);
+  gl_FragColor = vec4(uTint, a);
+}
+`;
+
+function createStarRadialMaterial(coreHex: number, alphaScale: number): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uCoreColor: { value: new THREE.Color(coreHex) },
+      uAlphaScale: { value: alphaScale },
+    },
+    vertexShader: RADIAL_BILLBOARD_VERT,
+    fragmentShader: STAR_RADIAL_FRAG,
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+  });
+}
+
+function createInfluenceRadialMaterial(tintHex: number, alphaScale: number): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uTint: { value: new THREE.Color(tintHex) },
+      uAlphaScale: { value: alphaScale },
+    },
+    vertexShader: RADIAL_BILLBOARD_VERT,
+    fragmentShader: INFLUENCE_RADIAL_FRAG,
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    side: THREE.DoubleSide,
+    blending: THREE.NormalBlending,
+  });
+}
+
+/**
+ * Lettre spectrale quand l’API n’a pas encore `primaryStarClass` (fallback carte).
+ * Référence joueur : **Sol = G, Colonia = F** (vérifié Inara) ; le reste inchangé.
+ */
+const KNOWN_SPECTRAL_LETTER_BY_SYSTEM_NAME: Record<string, string> = {
+  SOL: 'G',
+  COLONIA: 'F',
+  ONOROS: 'K',
+};
+
+/** Noyau stellaire + teinte du disque d’influence (plus pâle / désaturée). */
+function inferStarPalette(
+  primaryStarClass: string | null | undefined,
+  systemName: string,
+  isJournalCmdr: boolean,
+): { core: number; influence: number } {
+  if (isJournalCmdr) {
+    return { core: CMDR_JOURNAL_FALLBACK, influence: 0x5ec4c4 };
+  }
+  const nameKey = systemName.trim().toUpperCase();
+  const fromApi = (primaryStarClass ?? '').trim();
+  const fromKnown = KNOWN_SPECTRAL_LETTER_BY_SYSTEM_NAME[nameKey];
+  const raw = (fromApi || fromKnown || '').toUpperCase();
+  const first = raw.charAt(0);
+  // O, B, A → bleu ; K, M → rouge ; F / G distincts ; naines blanches / neutrons bleutées
+  if (first === 'O' || first === 'B' || first === 'A' || /WOLF|NEUTRON|WHITE DWARF|WD/i.test(raw)) {
+    return { core: 0x7ec8ff, influence: 0x4a88cc };
+  }
+  if (first === 'K' || first === 'M' || /RED|CARBON|BROWN/i.test(raw)) {
+    return { core: 0xff7744, influence: 0xcc5030 };
+  }
+  if (first === 'F') {
+    return { core: 0xfff0dd, influence: 0xc9b898 };
+  }
+  if (first === 'G' || /YELLOW/i.test(raw)) {
+    return { core: 0xffcc55, influence: 0xd4a82a };
+  }
+  // Fallback déterministe par nom (bleu / rouge / jaune) pour variété sans données spectrales
+  let h = 0;
+  const s = nameKey;
+  for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i);
+  const t = Math.abs(h) % 3;
+  if (t === 0) return { core: 0x88ccff, influence: 0x5599dd };
+  if (t === 1) return { core: 0xff9966, influence: 0xcc6644 };
+  return { core: 0xffee99, influence: 0xc9b85c };
+}
+
+/** Survol : éclaircit le noyau spectral au lieu d’un cyan fixe (qui masquait Sol, etc.). */
+function hoverStarCoreHex(spectralCoreHex: number): number {
+  const c = new THREE.Color(spectralCoreHex);
+  c.lerp(new THREE.Color(0xffffff), 0.4);
+  return c.getHex();
+}
+
+/** Sphère repère : couleur fixe (ex. Sag A*) ou noyau spectral comme le reste de la carte. */
+function landmarkSphereHex(lm: { name: string; color?: number; primaryStarClass?: string | null }): number {
+  if (lm.color !== undefined) return lm.color;
+  return inferStarPalette(lm.primaryStarClass, lm.name, false).core;
+}
+
+/** Assombrit légèrement une couleur néon pour le disque d’influence (lisibilité, pas un pâté opaque). */
+function tintForInfluenceDisk(hex: number): number {
+  const c = new THREE.Color(hex);
+  c.lerp(new THREE.Color(0x0a1620), 0.42);
+  return c.getHex();
+}
 
 const FILTER_TO_CATEGORY: Partial<Record<SystemsFilterValue, MapCategoryKey>> = {
   origin: 'origin',
@@ -139,10 +304,10 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   private controls: OrbitControls | null = null;
   private raycaster = new THREE.Raycaster();
   private mouse = new THREE.Vector2();
-  private meshMap = new Map<number, THREE.Mesh>();
+  /** Groupe racine par système (étoile + disque + anneaux) — position / scale hover / focus. */
+  private systemGroups = new Map<number, THREE.Group>();
+  private systemLayers = new Map<number, SystemVisualLayers>();
   private hitMeshMap = new Map<number, THREE.Mesh>();
-  /** Halos additifs (même techno Cmdr / Faction). */
-  private systemHaloById = new Map<number, THREE.Mesh>();
   private animationId = 0;
   private hoveredSystem: MapSystem | null = null;
 
@@ -265,6 +430,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.renderer.domElement.addEventListener('mousemove', (e) => this.onMouseMove(e));
     this.renderer.domElement.addEventListener('mouseleave', () => this.onMouseLeave());
     this.renderer.domElement.addEventListener('click', (e) => this.onClick(e));
+    this.renderer.domElement.addEventListener('dblclick', (e) => this.onDblClick(e));
 
     window.addEventListener('resize', () => this.onResize());
     this.updatePoints(false);
@@ -303,7 +469,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
       const r = 6;
       const geom = new THREE.SphereGeometry(r, 12, 10);
       const mat = new THREE.MeshBasicMaterial({
-        color: lm.color,
+        color: landmarkSphereHex(lm),
         transparent: true,
         opacity: 0.9,
       });
@@ -331,12 +497,11 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.tooltipData = null;
     if (this.renderer?.domElement?.style) this.renderer.domElement.style.cursor = 'default';
 
-    this.meshMap.forEach((m) => this.scene!.remove(m));
-    this.meshMap.clear();
+    this.systemGroups.forEach((g) => this.scene!.remove(g));
+    this.systemGroups.clear();
+    this.systemLayers.clear();
     this.hitMeshMap.forEach((m) => this.scene!.remove(m));
     this.hitMeshMap.clear();
-    for (const glow of this.systemHaloById.values()) this.scene!.remove(glow);
-    this.systemHaloById.clear();
 
     const list = this.buildMapPointsList();
     if (list.length === 0) return;
@@ -353,46 +518,12 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const cz = sumZ / n;
 
     for (const sys of list) {
-      const r = sys.isJournalCmdrPoint ? CMDR_JOURNAL_CORE_RADIUS : this.radiusFromInfluence(sys.influencePercent);
-      const color = sys.isJournalCmdrPoint ? CMDR_JOURNAL_FALLBACK : CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED;
-
-      const geometry = new THREE.SphereGeometry(r, 10, 8);
-      const material = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: MAP_SYSTEM_CORE_OPACITY,
-        depthTest: true,
-      });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(ED_TO_SCENE_X(sys.coordsX!), sys.coordsY!, sys.coordsZ!);
-      (mesh as THREE.Mesh & { systemData?: MapSystem }).systemData = sys;
-      mesh.name = `sys-${sys.id}`;
-      mesh.renderOrder = 2;
-      this.scene.add(mesh);
-      this.meshMap.set(sys.id, mesh);
-
-      const glowR = r * MAP_SYSTEM_HALO_FACTOR;
-      const glowGeom = new THREE.SphereGeometry(glowR, 10, 8);
-      const glowMat = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: HALO_OPACITY_INITIAL,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-      const glowMesh = new THREE.Mesh(glowGeom, glowMat);
-      glowMesh.position.copy(mesh.position);
-      glowMesh.renderOrder = 1;
-      this.scene.add(glowMesh);
-      this.systemHaloById.set(sys.id, glowMesh);
-
-      const hitRadius = r * HIT_TOLERANCE;
-      const hitGeom = new THREE.SphereGeometry(hitRadius, 8, 6);
-      const hitMat = new THREE.MeshBasicMaterial({ visible: false });
-      const hitMesh = new THREE.Mesh(hitGeom, hitMat);
-      hitMesh.position.copy(mesh.position);
-      (hitMesh as THREE.Mesh & { systemData?: MapSystem }).systemData = sys;
-      hitMesh.name = `hit-${sys.id}`;
+      const baseR = sys.isJournalCmdrPoint ? CMDR_JOURNAL_CORE_RADIUS : this.radiusFromInfluence(sys.influencePercent);
+      const pos = new THREE.Vector3(ED_TO_SCENE_X(sys.coordsX!), sys.coordsY!, sys.coordsZ!);
+      const { group, layers, hitMesh } = this.buildSystemVisualGroup(sys, baseR, pos);
+      this.scene.add(group);
+      this.systemGroups.set(sys.id, group);
+      this.systemLayers.set(sys.id, layers);
       this.scene.add(hitMesh);
       this.hitMeshMap.set(sys.id, hitMesh);
     }
@@ -432,6 +563,84 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const clamped = Math.max(pctMin, Math.min(pctMax, pct));
     const t = (clamped - pctMin) / (pctMax - pctMin);
     return minR + t * (maxR - minR);
+  }
+
+  /**
+   * Étoile centrale + disque d’influence + bordure catégorie + halo.
+   * Le raycast utilise une sphère invisible de rayon = moitié du disque total (bord extérieur du halo).
+   */
+  private buildSystemVisualGroup(
+    sys: MapSystem,
+    baseR: number,
+    pos: THREE.Vector3,
+  ): { group: THREE.Group; layers: SystemVisualLayers; hitMesh: THREE.Mesh } {
+    const group = new THREE.Group();
+    group.position.copy(pos);
+    group.userData['systemData'] = sys;
+    group.name = `sys-${sys.id}`;
+
+    const palette = inferStarPalette(sys.primaryStarClass, sys.name, !!sys.isJournalCmdrPoint);
+    const coreR = Math.max(0.12, baseR * 0.12);
+    /** Cercle billboard : le dégradé UV va à 0 sur le bord — pas de disque dur. */
+    const starBillboardR = coreR * 2.5;
+
+    const starGeom = new THREE.CircleGeometry(starBillboardR, 64);
+    const starMat = createStarRadialMaterial(palette.core, STAR_ALPHA_SCALE);
+    const starCore = new THREE.Mesh(starGeom, starMat);
+    starCore.renderOrder = 4;
+
+    const borderW = Math.max(0.04, baseR * RING_PRIMARY_BORDER_FRAC);
+    const ring1Inner = baseR;
+    const ring1Outer = ring1Inner + borderW;
+    const diskR = ring1Inner * 0.94;
+    const diskGeom = new THREE.CircleGeometry(diskR, 64);
+    const diskMat = createInfluenceRadialMaterial(palette.influence, INFLUENCE_DISK_OPACITY);
+    const influenceDisk = new THREE.Mesh(diskGeom, diskMat);
+    influenceDisk.renderOrder = 2;
+
+    const cat = CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED;
+    const ring1Geom = new THREE.RingGeometry(ring1Inner, ring1Outer, 64);
+    const ring1Mat = new THREE.MeshBasicMaterial({
+      color: cat,
+      transparent: true,
+      opacity: RING_PRIMARY_OPACITY,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const ringPrimary = new THREE.Mesh(ring1Geom, ring1Mat);
+    ringPrimary.renderOrder = 3;
+
+    const r2Inner = ring1Outer + borderW * 0.25;
+    const r2OuterFull = baseR * 1.28;
+    /** Moitié de l’extension radiale de l’ancien halo → moins envahissant. */
+    const r2Outer = r2Inner + (r2OuterFull - r2Inner) * 0.5;
+    const ring2Geom = new THREE.RingGeometry(r2Inner, r2Outer, 48);
+    const ring2Mat = new THREE.MeshBasicMaterial({
+      color: cat,
+      transparent: true,
+      opacity: RING_SECONDARY_OPACITY,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const ringSecondary = new THREE.Mesh(ring2Geom, ring2Mat);
+    ringSecondary.renderOrder = 1;
+
+    group.add(ringSecondary);
+    group.add(influenceDisk);
+    group.add(ringPrimary);
+    group.add(starCore);
+
+    const hitRadius = visualSystemDiskOuterRadius(baseR) * 0.5;
+    const hitGeom = new THREE.SphereGeometry(hitRadius, 10, 8);
+    const hitMat = new THREE.MeshBasicMaterial({ visible: false });
+    const hitMesh = new THREE.Mesh(hitGeom, hitMat);
+    hitMesh.position.copy(pos);
+    (hitMesh as THREE.Mesh & { systemData?: MapSystem }).systemData = sys;
+    hitMesh.name = `hit-${sys.id}`;
+
+    const layers: SystemVisualLayers = { starCore, influenceDisk, ringPrimary, ringSecondary };
+    return { group, layers, hitMesh };
   }
 
   private journalLayersActive(): boolean {
@@ -479,57 +688,75 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const journalOn = this.journalLayersActive();
     const cmdr = this.mapViewMode === 'cmdr';
 
-    for (const [id, mesh] of this.meshMap) {
-      const mat = mesh.material as THREE.MeshBasicMaterial;
-      const sys = (mesh as THREE.Mesh & { systemData?: MapSystem }).systemData;
+    for (const [id, layers] of this.systemLayers) {
+      const sys = this.systemGroups.get(id)?.userData?.['systemData'] as MapSystem | undefined;
       if (!sys) continue;
-      if (this.hoveredSystem?.id === id) {
-        mat.opacity = 1;
-        continue;
-      }
+      if (this.hoveredSystem?.id === id) continue;
+
+      const palette = inferStarPalette(sys.primaryStarClass, sys.name, !!sys.isJournalCmdrPoint);
+      const catHex = CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED;
+
+      const starMat = layers.starCore.material as THREE.ShaderMaterial;
+      const diskMat = layers.influenceDisk.material as THREE.ShaderMaterial;
+      const r1Mat = layers.ringPrimary.material as THREE.MeshBasicMaterial;
+      const r2Mat = layers.ringSecondary.material as THREE.MeshBasicMaterial;
+
+      r1Mat.color.setHex(catHex);
+      r2Mat.color.setHex(catHex);
+
+      let coreHex = palette.core;
+      let infHex = palette.influence;
+      let coreAlpha = STAR_ALPHA_SCALE;
+      let infOp = INFLUENCE_DISK_OPACITY;
+      let r1Op = RING_PRIMARY_OPACITY;
+      let r2Op = RING_SECONDARY_OPACITY;
+
       if (cmdr) {
         const matchJ = !journalOn || this.journalMatchesActiveLayers(sys);
-        mat.opacity = matchJ ? MAP_SYSTEM_CORE_OPACITY : 0.18;
         const accent = this.journalAccentColor(sys);
-        let coreHex: number;
         if (journalOn && accent != null && matchJ) {
           coreHex = accent;
-          mat.color.setHex(accent);
+          infHex = tintForInfluenceDisk(accent);
         } else if (!journalOn) {
-          coreHex = this.journalCmdrDefaultColor(sys);
-          mat.color.setHex(coreHex);
+          const c = this.journalCmdrDefaultColor(sys);
+          coreHex = c;
+          infHex = tintForInfluenceDisk(c);
         } else {
-          coreHex = CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED;
-          mat.color.setHex(coreHex);
+          coreHex = catHex;
+          infHex = tintForInfluenceDisk(catHex);
         }
-        const halo = this.systemHaloById.get(id);
-        if (halo) {
-          const hm = halo.material as THREE.MeshBasicMaterial;
-          hm.color.setHex(coreHex);
-          hm.opacity = matchJ ? HALO_OPACITY_VISIBLE : HALO_OPACITY_DIMMED;
+        if (!matchJ) {
+          coreAlpha *= DIM_FACTOR_CORE;
+          infOp *= DIM_FACTOR_INFLUENCE;
+          r1Op *= DIM_FACTOR_RING1;
+          r2Op *= DIM_FACTOR_RING2;
         }
-        continue;
-      }
-      const matchCat = !highlightCat || sys.mapCategory === highlightCat;
-      const matchJ = !journalOn || this.journalMatchesActiveLayers(sys);
-      const visible = matchCat && matchJ;
-      mat.opacity = visible ? MAP_SYSTEM_CORE_OPACITY : 0.2;
-
-      const accent = this.journalAccentColor(sys);
-      let coreHex: number;
-      if (journalOn && accent != null && matchJ && matchCat) {
-        coreHex = accent;
-        mat.color.setHex(accent);
       } else {
-        coreHex = CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED;
-        mat.color.setHex(coreHex);
+        const matchCat = !highlightCat || sys.mapCategory === highlightCat;
+        const matchJ = !journalOn || this.journalMatchesActiveLayers(sys);
+        const visible = matchCat && matchJ;
+        const accent = this.journalAccentColor(sys);
+        if (journalOn && accent != null && matchJ && matchCat) {
+          coreHex = accent;
+          infHex = tintForInfluenceDisk(accent);
+        } else {
+          coreHex = palette.core;
+          infHex = palette.influence;
+        }
+        if (!visible) {
+          coreAlpha *= DIM_FACTOR_CORE;
+          infOp *= DIM_FACTOR_INFLUENCE;
+          r1Op *= DIM_FACTOR_RING1;
+          r2Op *= DIM_FACTOR_RING2;
+        }
       }
-      const halo = this.systemHaloById.get(id);
-      if (halo) {
-        const hm = halo.material as THREE.MeshBasicMaterial;
-        hm.color.setHex(coreHex);
-        hm.opacity = visible ? HALO_OPACITY_VISIBLE : HALO_OPACITY_DIMMED;
-      }
+
+      starMat.uniforms['uCoreColor'].value.setHex(coreHex);
+      starMat.uniforms['uAlphaScale'].value = coreAlpha;
+      diskMat.uniforms['uTint'].value.setHex(infHex);
+      diskMat.uniforms['uAlphaScale'].value = infOp;
+      r1Mat.opacity = r1Op;
+      r2Mat.opacity = r2Op;
     }
   }
 
@@ -566,37 +793,36 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
 
   private clearHoverFocus(): void {
     if (this.hoveredSystem) {
-      const mesh = this.meshMap.get(this.hoveredSystem.id);
-      if (mesh) {
-        mesh.scale.setScalar(1);
-        mesh.renderOrder = 2;
-        const sys = (mesh as THREE.Mesh & { systemData?: MapSystem }).systemData;
-        if (sys) {
-          const mat = mesh.material as THREE.MeshBasicMaterial;
-          mat.color.setHex(CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED);
-          mat.depthTest = true;
-        }
+      const group = this.systemGroups.get(this.hoveredSystem.id);
+      const layers = this.systemLayers.get(this.hoveredSystem.id);
+      if (group) group.scale.setScalar(1);
+      if (layers) {
+        (layers.starCore.material as THREE.ShaderMaterial).depthTest = true;
+        (layers.influenceDisk.material as THREE.ShaderMaterial).depthTest = true;
       }
       this.updateVisualHighlight();
     }
   }
 
   private applyHoverFocus(systemId: number): void {
-    const mesh = this.meshMap.get(systemId);
-    if (!mesh) return;
-    mesh.scale.setScalar(HOVER_SCALE);
-    mesh.renderOrder = 10;
-    const mat = mesh.material as THREE.MeshBasicMaterial;
-    const sys = (mesh as THREE.Mesh & { systemData?: MapSystem }).systemData;
-    mat.opacity = 1;
-    mat.color.setHex(sys?.isJournalCmdrPoint ? 0xffffff : 0x00e5ff);
-    mat.depthTest = false;
-    const g = this.systemHaloById.get(systemId);
-    if (g) {
-      const gm = g.material as THREE.MeshBasicMaterial;
-      gm.color.setHex(0xffffff);
-      gm.opacity = HALO_OPACITY_HOVER;
-    }
+    const group = this.systemGroups.get(systemId);
+    const layers = this.systemLayers.get(systemId);
+    if (!group || !layers) return;
+    group.scale.setScalar(HOVER_SCALE);
+    const sys = group.userData['systemData'] as MapSystem | undefined;
+    const sm = layers.starCore.material as THREE.ShaderMaterial;
+    const dm = layers.influenceDisk.material as THREE.ShaderMaterial;
+    const r1 = layers.ringPrimary.material as THREE.MeshBasicMaterial;
+    const r2 = layers.ringSecondary.material as THREE.MeshBasicMaterial;
+    const pal = inferStarPalette(sys?.primaryStarClass, sys?.name ?? '', !!sys?.isJournalCmdrPoint);
+    const hoverCore = sys?.isJournalCmdrPoint ? 0xffffff : hoverStarCoreHex(pal.core);
+    sm.uniforms['uCoreColor'].value.setHex(hoverCore);
+    sm.uniforms['uAlphaScale'].value = Math.min(1.25, STAR_ALPHA_SCALE + 0.22);
+    sm.depthTest = false;
+    const curInf = dm.uniforms['uAlphaScale'].value as number;
+    dm.uniforms['uAlphaScale'].value = Math.min(0.42, curInf * 1.35);
+    r1.opacity = Math.min(1, RING_PRIMARY_OPACITY + 0.1);
+    r2.opacity = Math.min(0.28, RING_SECONDARY_OPACITY + 0.08);
   }
 
   private onClick(_event: MouseEvent): void {
@@ -620,6 +846,38 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     }
   }
 
+  /** Double-clic : recentre la vue Orbit sur le système sous le curseur (sans changer la logique de clic simple). */
+  private onDblClick(event: MouseEvent): void {
+    if (!this.raycaster || !this.camera || !this.controls) return;
+    event.preventDefault();
+    const rect = this.renderer!.domElement.getBoundingClientRect();
+    const nx = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(new THREE.Vector2(nx, ny), this.camera);
+    const hitMeshes = Array.from(this.hitMeshMap.values());
+    const hits = this.raycaster.intersectObjects(hitMeshes);
+    const hit = hits[0];
+    const sys: MapSystem | null = hit?.object
+      ? ((hit.object as THREE.Mesh & { systemData?: MapSystem }).systemData ?? null)
+      : null;
+    if (!sys) return;
+    this.centerCameraOnSystem(sys.id);
+  }
+
+  /** Pivot Orbit + caméra sur le système (même recul que le focus synchronisé panneau). */
+  private centerCameraOnSystem(id: number): void {
+    const group = this.systemGroups.get(id);
+    if (!group || !this.camera || !this.controls) return;
+    const pos = group.position.clone();
+    this.controls.target.copy(pos);
+    const dist = 80;
+    this.camera.position.set(pos.x + dist, pos.y + dist, pos.z + dist);
+    const orbitDist = this.camera.position.distanceTo(this.controls.target);
+    this.viewDistance = orbitDist;
+    this.zoomLevel = zoomLevelForViewDistance(orbitDist);
+    this.cdr.markForCheck();
+  }
+
   private onMouseLeave(): void {
     this.clearHoverFocus();
     this.hoveredSystem = null;
@@ -628,12 +886,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   }
 
   private focusOnSystemId(id: number): void {
-    const mesh = this.meshMap.get(id);
-    if (!mesh || !this.camera || !this.controls) return;
-    const pos = mesh.position.clone();
-    this.controls.target.copy(pos);
-    const dist = 80;
-    this.camera.position.set(pos.x + dist, pos.y + dist, pos.z + dist);
+    this.centerCameraOnSystem(id);
     this.guildSync.focusOnSystemId.set(null);
   }
 
@@ -749,6 +1002,15 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.animationId = requestAnimationFrame(this.animate);
     this.controls?.update();
     this.syncZoomSliderFromOrbit();
+    if (this.camera && this.systemLayers.size > 0) {
+      const camPos = this.camera.position;
+      for (const layers of this.systemLayers.values()) {
+        layers.starCore.lookAt(camPos);
+        layers.influenceDisk.lookAt(camPos);
+        layers.ringPrimary.lookAt(camPos);
+        layers.ringSecondary.lookAt(camPos);
+      }
+    }
     if (this.landmarksVisible && this.camera && this.renderer && this.landmarkPositions.length > 0) {
       const rect = this.renderer.domElement.getBoundingClientRect();
       const w = rect.width;
@@ -797,12 +1059,17 @@ function syntheticJournalId(systemName: string): number {
   return h <= 0 ? h - 1 : -h;
 }
 
-const GUILD_CATEGORY_SCAN_ORDER: { cat: MapCategoryKey; key: keyof GuildSystemsResponseInput }[] = [
-  { cat: 'origin', key: 'origin' },
+/**
+ * Priorité décroissante : si un même système (même `id`) est présent dans plusieurs listes API
+ * (ex. origine + siège), une seule entrée carte doit être créée — sinon deux groupes 3D se superposent
+ * (effet « double disque » / anneaux doublés).
+ */
+const GUILD_CATEGORY_PRIORITY: { cat: MapCategoryKey; key: keyof GuildSystemsResponseInput }[] = [
   { cat: 'headquarter', key: 'headquarter' },
   { cat: 'surveillance', key: 'surveillance' },
   { cat: 'conflicts', key: 'conflicts' },
   { cat: 'critical', key: 'critical' },
+  { cat: 'origin', key: 'origin' },
   { cat: 'low', key: 'low' },
   { cat: 'healthy', key: 'healthy' },
   { cat: 'others', key: 'others' },
@@ -813,7 +1080,7 @@ function findGuildMatchForJournalName(
   systems: GuildSystemsResponseInput,
 ): { sys: GuildSystemBgsDto; cat: MapCategoryKey } | null {
   const key = name.trim().toUpperCase();
-  for (const { cat, key: arrKey } of GUILD_CATEGORY_SCAN_ORDER) {
+  for (const { cat, key: arrKey } of GUILD_CATEGORY_PRIORITY) {
     for (const s of systems[arrKey] ?? []) {
       if (s.name.trim().toUpperCase() === key) return { sys: s, cat };
     }
@@ -859,11 +1126,12 @@ function journalDtoToMapSystemMerged(
 
 /** Vue Faction uniquement : systèmes guilde enrichis (coords EDSM), sans passer par le journal CMDR. */
 function guildInputToFactionMapSystems(input: GuildSystemsResponseInput): MapSystem[] {
-  const list: MapSystem[] = [];
-  for (const { cat, key: arrKey } of GUILD_CATEGORY_SCAN_ORDER) {
+  const byId = new Map<number, MapSystem>();
+  for (const { cat, key: arrKey } of GUILD_CATEGORY_PRIORITY) {
     for (const s of input[arrKey] ?? []) {
       if (s.coordsX == null || s.coordsY == null || s.coordsZ == null) continue;
-      list.push({
+      if (byId.has(s.id)) continue;
+      byId.set(s.id, {
         ...s,
         coordsX: s.coordsX,
         coordsY: s.coordsY,
@@ -873,7 +1141,7 @@ function guildInputToFactionMapSystems(input: GuildSystemsResponseInput): MapSys
       });
     }
   }
-  return list;
+  return Array.from(byId.values());
 }
 
 function emptyInput(): GuildSystemsResponseInput {

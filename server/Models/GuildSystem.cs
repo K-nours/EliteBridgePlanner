@@ -32,4 +32,6 @@ public class GuildSystem
     public double? CoordsY { get; set; }
     /// <summary>Coordonnée Z galactique (EDSM). Null si non enrichi.</summary>
     public double? CoordsZ { get; set; }
+    /// <summary>Classe spectrale principale normalisée (O,B,A,F,G,K,M,…), source EDSM primaryStar.type.</summary>
+    public string? PrimaryStarClass { get; set; }
 }

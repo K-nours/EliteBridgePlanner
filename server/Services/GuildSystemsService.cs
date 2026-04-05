@@ -422,7 +422,8 @@ public class GuildSystemsService
             gs.InaraUrl,
             gs.CoordsX,
             gs.CoordsY,
-            gs.CoordsZ
+            gs.CoordsZ,
+            gs.PrimaryStarClass
         );
     }
 }
