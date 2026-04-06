@@ -165,12 +165,59 @@
   text-shadow: var(--glow);
 }
 
-.stat-progress {
+.stats-bar-right {
   position: absolute;
   right: v.$spacing-lg;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: v.$spacing-md;
+  max-width: min(420px, 45vw);
+}
+
+.stats-501-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.stats-501-btn {
+  font-family: v.$font-ui;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  background: rgba(0, 212, 255, 0.08);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  cursor: pointer;
+  transition: v.$transition-fast;
+
+  &:hover:not(:disabled) {
+    background: rgba(0, 212, 255, 0.15);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.stats-501-msg {
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  text-align: right;
+  line-height: 1.25;
+  max-width: 260px;
+}
+
+.stat-progress {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 // ── Body layout ───────────────────────────────────────────────────────────

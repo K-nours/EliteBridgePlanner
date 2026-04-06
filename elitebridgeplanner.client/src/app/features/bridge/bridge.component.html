@@ -68,9 +68,24 @@
           <span class="stat-val">{{ store.stats().tabliers }}</span>
         </div>
       </div>
-      <div class="stat-progress">
-        <span class="stat-label">{{'COMMON.COMPLETION' | translate}}</span>
-        <span class="stat-val accent">{{ store.stats().completion }}%</span>
+      <div class="stats-bar-right">
+        <div class="stats-501-wrap">
+          <button
+            type="button"
+            class="stats-501-btn"
+            [disabled]="sendingTo501() || store.orderedSystems().length === 0"
+            (click)="sendRouteTo501Dashboard()"
+            title="Envoie la route vers le dashboard 501 (vue Pont galactique)">
+            {{ sendingTo501() ? 'Envoi…' : 'Carte 501' }}
+          </button>
+          @if (send501Message(); as msg) {
+            <span class="stats-501-msg">{{ msg }}</span>
+          }
+        </div>
+        <div class="stat-progress">
+          <span class="stat-label">{{'COMMON.COMPLETION' | translate}}</span>
+          <span class="stat-val accent">{{ store.stats().completion }}%</span>
+        </div>
       </div>
     </div>
   }

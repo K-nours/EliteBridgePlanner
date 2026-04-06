@@ -14,6 +14,8 @@ import { GuildSettingsService } from '../../core/services/guild-settings.service
 import { InaraSyncBridgeService } from '../../core/services/inara-sync-bridge.service';
 import { SyncHelpModalService } from '../../core/services/sync-help-modal.service';
 import { FrontierJournalApiService } from '../../core/services/frontier-journal-api.service';
+import { BridgeRouteApiService } from '../../core/services/bridge-route-api.service';
+import type { BridgeRoute } from '@elite-bridge-shared/bridge-planner-route';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
 import type { SystemsFilterValue } from '../../core/models/guild-systems.model';
@@ -146,7 +148,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                   [journalLayerVisited]="journalMapLayerVisited()"
                   [journalLayerDiscovered]="journalMapLayerDiscovered()"
                   [journalLayerFullScan]="journalMapLayerFullScan()"
-                  [journalByName]="journalDerivedByName()" />
+                  [journalByName]="journalDerivedByName()"
+                  [bridgePlannerRoute]="bridgePlannerRoute()" />
               </div>
               @if (mapViewMode() === 'faction') {
               <div class="map-filter-counters" role="group" aria-label="Filtres BGS carte">
@@ -1816,6 +1819,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly AVATAR_DEFAULT_FALLBACK_URL = AVATAR_DEFAULT_FALLBACK_URL;
   protected readonly guildSystemsSync = inject(GuildSystemsSyncService);
   private readonly guildSystemsApi = inject(GuildSystemsApiService);
+  private readonly bridgeRouteApi = inject(BridgeRouteApiService);
+  /** Route BridgePlanner (GET /api/bridge-route) pour la vue Pont galactique. */
+  protected readonly bridgePlannerRoute = signal<BridgeRoute | null>(null);
+  private bridgeRoutePollRef: ReturnType<typeof setInterval> | null = null;
   private journalUnifiedPollingRef: ReturnType<typeof setInterval> | null = null;
   private journalUnifiedExpectComplete = false;
   /** Évite les doublons dans les logs pour le même libellé de progression. */
@@ -1940,6 +1947,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   /** Un seul filtre carte à la fois : changement de vue réinitialise l’autre côté. */
   protected onMapViewFaction(): void {
+    this.stopBridgeRoutePolling();
     this.mapViewMode.set('faction');
     this.journalMapLayerVisited.set(false);
     this.journalMapLayerDiscovered.set(false);
@@ -1947,16 +1955,42 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   protected onMapViewCmdr(): void {
+    this.stopBridgeRoutePolling();
     this.mapViewMode.set('cmdr');
     this.guildSystemsSync.systemsFilter.set('all');
   }
 
   protected onMapViewGalacticBridge(): void {
+    this.stopBridgeRoutePolling();
     this.mapViewMode.set('galacticBridge');
     this.guildSystemsSync.systemsFilter.set('all');
     this.journalMapLayerVisited.set(false);
     this.journalMapLayerDiscovered.set(false);
     this.journalMapLayerFullScan.set(false);
+    this.refreshBridgeRouteFromServer();
+    this.bridgeRoutePollRef = setInterval(() => this.refreshBridgeRouteFromServer(), 8000);
+  }
+
+  private stopBridgeRoutePolling(): void {
+    if (this.bridgeRoutePollRef) {
+      clearInterval(this.bridgeRoutePollRef);
+      this.bridgeRoutePollRef = null;
+    }
+  }
+
+  private refreshBridgeRouteFromServer(): void {
+    this.bridgeRouteApi.getLatest().subscribe({
+      next: (p) => {
+        console.debug('[Dashboard] bridge-route stocké dans bridgePlannerRoute', {
+          count: p?.points?.length ?? 0,
+        });
+        this.bridgePlannerRoute.set(p);
+      },
+      error: (err: unknown) => {
+        // Ne pas effacer une route déjà reçue (ex. erreur réseau / CORS ponctuelle).
+        console.error('[Dashboard] bridge-route GET — route conservée si déjà chargée', err);
+      },
+    });
   }
 
   /** Calques journal exclusifs ; reclic sur l’actif désactive. Réinitialise le filtre Faction sur « Total ». */
@@ -2579,5 +2613,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopJournalUnifiedPolling();
+    this.stopBridgeRoutePolling();
   }
 }

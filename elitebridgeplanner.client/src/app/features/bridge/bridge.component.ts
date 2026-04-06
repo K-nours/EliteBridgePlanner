@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, computed } from '@angular/core';
+import { Component, inject, OnInit, computed, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { BridgeStore } from '../../core/services/bridge.store';
 import { AuthService } from '../../core/auth/auth.service';
@@ -9,6 +9,7 @@ import { SystemListComponent } from './system-list/system-list.component';
 import { SystemDetailComponent } from './system-detail/system-detail.component';
 import { StationsPanelComponent } from './stations-panel/stations-panel.component';
 import { TranslateModule } from '@ngx-translate/core';
+import { BridgeRoute501Service } from '../../core/services/bridge-route-501.service';
 
 @Component({
   selector: 'app-bridge',
@@ -29,6 +30,11 @@ export class BridgeComponent implements OnInit {
   readonly store = inject(BridgeStore);
   readonly authService = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
+  private readonly bridgeRoute501 = inject(BridgeRoute501Service);
+
+  /** Envoi route vers le dashboard 501 (carte Pont galactique). */
+  readonly sendingTo501 = signal(false);
+  readonly send501Message = signal<string | null>(null);
 
   readonly bridgeLabel = computed(() => {
     const systems = this.store.orderedSystems();
@@ -51,5 +57,20 @@ export class BridgeComponent implements OnInit {
 
   logout(): void {
     this.authService.logout();
+  }
+
+  sendRouteTo501Dashboard(): void {
+    this.send501Message.set(null);
+    this.sendingTo501.set(true);
+    this.bridgeRoute501.sendActiveBridgeTo501().subscribe({
+      next: (r) => {
+        this.sendingTo501.set(false);
+        this.send501Message.set(`Carte 501 : ${r.pointCount} point(s) envoyé(s). Ouvrez la vue « Pont galactique ».`);
+      },
+      error: (e: Error) => {
+        this.sendingTo501.set(false);
+        this.send501Message.set(e?.message ?? 'Envoi vers 501 impossible.');
+      },
+    });
   }
 }

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using EliteBridgePlanner.Server.Auth;
 using EliteBridgePlanner.Server.Data;
 using EliteBridgePlanner.Server.Data.Seed;
@@ -86,13 +87,33 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
-// ── CORS — Angular dev server ─────────────────────────────────────────────
+// ── CORS — dev : tout localhost (ports variables ng serve) ; prod : origines fixes ──
 builder.Services.AddCors(options =>
     options.AddPolicy("AngularDev", policy =>
-        policy.WithOrigins("https://localhost:61358", "https://localhost:4200", "https://127.0.0.1:4200", "http://localhost:4200", "http://127.0.0.1:4200")
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-    )
+    {
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.SetIsOriginAllowed(static origin =>
+            {
+                if (string.IsNullOrEmpty(origin)) return false;
+                try
+                {
+                    var uri = new Uri(origin);
+                    return uri.Host is "localhost" or "127.0.0.1";
+                }
+                catch (UriFormatException)
+                {
+                    return false;
+                }
+            });
+        }
+        else
+        {
+            policy.WithOrigins("https://localhost:61358", "https://localhost:4200", "https://127.0.0.1:4200", "http://localhost:4200", "http://127.0.0.1:4200");
+        }
+
+        policy.AllowAnyHeader().AllowAnyMethod();
+    })
 );
 
 // ── HttpClient (Spansh API) ───────────────────────────────────────────────
@@ -103,11 +124,14 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IBridgeService, BridgeService>();
 builder.Services.AddScoped<ISpanshRouteService, SpanshRouteService>();
 builder.Services.AddScoped<DataSeeder>();
+builder.Services.AddSingleton<BridgeRouteStore>();
 
 // ── Controllers + JSON ────────────────────────────────────────────────────
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
+        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.CamelCase;
         // Sérialiser les enums en string (PLANIFIE, FINI...) au lieu de int
         options.JsonSerializerOptions.Converters
             .Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
@@ -151,9 +175,13 @@ app.Use((context, next) =>
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseMiddleware<LocalizationMiddleware>();
 
-// Fichiers statiques du build Angular AVANT auth (accès public aux .js, .css)
+// Fichiers statiques : uniquement hors /api — sinon POST/GET /api/* peut être traité comme ressource statique (405 Method Not Allowed).
 if (webRootPath != null)
-    app.UseStaticFiles(new StaticFileOptions { FileProvider = new PhysicalFileProvider(webRootPath) });
+{
+    app.UseWhen(
+        ctx => !ctx.Request.Path.StartsWithSegments("/api"),
+        sub => sub.UseStaticFiles(new StaticFileOptions { FileProvider = new PhysicalFileProvider(webRootPath) }));
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -167,8 +195,21 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// Fallback SPA : index.html pour le routing côté client
-app.MapFallbackToFile("index.html");
+// Fallback SPA : ne pas intercepter /api/* (sinon conflit de méthodes avec MapFallbackToFile sur POST, etc.).
+if (webRootPath != null)
+{
+    app.MapFallback(async (HttpContext context) =>
+    {
+        if (context.Request.Path.StartsWithSegments("/api"))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        context.Response.ContentType = "text/html; charset=utf-8";
+        await context.Response.SendFileAsync(Path.Combine(webRootPath, "index.html"));
+    });
+}
 
 app.Run();
 

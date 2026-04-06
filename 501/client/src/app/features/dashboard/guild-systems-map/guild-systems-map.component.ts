@@ -18,6 +18,7 @@ import type { GuildSystemBgsDto } from '../../../core/models/guild-systems.model
 import type { SystemsFilterValue } from '../../../core/models/guild-systems.model';
 import { GuildSystemsSyncService } from '../../../core/services/guild-systems-sync.service';
 import type { FrontierJournalSystemDerivedDto } from '../../../core/services/frontier-journal-api.service';
+import type { BridgeRoute } from '@elite-bridge-shared/bridge-planner-route';
 
 export type MapCategoryKey =
   | 'origin'
@@ -80,6 +81,9 @@ const HOVER_SCALE = 1.3;
 
 /** Décalage vertical (px) des libellés repères : sous le point projeté pour ne pas masquer l’étoile / le système. */
 const LANDMARK_LABEL_OFFSET_Y_PX = 40;
+
+/** Points BridgePlanner sur la carte — taille fixe (Ly ≈ unités scène). */
+const BRIDGE_ROUTE_NODE_RADIUS = 3.6;
 
 /** Distance caméra ↔ cible : molette OrbitControls et curseur identiques. */
 const MAP_ZOOM_DISTANCE_MIN = 5;
@@ -164,9 +168,6 @@ function visualSystemDiskOuterRadius(baseR: number): number {
   const r2OuterFull = baseR * 1.28;
   return r2Inner + (r2OuterFull - r2Inner) * 0.5;
 }
-
-/** Couleur par défaut si pas de calque : glaçage clair (pas gris terne). */
-const CMDR_JOURNAL_FALLBACK = 0x8effff;
 
 interface SystemVisualLayers {
   /** Billboards : ShaderMaterial radial (étoile + disque influence). */
@@ -259,15 +260,11 @@ const KNOWN_SPECTRAL_LETTER_BY_SYSTEM_NAME: Record<string, string> = {
   'BEAGLE POINT': 'K',
 };
 
-/** Noyau stellaire + teinte du disque d’influence (plus pâle / désaturée). */
+/** Noyau stellaire + teinte du disque d’influence (plus pâle / désaturée). Vue Faction et Cmdr. */
 function inferStarPalette(
   primaryStarClass: string | null | undefined,
   systemName: string,
-  isJournalCmdr: boolean,
 ): { core: number; influence: number } {
-  if (isJournalCmdr) {
-    return { core: CMDR_JOURNAL_FALLBACK, influence: 0x5ec4c4 };
-  }
   const nameKey = systemName.trim().toUpperCase();
   const fromApi = (primaryStarClass ?? '').trim();
   const fromKnown = KNOWN_SPECTRAL_LETTER_BY_SYSTEM_NAME[nameKey];
@@ -345,6 +342,9 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   /** Clé = nom système normalisé (uppercase trim), valeurs depuis GET derived/systems. */
   @Input() journalByName: Record<string, { isVisited: boolean; hasFirstDiscoveryBody: boolean; isFullScanned: boolean }> = {};
 
+  /** Route envoyée depuis BridgePlanner (GET /api/bridge-route) — couleurs déjà résolues (colorHex). */
+  @Input() bridgePlannerRoute: BridgeRoute | null = null;
+
   private readonly guildSync = inject(GuildSystemsSyncService);
   private readonly cdr = inject(ChangeDetectorRef);
 
@@ -392,6 +392,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   private landmarkHitMeshes: THREE.Mesh[] = [];
   private landmarkLayers: SystemVisualLayers[] = [];
   private landmarkPositions: THREE.Vector3[] = [];
+  /** Ligne + sphères BridgePlanner (vue Pont galactique). */
+  private bridgeRouteGroup: THREE.Group | null = null;
 
   constructor() {
     effect(() => {
@@ -405,6 +407,9 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
    * Vue Cmdr : pas de points si le journal parsé n’a aucune coordonnée StarPos.
    */
   hasNoCoords(): boolean {
+    if (this.mapViewMode === 'galacticBridge') {
+      return (this.bridgePlannerRoute?.points?.length ?? 0) === 0;
+    }
     return this.buildMapPointsList().length === 0;
   }
 
@@ -434,11 +439,22 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const systemsCh = !!changes['systems'];
     const modeCh = !!changes['mapViewMode'];
     const journalCh = !!changes['journalCmdrPoints'];
+    const bridgeCh = !!changes['bridgePlannerRoute'];
+    if (bridgeCh) {
+      const cur = this.bridgePlannerRoute;
+      console.debug('[GuildSystemsMap] @Input bridgePlannerRoute', {
+        pointCount: cur?.points?.length ?? 0,
+        mode: this.mapViewMode,
+      });
+    }
     /** Changement Faction / Cmdr / Pont uniquement : ne pas recadrer la caméra. */
-    const preserveCamera = modeCh && !systemsCh && !journalCh;
+    const preserveCamera = modeCh && !systemsCh && !journalCh && !bridgeCh;
 
-    if (systemsCh || modeCh || journalCh) {
-      if (this.scene) this.updatePoints(preserveCamera);
+    if (systemsCh || modeCh || journalCh || bridgeCh) {
+      if (this.scene) {
+        if (modeCh) this.addLandmarks();
+        this.updatePoints(preserveCamera);
+      }
     } else if (
       (changes['systemsFilter'] ||
         changes['journalLayerVisited'] ||
@@ -540,7 +556,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
         sys,
         STAR_MAP_NO_FACTION_BASE_R,
         pos,
-        paletteOpts,
+        { ...paletteOpts, cmdrMinimalGlow: this.mapViewMode === 'cmdr' },
       );
       group.name = `landmark-group-${lm.id}`;
       hitMesh.name = `landmark-${lm.id}`;
@@ -596,68 +612,159 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
 
     const list = this.buildMapPointsList();
     this.syncLandmarkMeshesWithFactionSystems();
-    if (list.length === 0) return;
 
-    let sumX = 0, sumY = 0, sumZ = 0;
-    for (const sys of list) {
-      sumX += ED_TO_SCENE_X(sys.coordsX!);
-      sumY += sys.coordsY!;
-      sumZ += sys.coordsZ!;
+    if (list.length > 0) {
+      let sumX = 0,
+        sumY = 0,
+        sumZ = 0;
+      for (const sys of list) {
+        sumX += ED_TO_SCENE_X(sys.coordsX!);
+        sumY += sys.coordsY!;
+        sumZ += sys.coordsZ!;
+      }
+      const n = list.length;
+      const cx = sumX / n;
+      const cy = sumY / n;
+      const cz = sumZ / n;
+
+      const cmdrView = this.mapViewMode === 'cmdr';
+      for (const sys of list) {
+        /** En vue Cmdr, taille unique (sinon HQ / sync guilde + journal → `radiusFromInfluence` → énormes cercles). */
+        const baseR = cmdrView
+          ? CMDR_JOURNAL_CORE_RADIUS
+          : hasFactionInfluenceOnMap(sys)
+            ? this.radiusFromInfluence(sys.influencePercent)
+            : STAR_MAP_NO_FACTION_BASE_R;
+        const pos = new THREE.Vector3(ED_TO_SCENE_X(sys.coordsX!), sys.coordsY!, sys.coordsZ!);
+        const { group, layers, hitMesh } = this.buildSystemVisualGroup(sys, baseR, pos, {
+          cmdrMinimalGlow: cmdrView,
+        });
+        this.scene.add(group);
+        this.systemGroups.set(sys.id, group);
+        this.systemLayers.set(sys.id, layers);
+        this.scene.add(hitMesh);
+        this.hitMeshMap.set(sys.id, hitMesh);
+      }
+      this.updateVisualHighlight();
+
+      const defaultDist = DEFAULT_MAP_VIEW_DISTANCE;
+      const defaultViewDir = new THREE.Vector3(1, 1, 1).normalize();
+
+      const hqSys = list.find(
+        (s) => s.mapCategory === 'headquarter' && s.coordsX != null && s.coordsY != null && s.coordsZ != null,
+      );
+
+      if (hqSys) {
+        this.viewCenter.set(ED_TO_SCENE_X(hqSys.coordsX!), hqSys.coordsY!, hqSys.coordsZ!);
+      } else {
+        this.viewCenter.set(cx, cy, cz);
+      }
+
+      if (!preserveCamera) {
+        this.controls.target.copy(this.viewCenter);
+        this.zoomLevel = zoomLevelForViewDistance(defaultDist);
+        this.viewDistance = defaultDist;
+        this.camera.position.copy(this.viewCenter).add(defaultViewDir.clone().multiplyScalar(defaultDist));
+      } else {
+        const dist = this.camera.position.distanceTo(this.controls.target);
+        this.viewDistance = dist;
+        this.zoomLevel = zoomLevelForViewDistance(dist);
+      }
     }
-    const n = list.length;
-    const cx = sumX / n;
-    const cy = sumY / n;
-    const cz = sumZ / n;
 
-    for (const sys of list) {
-      const baseR = sys.isJournalCmdrPoint
-        ? CMDR_JOURNAL_CORE_RADIUS
-        : hasFactionInfluenceOnMap(sys)
-          ? this.radiusFromInfluence(sys.influencePercent)
-          : STAR_MAP_NO_FACTION_BASE_R;
-      const pos = new THREE.Vector3(ED_TO_SCENE_X(sys.coordsX!), sys.coordsY!, sys.coordsZ!);
-      const { group, layers, hitMesh } = this.buildSystemVisualGroup(sys, baseR, pos);
-      this.scene.add(group);
-      this.systemGroups.set(sys.id, group);
-      this.systemLayers.set(sys.id, layers);
-      this.scene.add(hitMesh);
-      this.hitMeshMap.set(sys.id, hitMesh);
-    }
-    this.updateVisualHighlight();
+    this.rebuildBridgeRouteLayer(preserveCamera);
 
-    const defaultDist = DEFAULT_MAP_VIEW_DISTANCE;
-    const defaultViewDir = new THREE.Vector3(1, 1, 1).normalize();
-
-    const hqSys = list.find(
-      (s) => s.mapCategory === 'headquarter' && s.coordsX != null && s.coordsY != null && s.coordsZ != null,
-    );
-
-    if (hqSys) {
-      this.viewCenter.set(ED_TO_SCENE_X(hqSys.coordsX!), hqSys.coordsY!, hqSys.coordsZ!);
-    } else {
-      this.viewCenter.set(cx, cy, cz);
-    }
-
-    if (!preserveCamera) {
-      this.controls.target.copy(this.viewCenter);
-      this.zoomLevel = zoomLevelForViewDistance(defaultDist);
-      this.viewDistance = defaultDist;
-      this.camera.position.copy(this.viewCenter).add(defaultViewDir.clone().multiplyScalar(defaultDist));
-    } else {
-      const dist = this.camera.position.distanceTo(this.controls.target);
-      this.viewDistance = dist;
-      this.zoomLevel = zoomLevelForViewDistance(dist);
+    if (list.length === 0 && !this.hasBridgeRouteToShow()) {
+      return;
     }
   }
 
-  /** Noyau : rayon minR → maxR selon influence 1–80 % (écart large pour lisibilité). */
+  private hasBridgeRouteToShow(): boolean {
+    return this.mapViewMode === 'galacticBridge' && (this.bridgePlannerRoute?.points?.length ?? 0) > 0;
+  }
+
+  private parseBridgePlannerColorHex(hex: string): number {
+    const s = hex?.trim() ?? '';
+    if (s.startsWith('#') && s.length >= 7) {
+      const n = parseInt(s.slice(1, 7), 16);
+      return Number.isNaN(n) ? 0x00d4ff : n;
+    }
+    return 0x00d4ff;
+  }
+
+  /**
+   * Pont BridgePlanner : sphères + segments — couleurs = `colorHex` du payload (aucun mapping local).
+   */
+  private rebuildBridgeRouteLayer(preserveCamera: boolean): void {
+    if (!this.scene) return;
+    if (this.bridgeRouteGroup) {
+      this.scene.remove(this.bridgeRouteGroup);
+      this.bridgeRouteGroup = null;
+    }
+
+    if (this.mapViewMode !== 'galacticBridge') return;
+    const pts = this.bridgePlannerRoute?.points;
+    if (!pts?.length) {
+      console.debug('[GuildSystemsMap] rebuildBridgeRouteLayer — aucun point', {
+        hasRoute: !!this.bridgePlannerRoute,
+      });
+      return;
+    }
+
+    console.debug('[GuildSystemsMap] rebuildBridgeRouteLayer — rendu', { n: pts.length });
+
+    const g = new THREE.Group();
+    g.name = 'bridge-planner-route';
+    const positions: THREE.Vector3[] = [];
+
+    for (const p of pts) {
+      const pos = new THREE.Vector3(ED_TO_SCENE_X(p.lng), p.y, p.lat);
+      positions.push(pos);
+      const hex = this.parseBridgePlannerColorHex(p.colorHex);
+      const mat = new THREE.MeshBasicMaterial({ color: hex, transparent: true, opacity: 0.95 });
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(BRIDGE_ROUTE_NODE_RADIUS, 20, 16), mat);
+      mesh.position.copy(pos);
+      g.add(mesh);
+    }
+
+    for (let i = 0; i < positions.length - 1; i++) {
+      const geom = new THREE.BufferGeometry().setFromPoints([positions[i], positions[i + 1]]);
+      const mat = new THREE.LineBasicMaterial({
+        color: this.parseBridgePlannerColorHex(pts[i].colorHex),
+        transparent: true,
+        opacity: 0.72,
+      });
+      g.add(new THREE.Line(geom, mat));
+    }
+
+    this.scene.add(g);
+    this.bridgeRouteGroup = g;
+
+    if (!preserveCamera && this.camera && this.controls) {
+      const center = new THREE.Vector3();
+      for (const v of positions) center.add(v);
+      center.multiplyScalar(1 / positions.length);
+      let maxD = 80;
+      for (const v of positions) maxD = Math.max(maxD, center.distanceTo(v));
+      const dist = Math.min(MAP_ZOOM_DISTANCE_MAX, Math.max(120, maxD * 3.5));
+      this.viewCenter.copy(center);
+      this.controls.target.copy(center);
+      this.viewDistance = dist;
+      this.zoomLevel = zoomLevelForViewDistance(dist);
+      const dir = new THREE.Vector3(1, 0.55, 1).normalize();
+      this.camera.position.copy(center).add(dir.multiplyScalar(dist));
+    }
+  }
+
+  /**
+   * Disque d’influence : rayon proportionnel au pourcentage BGS (0–100 %).
+   * Anciennement plafonné à 80 % → toutes les influences fortes avaient la même taille.
+   */
   private radiusFromInfluence(pct: number): number {
-    const minR = 0.45;
+    const minR = 0.4;
     const maxR = 7;
-    const pctMin = 1;
-    const pctMax = 80;
-    const clamped = Math.max(pctMin, Math.min(pctMax, pct));
-    const t = (clamped - pctMin) / (pctMax - pctMin);
+    const p = Math.max(0, Math.min(100, pct));
+    const t = p / 100;
     return minR + t * (maxR - minR);
   }
 
@@ -669,7 +776,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     sys: MapSystem,
     baseR: number,
     pos: THREE.Vector3,
-    opts?: { palette?: { core: number; influence: number } },
+    opts?: { palette?: { core: number; influence: number }; cmdrMinimalGlow?: boolean },
   ): { group: THREE.Group; layers: SystemVisualLayers; hitMesh: THREE.Mesh } {
     const group = new THREE.Group();
     group.position.copy(pos);
@@ -677,7 +784,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     group.name = `sys-${sys.id}`;
 
     const palette =
-      opts?.palette ?? inferStarPalette(sys.primaryStarClass, sys.name, !!sys.isJournalCmdrPoint);
+      opts?.palette ?? inferStarPalette(sys.primaryStarClass, sys.name);
     const coreR = Math.max(0.12, baseR * 0.12);
     /** Cercle billboard : le dégradé UV va à 0 sur le bord — pas de disque dur. */
     const starBillboardR = coreR * 2.5;
@@ -726,6 +833,16 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const ringSecondary = new THREE.Mesh(ring2Geom, ring2Mat);
     ringSecondary.renderOrder = 1;
 
+    /**
+     * Vue Cmdr : tout le monde (y compris systèmes journal fusionnés guilde avec `isJournalCmdrPoint: false`)
+     * sans disques ni anneaux — uniquement le noyau shader. Repères galactiques : idem si `cmdrMinimalGlow`.
+     */
+    if (opts?.cmdrMinimalGlow) {
+      influenceDisk.visible = false;
+      ringPrimary.visible = false;
+      ringSecondary.visible = false;
+    }
+
     group.add(ringSecondary);
     group.add(influenceDisk);
     group.add(ringPrimary);
@@ -772,15 +889,6 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     );
   }
 
-  private journalCmdrDefaultColor(sys: MapSystem): number {
-    const j = this.journalByName[this.normalizeJournalKey(sys.name)];
-    if (!j) return CMDR_JOURNAL_FALLBACK;
-    if (j.isFullScanned) return JOURNAL_COLOR_FULLSCAN;
-    if (j.hasFirstDiscoveryBody) return JOURNAL_COLOR_DISCOVERED;
-    if (j.isVisited) return JOURNAL_COLOR_VISITED;
-    return CMDR_JOURNAL_FALLBACK;
-  }
-
   private updateVisualHighlight(): void {
     if (!this.scene) return;
     const filter = this.systemsFilter;
@@ -793,7 +901,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
       if (!sys) continue;
       if (this.hoveredSystem?.id === id) continue;
 
-      const palette = inferStarPalette(sys.primaryStarClass, sys.name, !!sys.isJournalCmdrPoint);
+      const palette = inferStarPalette(sys.primaryStarClass, sys.name);
       const catHex = CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED;
 
       const starMat = layers.starCore.material as THREE.ShaderMaterial;
@@ -817,13 +925,9 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
         if (journalOn && accent != null && matchJ) {
           coreHex = accent;
           infHex = tintForInfluenceDisk(accent);
-        } else if (!journalOn) {
-          const c = this.journalCmdrDefaultColor(sys);
-          coreHex = c;
-          infHex = tintForInfluenceDisk(c);
         } else {
-          coreHex = catHex;
-          infHex = tintForInfluenceDisk(catHex);
+          coreHex = palette.core;
+          infHex = palette.influence;
         }
         if (!matchJ) {
           coreAlpha *= DIM_FACTOR_CORE;
@@ -914,8 +1018,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const dm = layers.influenceDisk.material as THREE.ShaderMaterial;
     const r1 = layers.ringPrimary.material as THREE.MeshBasicMaterial;
     const r2 = layers.ringSecondary.material as THREE.MeshBasicMaterial;
-    const pal = inferStarPalette(sys?.primaryStarClass, sys?.name ?? '', !!sys?.isJournalCmdrPoint);
-    const hoverCore = sys?.isJournalCmdrPoint ? 0xffffff : hoverStarCoreHex(pal.core);
+    const pal = inferStarPalette(sys?.primaryStarClass, sys?.name ?? '');
+    const hoverCore = hoverStarCoreHex(pal.core);
     sm.uniforms['uCoreColor'].value.setHex(hoverCore);
     sm.uniforms['uAlphaScale'].value = Math.min(1.25, STAR_ALPHA_SCALE + 0.22);
     sm.depthTest = false;
