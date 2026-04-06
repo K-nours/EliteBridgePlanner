@@ -123,6 +123,12 @@ public sealed class FrontierJournalUnifiedSyncService
     /// </summary>
     private async Task<bool> EnsureFrontierAccessForJournalAsync(CancellationToken ct)
     {
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var oauth = scope.ServiceProvider.GetRequiredService<FrontierOAuthSessionService>();
+            await oauth.GetEffectiveTokenAsync(ct);
+        }
+
         var diag = _tokens.GetSessionDiagnostics();
 
         if (!diag.HasStoredToken || (!diag.HasAccessToken && !diag.HasRefreshToken))
@@ -170,7 +176,8 @@ public sealed class FrontierJournalUnifiedSyncService
                     return false;
                 }
 
-                _tokens.SetToken(refreshed);
+                var oauthPersist = scope.ServiceProvider.GetRequiredService<FrontierOAuthSessionService>();
+                await oauthPersist.PersistAndSetAsync(refreshed, null, ct);
             }
         }
 

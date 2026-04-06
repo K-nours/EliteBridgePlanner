@@ -4,6 +4,7 @@ using GuildDashboard.Server.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace GuildDashboard.Server.Migrations
 {
     [DbContext(typeof(GuildDashboardDbContext))]
-    partial class GuildDashboardDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260406173751_AddFrontierOAuthSessions")]
+    partial class AddFrontierOAuthSessions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -85,73 +88,6 @@ namespace GuildDashboard.Server.Migrations
                     b.HasIndex("GuildId");
 
                     b.ToTable("ControlledSystems", (string)null);
-                });
-
-            modelBuilder.Entity("GuildDashboard.Server.Models.DeclaredChantier", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<bool>("Active")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("CmdrName")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
-                    b.Property<string>("ConstructionResourcesJson")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("DeclaredAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("GuildId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("MarketId")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
-
-                    b.Property<string>("StationName")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
-
-                    b.Property<string>("StationNameKey")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
-
-                    b.Property<string>("SystemName")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
-
-                    b.Property<string>("SystemNameKey")
-                        .IsRequired()
-                        .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GuildId");
-
-                    b.HasIndex("GuildId", "MarketId")
-                        .IsUnique()
-                        .HasFilter("[MarketId] IS NOT NULL");
-
-                    b.HasIndex("GuildId", "SystemNameKey", "StationNameKey")
-                        .IsUnique()
-                        .HasFilter("[MarketId] IS NULL");
-
-                    b.ToTable("DeclaredChantiers", (string)null);
                 });
 
             modelBuilder.Entity("GuildDashboard.Server.Models.EddnRawMessage", b =>
@@ -492,17 +428,6 @@ namespace GuildDashboard.Server.Migrations
                     b.HasIndex("GuildId");
 
                     b.ToTable("SquadronSnapshots", (string)null);
-                });
-
-            modelBuilder.Entity("GuildDashboard.Server.Models.DeclaredChantier", b =>
-                {
-                    b.HasOne("GuildDashboard.Server.Models.Guild", "Guild")
-                        .WithMany()
-                        .HasForeignKey("GuildId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Guild");
                 });
 
             modelBuilder.Entity("GuildDashboard.Server.Models.FrontierProfile", b =>

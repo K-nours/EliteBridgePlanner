@@ -95,7 +95,11 @@ public class FrontierTokenStore
             var hasA = !string.IsNullOrEmpty(_lastToken.AccessToken);
             var hasR = !string.IsNullOrEmpty(_lastToken.RefreshToken);
             var expired = false;
-            if (hasA && _tokenReceivedUtc != null && _lastToken.ExpiresIn > 0)
+            if (hasA && _lastToken.AccessTokenExpiresAtUtc.HasValue)
+            {
+                expired = DateTime.UtcNow >= _lastToken.AccessTokenExpiresAtUtc.Value.AddMinutes(-2);
+            }
+            else if (hasA && _tokenReceivedUtc != null && _lastToken.ExpiresIn > 0)
             {
                 var expiresAt = _tokenReceivedUtc.Value.AddSeconds(_lastToken.ExpiresIn).AddMinutes(-2);
                 expired = DateTime.UtcNow >= expiresAt;
