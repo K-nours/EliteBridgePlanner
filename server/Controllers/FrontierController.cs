@@ -352,7 +352,9 @@ public class FrontierController : ControllerBase
     [HttpGet("chantiers-declared")]
     public async Task<IActionResult> GetDeclaredChantiers(CancellationToken ct)
     {
-        var list = await _declaredChantiers.GetActiveForGuildAsync(_currentGuild.CurrentGuildId, ct);
+        var guildId = _currentGuild.CurrentGuildId;
+        var list = await _declaredChantiers.GetActiveForGuildAsync(guildId, ct);
+        _declaredChantiers.LogGetChantiersResponseDiagnostics("all", guildId, list);
         return Ok(list);
     }
 
@@ -370,13 +372,13 @@ public class FrontierController : ControllerBase
         if (profile == null || string.IsNullOrWhiteSpace(profile.CommanderName))
         {
             _log.LogInformation("[DeclaredChantiers] GET me — profil sans CommanderName, liste vide.");
+            _declaredChantiers.LogGetChantiersResponseDiagnostics("me", _currentGuild.CurrentGuildId, Array.Empty<DeclaredChantierListItemDto>());
             return Ok(Array.Empty<DeclaredChantierListItemDto>());
         }
 
-        var list = await _declaredChantiers.GetActiveForGuildForCommanderAsync(
-            _currentGuild.CurrentGuildId,
-            profile.CommanderName,
-            ct);
+        var guildId = _currentGuild.CurrentGuildId;
+        var list = await _declaredChantiers.GetActiveForGuildForCommanderAsync(guildId, profile.CommanderName, ct);
+        _declaredChantiers.LogGetChantiersResponseDiagnostics("me", guildId, list);
         return Ok(list);
     }
 
@@ -392,11 +394,41 @@ public class FrontierController : ControllerBase
 
         var profile = await _userService.GetProfileAsync(ct);
         var cmdr = profile?.CommanderName;
-        var list = await _declaredChantiers.GetActiveForGuildExcludingCommanderAsync(
-            _currentGuild.CurrentGuildId,
-            cmdr,
-            ct);
+        var guildId = _currentGuild.CurrentGuildId;
+        var list = await _declaredChantiers.GetActiveForGuildExcludingCommanderAsync(guildId, cmdr, ct);
+        _declaredChantiers.LogGetChantiersResponseDiagnostics("others", guildId, list);
         return Ok(list);
+    }
+
+    /// <summary>
+    /// DELETE /api/integrations/frontier/chantiers-declared/{id} — suppression définitive en base (OAuth requis).
+    /// </summary>
+    [HttpDelete("chantiers-declared/{id:int}")]
+    public async Task<IActionResult> DeleteDeclaredChantier(int id, CancellationToken ct)
+    {
+        var res = await _oauthSession.ResolveEffectiveTokenAsync(ct);
+        if (res.Token == null || string.IsNullOrEmpty(res.Token.AccessToken))
+            return Unauthorized(new { message = "Connexion Frontier requise pour supprimer un chantier." });
+
+        var guildId = _currentGuild.CurrentGuildId;
+        var outcome = await _declaredChantiers.DeleteClusterByPrimaryIdAsync(guildId, id, ct);
+        if (!outcome.AnchorFound)
+            return NotFound(new { message = "Chantier introuvable." });
+
+        if (outcome.RequestedIdStillExistsAfter)
+            _log.LogError(
+                "DELETE chantier INTEGRITY: id={Id} still exists after SaveChanges — idsRemoved=[{Ids}]",
+                id,
+                string.Join(',', outcome.DeletedIds));
+
+        var profileAfterDelete = await _userService.GetProfileAsync(ct);
+        await _declaredChantiers.LogPostDeleteMeAndOthersSnapshotAsync(
+            guildId,
+            profileAfterDelete?.CommanderName,
+            outcome.DeletedIds,
+            ct);
+
+        return NoContent();
     }
 
     /// <summary>POST /api/integrations/frontier/chantiers-declared — upsert après évaluation réussie (OAuth requis).</summary>
