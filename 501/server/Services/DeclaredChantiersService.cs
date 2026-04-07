@@ -7,7 +7,20 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GuildDashboard.Server.Services;
 
-/// <summary>Persistance chantiers déclarés — upsert par MarketId ou (système, station).</summary>
+/// <summary>Résultat détaillé suppression (diagnostic + cluster doublons métier).</summary>
+public sealed record DeclaredChantierDeleteOutcome(
+    bool AnchorFound,
+    int RequestedId,
+    int GuildId,
+    IReadOnlyList<int> DeletedIds,
+    int SaveChangesAffected,
+    bool RequestedIdStillExistsAfter,
+    string LogAnchorLine);
+
+/// <summary>
+/// Persistance chantiers déclarés — table SQL <c>DeclaredChantiers</c> uniquement (pas de cache, pas de fusion Frontier live).
+/// Upsert : clé marché CAPI <see cref="DeclaredChantier.MarketId"/> si fourni, sinon même site (SystemNameKey+StationNameKey) + même CMDR.
+/// </summary>
 public class DeclaredChantiersService
 {
     private const int MaxJsonChars = 48_000;
@@ -27,8 +40,15 @@ public class DeclaredChantiersService
         _log = log;
     }
 
+    /// <summary>
+    /// Lecture exclusive de la table <c>DeclaredChantiers</c> (EF <c>AsNoTracking</c>), filtre <c>Active</c> — aucune autre source.
+    /// </summary>
     public async Task<IReadOnlyList<DeclaredChantierListItemDto>> GetActiveForGuildAsync(int guildId, CancellationToken ct = default)
     {
+        _log.LogDebug(
+            "[DeclaredChantiers] GET source=table DeclaredChantiers only (guild={Guild}, active=true, AsNoTracking)",
+            guildId);
+
         var rows = await _db.DeclaredChantiers
             .AsNoTracking()
             .Where(x => x.GuildId == guildId && x.Active)
@@ -78,6 +98,90 @@ public class DeclaredChantiersService
         return s.Trim().ToLowerInvariant();
     }
 
+    /// <summary>Logs temporaires : liste renvoyée + détection doublons métier (scope GET).</summary>
+    public void LogGetChantiersResponseDiagnostics(string scope, int guildId, IReadOnlyList<DeclaredChantierListItemDto> list)
+    {
+        _log.LogInformation(
+            "GET chantiers source=DeclaredChantiers(SQL) scope={Scope} guild={Guild} count={Count} ids=[{Ids}]",
+            scope,
+            guildId,
+            list.Count,
+            list.Count == 0 ? "" : string.Join(',', list.Select(x => x.Id)));
+
+        foreach (var x in list)
+        {
+            _log.LogInformation(
+                "GET chantier item id={Id} marketId(CAPI)={Mid} system={Sys} station={St} commander={Cmdr} active={Active} guild={Guild}",
+                x.Id,
+                x.MarketId ?? "(null)",
+                x.SystemName,
+                x.StationName,
+                x.CmdrName,
+                x.Active,
+                guildId);
+        }
+
+        var bySiteCmdr = list.GroupBy(x => (
+            Sys: NormalizeKey(x.SystemName),
+            St: NormalizeKey(x.StationName),
+            Cmdr: NormalizeCmdrName(x.CmdrName)));
+        foreach (var grp in bySiteCmdr.Where(g => g.Count() > 1))
+        {
+            var first = grp.First();
+            _log.LogWarning(
+                "DUPLICATE métier scope={Scope} même site+cmdr ids=[{Ids}] system={Sys} station={St} commander={Cmdr}",
+                scope,
+                string.Join(',', grp.Select(x => x.Id)),
+                first.SystemName,
+                first.StationName,
+                first.CmdrName);
+        }
+
+        var byMarket = list
+            .Where(x => !string.IsNullOrWhiteSpace(x.MarketId))
+            .GroupBy(x => x.MarketId!.Trim(), StringComparer.OrdinalIgnoreCase);
+        foreach (var grp in byMarket.Where(g => g.Count() > 1))
+        {
+            _log.LogWarning(
+                "DUPLICATE métier scope={Scope} même marketId ids=[{Ids}] marketId={Mid}",
+                scope,
+                string.Join(',', grp.Select(x => x.Id)),
+                grp.Key);
+        }
+    }
+
+    /// <summary>
+    /// Après DELETE réussi : même requêtes que les GET me / others (données issues uniquement de DeclaredChantiers), pour prouver que les ids supprimés ne reviennent pas.
+    /// </summary>
+    public async Task LogPostDeleteMeAndOthersSnapshotAsync(
+        int guildId,
+        string? commanderName,
+        IReadOnlyList<int> deletedIds,
+        CancellationToken ct)
+    {
+        IReadOnlyList<DeclaredChantierListItemDto> me;
+        if (string.IsNullOrWhiteSpace(commanderName))
+            me = Array.Empty<DeclaredChantierListItemDto>();
+        else
+            me = await GetActiveForGuildForCommanderAsync(guildId, commanderName, ct);
+
+        var others = await GetActiveForGuildExcludingCommanderAsync(guildId, commanderName, ct);
+
+        foreach (var delId in deletedIds)
+        {
+            var inMe = me.Any(x => x.Id == delId);
+            var inOthers = others.Any(x => x.Id == delId);
+            _log.LogInformation(
+                "DELETE chantier post-verify id={Id} still in scope_me={InMe} scope_others={InOthers} (attendu false/false)",
+                delId,
+                inMe,
+                inOthers);
+        }
+
+        LogGetChantiersResponseDiagnostics("me-after-delete", guildId, me);
+        LogGetChantiersResponseDiagnostics("others-after-delete", guildId, others);
+    }
+
     public async Task<DeclaredChantierListItemDto> UpsertAsync(int guildId, DeclaredChantierPersistRequest req, CancellationToken ct = default)
     {
         var system = req.SystemName.Trim();
@@ -87,27 +191,44 @@ public class DeclaredChantiersService
         var stKey = NormalizeKey(station);
         var cmdr = (req.CommanderName ?? string.Empty).Trim();
         if (string.IsNullOrEmpty(cmdr)) cmdr = "—";
+        var cmdrKey = NormalizeCmdrName(cmdr);
 
         var json = SerializeResources(req.ConstructionResources, req.ConstructionResourcesTotal);
         var now = DateTime.UtcNow;
 
         DeclaredChantier? row = null;
+        var matchReason = "none";
+
         if (marketId != null)
         {
             row = await _db.DeclaredChantiers
-                .FirstOrDefaultAsync(x => x.GuildId == guildId && x.MarketId == marketId, ct);
+                .FirstOrDefaultAsync(x => x.GuildId == guildId && x.MarketId != null && x.MarketId == marketId, ct);
+            if (row != null)
+                matchReason = "guild+marketId(CAPI)";
         }
 
-        row ??= await _db.DeclaredChantiers
-            .FirstOrDefaultAsync(
-                x => x.GuildId == guildId
-                    && x.MarketId == null
-                    && x.SystemNameKey == sysKey
-                    && x.StationNameKey == stKey,
-                ct);
+        if (row == null)
+        {
+            var atSite = await _db.DeclaredChantiers
+                .Where(x => x.GuildId == guildId && x.SystemNameKey == sysKey && x.StationNameKey == stKey)
+                .ToListAsync(ct);
+            row = atSite.FirstOrDefault(x => NormalizeCmdrName(x.CmdrName) == cmdrKey);
+            if (row != null)
+                matchReason = "guild+systemKey+stationKey+cmdr (fusionne MarketId null/non-null)";
+        }
 
         if (row != null)
         {
+            _log.LogInformation(
+                "UPSERT chantier match on [{Match}] => existing id={Id} (guild={Guild} system={Sys} station={St} cmdr={Cmdr} marketIdRow={MidRow} marketIdReq={MidReq})",
+                matchReason,
+                row.Id,
+                guildId,
+                system,
+                station,
+                cmdr,
+                row.MarketId ?? "(null)",
+                marketId ?? "(null)");
             row.CmdrName = cmdr;
             row.SystemName = system;
             row.StationName = station;
@@ -120,6 +241,13 @@ public class DeclaredChantiersService
         }
         else
         {
+            _log.LogInformation(
+                "UPSERT chantier no existing row found => create new (guild={Guild} system={Sys} station={St} cmdr={Cmdr} marketId={Mid})",
+                guildId,
+                system,
+                station,
+                cmdr,
+                marketId ?? "(null)");
             row = new DeclaredChantier
             {
                 GuildId = guildId,
@@ -137,14 +265,118 @@ public class DeclaredChantiersService
             _db.DeclaredChantiers.Add(row);
         }
 
+        var isNew = row.Id == 0;
         await _db.SaveChangesAsync(ct);
         _log.LogInformation(
-            "[DeclaredChantiers] Upsert id={Id} guild={Guild} marketId={MarketId}",
+            isNew
+                ? "[DeclaredChantiers] Création chantier id={Id} guild={Guild} marketId={MarketId}"
+                : "[DeclaredChantiers] Mise à jour chantier id={Id} guild={Guild} marketId={MarketId}",
             row.Id,
             guildId,
             marketId ?? "(null)");
 
         return ToListItem(row);
+    }
+
+    /// <summary>
+    /// Supprime la ligne demandée et toute ligne doublon métier (même guilde, même site, même CMDR) — cas typique : MarketId null + ligne avec MarketId CAPI.
+    /// </summary>
+    public async Task<DeclaredChantierDeleteOutcome> DeleteClusterByPrimaryIdAsync(int guildId, int requestedId, CancellationToken ct = default)
+    {
+        _log.LogInformation("DELETE chantier requested id={Id} guild={Guild}", requestedId, guildId);
+
+        var anchor = await _db.DeclaredChantiers.FirstOrDefaultAsync(x => x.GuildId == guildId && x.Id == requestedId, ct);
+        if (anchor == null)
+        {
+            _log.LogWarning("DELETE chantier anchor NOT FOUND id={Id} guild={Guild}", requestedId, guildId);
+            return new DeclaredChantierDeleteOutcome(
+                false,
+                requestedId,
+                guildId,
+                Array.Empty<int>(),
+                0,
+                false,
+                "not found");
+        }
+
+        var cmdrK = NormalizeCmdrName(anchor.CmdrName);
+        var atSite = await _db.DeclaredChantiers
+            .Where(x => x.GuildId == guildId
+                && x.SystemNameKey == anchor.SystemNameKey
+                && x.StationNameKey == anchor.StationNameKey)
+            .ToListAsync(ct);
+        var cluster = atSite.Where(x => NormalizeCmdrName(x.CmdrName) == cmdrK).ToList();
+
+        var anchorLine =
+            $"DELETE chantier found id={anchor.Id} marketId(CAPI)={anchor.MarketId ?? "(null)"} system={anchor.SystemName} station={anchor.StationName} commander={anchor.CmdrName} active={anchor.Active} guild={guildId} keys=({anchor.SystemNameKey}|{anchor.StationNameKey})";
+        _log.LogInformation("{Line}", anchorLine);
+        _log.LogInformation(
+            "DELETE chantier cluster same site+cmdr: ids=[{Ids}] count={Count}",
+            string.Join(',', cluster.Select(c => c.Id)),
+            cluster.Count);
+
+        _db.DeclaredChantiers.RemoveRange(cluster);
+        _log.LogInformation("DELETE chantier RemoveRange pending ids=[{Ids}] — calling SaveChanges", string.Join(',', cluster.Select(c => c.Id)));
+
+        var affected = await _db.SaveChangesAsync(ct);
+        _log.LogInformation("DELETE chantier SaveChanges affected={Affected}", affected);
+
+        var stillThere = await _db.DeclaredChantiers.AsNoTracking().AnyAsync(x => x.Id == requestedId, ct);
+        _log.LogInformation("DELETE chantier verify by id={Id} exists={Exists}", requestedId, stillThere);
+        if (affected == 0)
+            _log.LogWarning("DELETE chantier SaveChanges reported 0 entities changed — unexpected after RemoveRange");
+
+        foreach (var delId in cluster.Select(c => c.Id))
+        {
+            var exists = await _db.DeclaredChantiers.AsNoTracking().AnyAsync(x => x.Id == delId, ct);
+            if (exists)
+                _log.LogWarning("DELETE chantier verify FAILED id={Id} still present in table", delId);
+        }
+
+        var remainingDupHint = await _db.DeclaredChantiers
+            .AsNoTracking()
+            .Where(x => x.GuildId == guildId
+                && x.Active
+                && x.SystemNameKey == anchor.SystemNameKey
+                && x.StationNameKey == anchor.StationNameKey)
+            .Select(x => new { x.Id, x.CmdrName, x.MarketId })
+            .ToListAsync(ct);
+        var sameCmdrLeft = remainingDupHint.Where(x => NormalizeCmdrName(x.CmdrName) == cmdrK).ToList();
+        if (sameCmdrLeft.Count > 0)
+            _log.LogWarning(
+                "DELETE chantier post-check: still {Count} active row(s) same site+cmdr ids=[{Ids}]",
+                sameCmdrLeft.Count,
+                string.Join(',', sameCmdrLeft.Select(x => x.Id)));
+        else
+            _log.LogInformation(
+                "DELETE chantier post-check: no active row left same site+cmdr for commander={Cmdr}",
+                anchor.CmdrName);
+
+        var allActiveIds = await _db.DeclaredChantiers.AsNoTracking()
+            .Where(x => x.GuildId == guildId && x.Active)
+            .OrderBy(x => x.Id)
+            .Select(x => x.Id)
+            .ToListAsync(ct);
+        _log.LogInformation(
+            "DELETE chantier post-check guild active ids=[{Ids}] count={Count} (table DeclaredChantiers)",
+            allActiveIds.Count == 0 ? "" : string.Join(',', allActiveIds),
+            allActiveIds.Count);
+
+        return new DeclaredChantierDeleteOutcome(
+            true,
+            requestedId,
+            guildId,
+            cluster.Select(c => c.Id).ToList(),
+            affected,
+            stillThere,
+            anchorLine);
+    }
+
+    /// <summary>Compat : supprime le cluster ; considéré OK si ancrage trouvé.</summary>
+    public async Task<bool> DeleteByIdAsync(int guildId, int id, CancellationToken ct = default)
+    {
+        var o = await DeleteClusterByPrimaryIdAsync(guildId, id, ct);
+        return o.AnchorFound;
     }
 
     /// <summary>
