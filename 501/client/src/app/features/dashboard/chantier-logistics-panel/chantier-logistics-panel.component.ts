@@ -1,6 +1,7 @@
 import { Component, HostListener, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule, NgTemplateOutlet } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
+import type { Observable } from 'rxjs';
 import { catchError, forkJoin, map, of, switchMap, take } from 'rxjs';
 import { ChantierLogisticsUiService } from '../../../core/services/chantier-logistics-ui.service';
 import { ActiveChantiersStore } from '../../../core/state/active-chantiers.store';
@@ -25,6 +26,7 @@ export class ChantierLogisticsPanelComponent {
 
   protected readonly enlargeOpen = signal(false);
   protected readonly refreshLoading = signal(false);
+  protected readonly deleteLoading = signal(false);
 
   constructor() {
     effect(() => {
@@ -68,6 +70,79 @@ export class ChantierLogisticsPanelComponent {
     this.enlargeOpen.set(false);
   }
 
+  /** Recharge me + others depuis l’API et remplace le store (pas de merge). */
+  private reloadChantierListsFromServer(): Observable<{
+    mine: DeclaredChantierListItemApi[];
+    others: DeclaredChantierListItemApi[];
+  }> {
+    return forkJoin({
+      mine: this.declaredApi.listMine().pipe(catchError(() => of([] as DeclaredChantierListItemApi[]))),
+      others: this.declaredApi.listOthers().pipe(catchError(() => of([] as DeclaredChantierListItemApi[]))),
+    });
+  }
+
+  protected deleteSelected(event: Event): void {
+    event.stopPropagation();
+    const site = this.ui.selectedSite();
+    if (!site || this.deleteLoading()) return;
+    const id = Number(site.id);
+    if (!Number.isFinite(id) || id <= 0) return;
+
+    const ok = window.confirm(
+      'Supprimer définitivement ce chantier en base de données ? Cette action est irréversible.',
+    );
+    if (!ok) return;
+
+    console.log('DELETE chantier', id);
+    const siteId = site.id;
+    const mine = this.chantiersStore.mine().filter((e) => e.id !== siteId);
+    const others = this.chantiersStore.others().filter((e) => e.id !== siteId);
+    this.chantiersStore.replaceMineAndOthers(mine, others);
+    this.ui.selectedSiteId.set(null);
+
+    const stationLabel = site.stationName?.trim() || '—';
+    this.deleteLoading.set(true);
+    this.declaredApi
+      .delete(id)
+      .pipe(
+        switchMap(() => this.reloadChantierListsFromServer()),
+        map(({ mine: m, others: o }) => ({
+          mine: m.map(mapDeclaredListItemApiToSite),
+          others: o.map(mapDeclaredListItemApiToSite),
+        })),
+        take(1),
+      )
+      .subscribe({
+        next: ({ mine: m, others: o }) => {
+          this.chantiersStore.replaceMineAndOthers(m, o);
+          this.deleteLoading.set(false);
+          this.syncLog.addLog(`[Chantiers] chantier supprimé — ${stationLabel} (id ${id})`);
+        },
+        error: (err: unknown) => {
+          this.reloadChantierListsFromServer()
+            .pipe(
+              map(({ mine: m, others: o }) => ({
+                mine: m.map(mapDeclaredListItemApiToSite),
+                others: o.map(mapDeclaredListItemApiToSite),
+              })),
+              take(1),
+            )
+            .subscribe((lists) => {
+              this.chantiersStore.replaceMineAndOthers(lists.mine, lists.others);
+            });
+          this.deleteLoading.set(false);
+          let msg = 'suppression impossible';
+          if (err instanceof HttpErrorResponse) {
+            const e = err.error as { message?: string } | undefined;
+            if (typeof e?.message === 'string') msg = e.message;
+            else if (err.status === 404) msg = 'chantier introuvable';
+            else if (err.status === 401) msg = 'connexion Frontier requise';
+          }
+          this.syncLog.addLog(`[Chantiers] suppression échec — ${msg}`);
+        },
+      });
+  }
+
   protected refreshSelected(event: Event): void {
     event.stopPropagation();
     const site = this.ui.selectedSite();
@@ -80,10 +155,7 @@ export class ChantierLogisticsPanelComponent {
       .refreshOne(id)
       .pipe(
         switchMap((dto) =>
-          forkJoin({
-            mine: this.declaredApi.listMine().pipe(catchError(() => of([] as DeclaredChantierListItemApi[]))),
-            others: this.declaredApi.listOthers().pipe(catchError(() => of([] as DeclaredChantierListItemApi[]))),
-          }).pipe(
+          this.reloadChantierListsFromServer().pipe(
             map(({ mine, others }) => {
               const prev = this.ui.selectedSiteId();
               this.chantiersStore.replaceMineAndOthers(

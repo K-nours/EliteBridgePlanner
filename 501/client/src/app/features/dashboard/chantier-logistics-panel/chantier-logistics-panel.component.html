@@ -9,38 +9,51 @@
   } @else {
     @let site = ui.selectedSite()!;
     <div class="chantier-logistics-detail">
-      <div class="chantier-logistics-meta">
-        <p class="chantier-logistics-line">
-          <span class="chantier-logistics-label">Système</span>
-          <span class="chantier-logistics-value">{{ site.systemName }}</span>
-        </p>
-        <p class="chantier-logistics-line">
-          <span class="chantier-logistics-label">Site</span>
-          <span class="chantier-logistics-value">{{ site.stationName }}</span>
-        </p>
-        @if (site.marketId) {
-          <p class="chantier-logistics-marketid" title="marketId (debug)">marketId {{ site.marketId }}</p>
+      <div class="chantier-logistics-detail__body">
+        <div class="chantier-logistics-meta">
+          <p class="chantier-logistics-line">
+            <span class="chantier-logistics-label">Système</span>
+            <span class="chantier-logistics-value">{{ site.systemName }}</span>
+          </p>
+          <p class="chantier-logistics-line">
+            <span class="chantier-logistics-label">Site</span>
+            <span class="chantier-logistics-value">{{ site.stationName }}</span>
+          </p>
+          @if (site.marketId) {
+            <p class="chantier-logistics-marketid" title="marketId (debug)">marketId {{ site.marketId }}</p>
+          }
+        </div>
+
+        @if (!hasResourceData()) {
+          <p class="chantier-logistics-muted">Aucun détail de fournitures en cache pour ce chantier.</p>
+        } @else if (allDelivered()) {
+          <div class="chantier-logistics-complete">
+            <p class="chantier-logistics-complete__title">Approvisionnement complété</p>
+            <p class="chantier-logistics-complete__text">Aucune fourniture restante pour ce chantier.</p>
+          </div>
+        } @else {
+          <ul class="chantier-logistics-res" role="list">
+            @for (r of resourcesRemaining(); track r.name) {
+              <li class="chantier-logistics-res__row">
+                <span class="chantier-logistics-res__name">{{ r.name }}</span>
+                <span class="chantier-logistics-res__dots" aria-hidden="true"></span>
+                <span class="chantier-logistics-res__qty">{{ r.remaining }}</span>
+              </li>
+            }
+          </ul>
         }
       </div>
 
-      @if (!hasResourceData()) {
-        <p class="chantier-logistics-muted">Aucun détail de fournitures en cache pour ce chantier.</p>
-      } @else if (allDelivered()) {
-        <div class="chantier-logistics-complete">
-          <p class="chantier-logistics-complete__title">Approvisionnement complété</p>
-          <p class="chantier-logistics-complete__text">Aucune fourniture restante pour ce chantier.</p>
-        </div>
-      } @else {
-        <ul class="chantier-logistics-res" role="list">
-          @for (r of resourcesRemaining(); track r.name) {
-            <li class="chantier-logistics-res__row">
-              <span class="chantier-logistics-res__name">{{ r.name }}</span>
-              <span class="chantier-logistics-res__dots" aria-hidden="true"></span>
-              <span class="chantier-logistics-res__qty">{{ r.remaining }}</span>
-            </li>
-          }
-        </ul>
-      }
+      <div class="chantier-logistics-actions-row">
+        <button
+          type="button"
+          class="chantier-logistics-delete"
+          [disabled]="deleteLoading() || refreshLoading()"
+          (click)="deleteSelected($event)"
+        >
+          Supprimer le chantier
+        </button>
+      </div>
     </div>
   }
 </ng-template>

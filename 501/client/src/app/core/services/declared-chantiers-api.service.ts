@@ -53,4 +53,9 @@ export class DeclaredChantiersApiService {
       { id },
     );
   }
+
+  /** Suppression définitive en base (204 No Content). */
+  delete(id: number): Observable<void> {
+    return this.http.delete<void>(buildHttpUrl(this.apiBaseUrl, `${this.path}/${id}`));
+  }
 }
