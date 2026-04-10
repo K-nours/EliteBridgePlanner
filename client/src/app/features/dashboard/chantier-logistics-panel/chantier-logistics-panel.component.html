@@ -1,5 +1,9 @@
 <ng-template #logisticsBody>
-  @if (!ui.selectedSite()) {
+  @if (ui.chantierGoneMessage(); as gone) {
+    <div class="chantier-logistics-gone" role="status">
+      <p class="chantier-logistics-gone__text">{{ gone }}</p>
+    </div>
+  } @else if (!ui.selectedSite()) {
     <div class="chantier-logistics-empty">
       <p class="chantier-logistics-empty__title">Aucune logistique active</p>
       <p class="chantier-logistics-empty__text">
@@ -17,7 +21,16 @@
           </p>
           <p class="chantier-logistics-line">
             <span class="chantier-logistics-label">Site</span>
-            <span class="chantier-logistics-value">{{ site.stationName }}</span>
+            <span class="chantier-logistics-value">
+              @if (splitStationDisplayLabel(site.stationName); as st) {
+                @if (st.prefix) {
+                  <span class="chantier-logistics-site-prefix">{{ st.prefix }}</span
+                  ><span class="chantier-logistics-site-name">{{ st.name }}</span>
+                } @else {
+                  {{ st.name }}
+                }
+              }
+            </span>
           </p>
           @if (site.marketId) {
             <p class="chantier-logistics-marketid" title="marketId (debug)">marketId {{ site.marketId }}</p>
@@ -32,15 +45,113 @@
             <p class="chantier-logistics-complete__text">Aucune fourniture restante pour ce chantier.</p>
           </div>
         } @else {
-          <ul class="chantier-logistics-res" role="list">
-            @for (r of resourcesRemaining(); track r.name) {
-              <li class="chantier-logistics-res__row">
-                <span class="chantier-logistics-res__name">{{ r.name }}</span>
-                <span class="chantier-logistics-res__dots" aria-hidden="true"></span>
-                <span class="chantier-logistics-res__qty">{{ r.remaining }}</span>
-              </li>
-            }
-          </ul>
+          @let trust = inventoryTrust();
+          <div class="chantier-logistics-res-table-wrap">
+            <table class="chantier-logistics-res-table">
+              <colgroup>
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--name" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--need" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--gap" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--ship" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--gap" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--fc" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--gap" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--global" />
+                @if (showTotalColumn(trust)) {
+                  <col class="chantier-logistics-res-col chantier-logistics-res-col--gap" />
+                  <col class="chantier-logistics-res-col chantier-logistics-res-col--total" />
+                }
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col" class="chantier-logistics-res-th chantier-logistics-res-th--name">Ressource</th>
+                  <th
+                    scope="col"
+                    class="chantier-logistics-res-th chantier-logistics-res-th--num"
+                    title="Besoin restant sur ce chantier"
+                  >
+                    Besoin
+                  </th>
+                  <td class="chantier-logistics-res-th chantier-logistics-res-th--gap" aria-hidden="true"></td>
+                  <th
+                    scope="col"
+                    class="chantier-logistics-res-th chantier-logistics-res-th--num"
+                    title="Cargaison vaisseau (Frontier)"
+                  >
+                    Soute
+                  </th>
+                  <td class="chantier-logistics-res-th chantier-logistics-res-th--gap" aria-hidden="true"></td>
+                  <th
+                    scope="col"
+                    class="chantier-logistics-res-th chantier-logistics-res-th--num"
+                    title="Cargaison Fleet Carrier"
+                  >
+                    FC
+                  </th>
+                  <td class="chantier-logistics-res-th chantier-logistics-res-th--gap" aria-hidden="true"></td>
+                  <th
+                    scope="col"
+                    class="chantier-logistics-res-th chantier-logistics-res-th--num"
+                    title="Besoin restant cumulé pour cette marchandise sur tous tes chantiers"
+                  >
+                    Global
+                  </th>
+                  @if (showTotalColumn(trust)) {
+                    <td class="chantier-logistics-res-th chantier-logistics-res-th--gap" aria-hidden="true"></td>
+                    <th
+                      scope="col"
+                      class="chantier-logistics-res-th chantier-logistics-res-th--num"
+                      title="Somme des stocks affichés (vaisseau + FC, sources connues uniquement)"
+                    >
+                      Total
+                    </th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of resourceRows(); track row.name) {
+                  <tr
+                    class="chantier-logistics-res-tr"
+                    [class.chantier-logistics-res-tr--ok]="inventoryRowHasStockInfo() && row.status === 'ok'"
+                    [class.chantier-logistics-res-tr--warn]="inventoryRowHasStockInfo() && row.status === 'warn'"
+                    [class.chantier-logistics-res-tr--zero]="inventoryRowHasStockInfo() && row.status === 'zero'"
+                  >
+                    <th scope="row" class="chantier-logistics-res-td chantier-logistics-res-td--name">{{ row.name }}</th>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--need">{{ row.need }}</td>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--gap" aria-hidden="true"></td>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--ship">
+                      @if (!trust.shipKnown) {
+                        <span class="chantier-logistics-res-dash">—</span>
+                      } @else {
+                        <span class="chantier-logistics-res-num chantier-logistics-res-num--ship">{{ row.shipQty }}</span>
+                      }
+                    </td>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--gap" aria-hidden="true"></td>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--fc">
+                      @if (!trust.carrierKnown) {
+                        <span class="chantier-logistics-res-dash">—</span>
+                      } @else {
+                        <span class="chantier-logistics-res-num chantier-logistics-res-num--fc">{{ row.carrierQty }}</span>
+                      }
+                    </td>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--gap" aria-hidden="true"></td>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--global" title="Tous chantiers (cmdr)">
+                      {{ row.globalNeed }}
+                    </td>
+                    @if (showTotalColumn(trust)) {
+                      <td class="chantier-logistics-res-td chantier-logistics-res-td--gap" aria-hidden="true"></td>
+                      <td class="chantier-logistics-res-td chantier-logistics-res-td--total">
+                        <span
+                          class="chantier-logistics-res-num chantier-logistics-res-num--total"
+                          title="Somme des stocks affichés (vaisseau + FC, uniquement les sources connues)"
+                          >{{ knownStockSum(row, trust) }}</span>
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
         }
       </div>
 
@@ -48,7 +159,7 @@
         <button
           type="button"
           class="chantier-logistics-delete"
-          [disabled]="deleteLoading() || refreshLoading()"
+          [disabled]="deleteLoading() || refreshLoading() || realSyncTickRunning()"
           (click)="deleteSelected($event)"
         >
           Supprimer le chantier
@@ -60,13 +171,41 @@
 
 <div class="chantier-logistics">
   <div class="chantier-logistics-header">
-    <h3>LOGISTIQUE DE CHANTIER</h3>
+    <div class="chantier-logistics-header-main">
+      <h3>LOGISTIQUE DE CHANTIER</h3>
+      <p class="chantier-logistics-header-last-sync">
+        Dernière synchro :
+        <span class="chantier-logistics-header-last-sync__value">{{ formatLastSyncLabel(ui.lastRealSyncSuccessAt()) }}</span>
+      </p>
+    </div>
     <div class="chantier-logistics-header-actions">
       <button
         type="button"
+        class="chantier-logistics-real-sync-btn chantier-logistics-real-sync-btn--in-header"
+        [class.chantier-logistics-real-sync-btn--active]="ui.realSyncEnabled()"
+        [class.chantier-logistics-real-sync-btn--inactive]="!ui.realSyncEnabled()"
+        [disabled]="!canUseRealSyncSwitch()"
+        [attr.aria-pressed]="ui.realSyncEnabled()"
+        [attr.aria-label]="
+          (ui.realSyncEnabled() ? 'Real sync actif, désactiver' : 'Real sync inactif, activer')
+        "
+        [attr.title]="
+          ui.realSyncEnabled()
+            ? 'Real sync activé — clic pour désactiver le rafraîchissement automatique'
+            : 'Real sync désactivé — clic pour activer (toutes les 5 min)'
+        "
+        (click)="onRealSyncToggle(!ui.realSyncEnabled())"
+      >
+        <span class="chantier-logistics-real-sync-btn__title">Real sync</span>
+        <span class="chantier-logistics-real-sync-btn__pill" aria-hidden="true">{{
+          ui.realSyncEnabled() ? 'Actif' : 'Inactif'
+        }}</span>
+      </button>
+      <button
+        type="button"
         class="chantier-logistics-icon-btn"
-        [class.chantier-logistics-icon-btn--busy]="refreshLoading()"
-        [disabled]="!ui.selectedSite() || refreshLoading()"
+        [class.chantier-logistics-icon-btn--busy]="refreshLoading() || realSyncTickRunning()"
+        [disabled]="!ui.selectedSite() || refreshLoading() || realSyncTickRunning() || !!ui.chantierGoneMessage()"
         aria-label="Rafraîchir ce chantier"
         title="Rafraîchir ce chantier"
         (click)="refreshSelected($event)"
@@ -116,6 +255,7 @@
       </button>
     </div>
   </div>
+
   <div class="chantier-logistics-panel-body">
     <ng-container *ngTemplateOutlet="logisticsBody" />
   </div>
@@ -138,6 +278,38 @@
         </button>
       </div>
       <div class="chantier-logistics-modal-body">
+        <div class="chantier-logistics-header chantier-logistics-header--modal">
+          <div class="chantier-logistics-header-main">
+            <p class="chantier-logistics-header-last-sync">
+              Dernière synchro :
+              <span class="chantier-logistics-header-last-sync__value">{{ formatLastSyncLabel(ui.lastRealSyncSuccessAt()) }}</span>
+            </p>
+          </div>
+          <div class="chantier-logistics-header-actions">
+            <button
+              type="button"
+              class="chantier-logistics-real-sync-btn chantier-logistics-real-sync-btn--in-header"
+              [class.chantier-logistics-real-sync-btn--active]="ui.realSyncEnabled()"
+              [class.chantier-logistics-real-sync-btn--inactive]="!ui.realSyncEnabled()"
+              [disabled]="!canUseRealSyncSwitch()"
+              [attr.aria-pressed]="ui.realSyncEnabled()"
+              [attr.aria-label]="
+                (ui.realSyncEnabled() ? 'Real sync actif, désactiver' : 'Real sync inactif, activer')
+              "
+              [attr.title]="
+                ui.realSyncEnabled()
+                  ? 'Real sync activé — clic pour désactiver le rafraîchissement automatique'
+                  : 'Real sync désactivé — clic pour activer (toutes les 5 min)'
+              "
+              (click)="onRealSyncToggle(!ui.realSyncEnabled())"
+            >
+              <span class="chantier-logistics-real-sync-btn__title">Real sync</span>
+              <span class="chantier-logistics-real-sync-btn__pill" aria-hidden="true">{{
+                ui.realSyncEnabled() ? 'Actif' : 'Inactif'
+              }}</span>
+            </button>
+          </div>
+        </div>
         <ng-container *ngTemplateOutlet="logisticsBody" />
       </div>
     </div>
