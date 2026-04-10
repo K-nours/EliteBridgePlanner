@@ -35,6 +35,7 @@ import type {
   FrontierJournalSystemDerivedDto,
 } from '../../core/services/frontier-journal-api.service';
 import { hasConflictState } from '../../core/utils/guild-systems.util';
+import { isInaraWithoutNewsCategory } from '../../core/utils/inara-data-derivation.util';
 import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constants';
 
 @Component({
@@ -175,8 +176,10 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                       [class.map-counter--healthy]="fb.value === 'healthy'"
                       [class.map-counter--critical]="fb.value === 'critical'"
                       [class.map-counter--conflicts]="fb.value === 'conflicts'"
+                      [class.map-counter--conflicts-pulse]="fb.value === 'conflicts' && fb.count > 0"
                       [class.map-counter--surveillance-ok]="fb.value === 'surveillance' && !fb.surveillanceHasCritical"
                       [class.map-counter--surveillance-critical]="fb.value === 'surveillance' && fb.surveillanceHasCritical"
+                      [class.map-counter--without-news]="fb.value === 'withoutNews'"
                       [disabled]="fb.count === 0 && fb.value !== 'all'"
                       (click)="setSystemsFilter(fb.value)">
                       <span class="map-counter-label">{{ fb.label }}</span>
@@ -193,8 +196,10 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                       [class.map-counter--healthy]="fb.value === 'healthy'"
                       [class.map-counter--critical]="fb.value === 'critical'"
                       [class.map-counter--conflicts]="fb.value === 'conflicts'"
+                      [class.map-counter--conflicts-pulse]="fb.value === 'conflicts' && fb.count > 0"
                       [class.map-counter--surveillance-ok]="fb.value === 'surveillance' && !fb.surveillanceHasCritical"
                       [class.map-counter--surveillance-critical]="fb.value === 'surveillance' && fb.surveillanceHasCritical"
+                      [class.map-counter--without-news]="fb.value === 'withoutNews'"
                       [disabled]="fb.count === 0 && fb.value !== 'all'"
                       (click)="setSystemsFilter(fb.value)">
                       <span class="map-counter-label">{{ fb.label }}</span>
@@ -705,12 +710,17 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       border-color: rgba(255, 180, 100, 0.7);
     }
     .header-emblem-wrapper {
+      position: absolute;
+      left: 50%;
+      bottom: 0;
+      transform: translate(-50%, 50%);
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 0.5rem;
       flex-shrink: 0;
-      transform: translateY(23px);
+      z-index: 3;
+      pointer-events: auto;
     }
     .header-emblem-flank {
       font-family: 'Orbitron', sans-serif;
@@ -723,20 +733,19 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       display: inline-flex;
       align-items: center;
       transform: translateY(4px);
+      margin-bottom: 32px;
     }
     .emblem-spacer {
       position: relative;
       width: 72px;
-      height: 0;
-      min-height: 0;
-      overflow: visible;
+      height: 72px;
       flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     .emblem-box-wrapper {
-      position: absolute;
-      left: 50%;
-      bottom: -36px;
-      transform: translateX(-50%);
+      position: relative;
       z-index: 3;
     }
     .emblem-progress {
@@ -803,7 +812,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       width: 100%;
       max-width: 100%;
       margin: 0;
-      padding: 63px 1rem 1rem;
+      padding: calc(36px + 0.75rem) 1rem 1rem;
       box-sizing: border-box;
     }
     @media (min-width: 1200px) {
@@ -812,7 +821,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
         width: 100%;
         grid-template-columns: minmax(200px, 400px) minmax(0, 1fr) minmax(200px, 400px);
         gap: 1.5rem;
-        padding: 63px 1.5rem 1.5rem;
+        padding: calc(36px + 0.75rem) 1.5rem 1.5rem;
         box-sizing: border-box;
       }
     }
@@ -820,7 +829,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       .header-zone { padding: 1.5rem; }
       .main-grid {
         gap: 1.5rem;
-        padding: 63px 1.5rem 1.5rem;
+        padding: calc(36px + 0.75rem) 1.5rem 1.5rem;
       }
     }
     @media (max-width: 768px) {
@@ -1299,6 +1308,35 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       border-color: rgba(204, 85, 0, 0.65);
       box-shadow: 0 0 10px rgba(204, 85, 0, 0.2);
     }
+    @keyframes map-counter-conflicts-pulse {
+      0%,
+      100% {
+        border-color: rgba(220, 70, 70, 0.5);
+        box-shadow:
+          0 2px 8px rgba(0, 0, 0, 0.4),
+          0 0 0 1px rgba(220, 70, 70, 0.28),
+          0 0 8px rgba(220, 70, 70, 0.12);
+      }
+      50% {
+        border-color: rgba(248, 113, 113, 0.92);
+        box-shadow:
+          0 2px 8px rgba(0, 0, 0, 0.4),
+          0 0 0 2px rgba(239, 68, 68, 0.5),
+          0 0 18px rgba(239, 68, 68, 0.32);
+      }
+    }
+    .map-counter--conflicts.map-counter--conflicts-pulse:not(:disabled) {
+      animation: map-counter-conflicts-pulse 2.4s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .map-counter--conflicts.map-counter--conflicts-pulse:not(:disabled) {
+        animation: none;
+        border-color: rgba(220, 70, 70, 0.65);
+        box-shadow:
+          0 2px 8px rgba(0, 0, 0, 0.4),
+          0 0 0 1px rgba(220, 70, 70, 0.45);
+      }
+    }
     .map-counter--active.map-counter--surveillance-ok {
       background: rgba(147, 197, 253, 0.15);
       border-color: rgba(147, 197, 253, 0.62);
@@ -1328,8 +1366,16 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .map-counter--active.map-counter--total .map-counter-value {
       color: #b8fff9;
     }
-    .map-counter--active:not(.map-counter--healthy):not(.map-counter--critical):not(.map-counter--conflicts):not(.map-counter--surveillance-ok):not(.map-counter--surveillance-critical):not(.map-counter--journal):not(.map-counter--total) .map-counter-value {
+    .map-counter--active:not(.map-counter--healthy):not(.map-counter--critical):not(.map-counter--conflicts):not(.map-counter--surveillance-ok):not(.map-counter--surveillance-critical):not(.map-counter--without-news):not(.map-counter--journal):not(.map-counter--total) .map-counter-value {
       color: #00eaff;
+    }
+    .map-counter--active.map-counter--without-news {
+      background: rgba(148, 163, 184, 0.14);
+      border-color: rgba(148, 163, 184, 0.55);
+      box-shadow: 0 0 10px rgba(148, 163, 184, 0.16);
+    }
+    .map-counter--without-news .map-counter-value {
+      color: #94a3b8;
     }
     .map-counter--healthy .map-counter-value {
       color: #00ff88;
@@ -2016,6 +2062,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     for (const sys of allList) {
       if (!uniqueById.has(sys.id)) uniqueById.set(sys.id, sys);
     }
+    let withoutNewsCount = 0;
+    for (const sys of uniqueById.values()) {
+      if (isInaraWithoutNewsCategory(sys)) withoutNewsCount++;
+    }
     const totalCount = uniqueById.size;
     const conflictIds = new Set<number>();
     for (const sys of allList) {
@@ -2029,25 +2079,30 @@ export class DashboardComponent implements OnInit, OnDestroy {
       { value: 'conflicts', label: 'Conflits', count: conflictsCount },
       { value: 'surveillance', label: 'Surveillance', count: s.surveillance?.length ?? 0, surveillanceHasCritical },
       { value: 'healthy', label: 'Sains', count: s.healthy?.length ?? 0 },
+      { value: 'withoutNews', label: 'Sans signal', count: withoutNewsCount },
     ];
     return items;
   });
 
   /** Compteurs à gauche : Total + rouges (critiques, conflits, surveillance critique). */
+  /** Compteurs à gauche : Total, alertes rouges, puis « Sans signal » en dernier (ancienneté Inara > 30 j). */
   protected mapFilterCountsLeft = computed(() =>
     this.mapFilterCounts().filter(
       (fb) =>
         fb.value === 'all' ||
         fb.value === 'critical' ||
         fb.value === 'conflicts' ||
-        (fb.value === 'surveillance' && fb.surveillanceHasCritical)
+        (fb.value === 'surveillance' && fb.surveillanceHasCritical) ||
+        fb.value === 'withoutNews'
     )
   );
 
   /** Compteurs à droite : verts (sains, surveillance ok). */
   protected mapFilterCountsRight = computed(() =>
     this.mapFilterCounts().filter(
-      (fb) => fb.value === 'healthy' || (fb.value === 'surveillance' && !fb.surveillanceHasCritical)
+      (fb) =>
+        fb.value === 'healthy' ||
+        (fb.value === 'surveillance' && !fb.surveillanceHasCritical)
     )
   );
 

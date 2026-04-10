@@ -55,7 +55,7 @@ public static class FrontierMarketBusinessParser
 
         var stationName = ReadRootStationName(root);
         var marketId = ReadMarketId(root);
-        var (fullList, totalCount) = ReadConstructionCommodities(root);
+        var (fullList, totalCount, blockPresent) = ReadConstructionCommodities(root);
 
         var sample = fullList.Take(SampleNameCount).Select(x => x.Name).ToList();
         var capped = fullList.Take(MaxConstructionResourcesInResponse).ToList();
@@ -66,7 +66,8 @@ public static class FrontierMarketBusinessParser
             HasConstructionResources: totalCount > 0,
             ConstructionResourcesCount: totalCount,
             ConstructionResourcesSample: sample,
-            ConstructionResources: capped);
+            ConstructionResources: capped,
+            RequiredConstructionBlockPresent: blockPresent);
     }
 
     private static string? ReadRootStationName(JsonElement root)
@@ -121,17 +122,19 @@ public static class FrontierMarketBusinessParser
         return t.Length <= 160 ? t : t[..160] + "…";
     }
 
-    private static (IReadOnlyList<FrontierConstructionResourceItem> List, int TotalCount) ReadConstructionCommodities(JsonElement root)
+    private static (IReadOnlyList<FrontierConstructionResourceItem> List, int TotalCount, bool BlockPresent) ReadConstructionCommodities(JsonElement root)
     {
         JsonElement? commodities = null;
+        var blockPresent = false;
         if (TryGetPropertyIgnoreCase(root, "requiredConstructionResources", out var rcr) && rcr.ValueKind == JsonValueKind.Object)
         {
+            blockPresent = true;
             if (TryGetPropertyIgnoreCase(rcr, "commodities", out var c))
                 commodities = c;
         }
 
         if (commodities == null)
-            return (Array.Empty<FrontierConstructionResourceItem>(), 0);
+            return (Array.Empty<FrontierConstructionResourceItem>(), 0, blockPresent);
 
         var list = new List<FrontierConstructionResourceItem>();
         var comm = commodities.Value;
@@ -173,7 +176,7 @@ public static class FrontierMarketBusinessParser
         var ordered = list
             .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        return (ordered, ordered.Count);
+        return (ordered, ordered.Count, blockPresent);
     }
 
     private static FrontierConstructionResourceItem? CommodityFromObjectProperty(string propertyName, JsonElement value)

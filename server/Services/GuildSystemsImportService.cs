@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -135,7 +136,7 @@ public class GuildSystemsImportService
                 }
                 var influenceVal = raw.InfluencePercent.HasValue ? InfluenceParse.Sanitize(raw.InfluencePercent.Value) : (decimal?)null;
                 var stateVal = raw.States?.Count > 0 ? string.Join(",", raw.States) : null;
-                SyncControlledSystemFromImport(controlledSystems, name, influenceVal, existing.Category, raw.InfluenceDelta72h, stateVal);
+                SyncControlledSystemFromImport(controlledSystems, name, influenceVal, existing.Category, raw.InfluenceDelta72h, stateVal, ParseImportLastUpdatedUtc(raw));
                 LogSystemAudit(auditNames, existing.Name, raw.InfluencePercent, influenceVal, existing.InfluencePercent, existing.Category, controlledSystems);
                 LogCategoryAndInfluenceDiagnostic(auditNames, name, raw.Category, existing.Category, raw.InfluencePercent, influenceVal, existing.InfluencePercent, controlledSystems,
                     raw.InfluenceDelta72h, stateVal, raw.Tags?.Count > 0 ? string.Join(",", raw.Tags) : null);
@@ -164,6 +165,7 @@ public class GuildSystemsImportService
                     IsExpansionCandidate = false,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow,
+                    LastUpdated = ParseImportLastUpdatedUtc(raw),
                 };
                 _db.ControlledSystems.Add(cs);
                 controlledSystems.Add(cs);
@@ -207,7 +209,7 @@ public class GuildSystemsImportService
 
     /// <summary>Met à jour ControlledSystem avec InfluencePercent, Category, InfluenceDelta72h, State depuis l'import Inara (tooltips cellule Inf, mapping strict).
     /// State = null quand Inara ne détecte plus d'état : nettoie l'ancien état en base (ex. Expansion résiduel).</summary>
-    private void SyncControlledSystemFromImport(List<ControlledSystem> controlledSystems, string name, decimal? influencePercent, string? category, decimal? influenceDelta72h, string? state)
+    private void SyncControlledSystemFromImport(List<ControlledSystem> controlledSystems, string name, decimal? influencePercent, string? category, decimal? influenceDelta72h, string? state, DateTime? lastUpdatedUtc)
     {
         var normalized = SystemNameNormalizer.Normalize(name);
         foreach (var cs in controlledSystems.Where(c => string.Equals(SystemNameNormalizer.Normalize(c.Name), normalized, StringComparison.OrdinalIgnoreCase)))
@@ -219,7 +221,24 @@ public class GuildSystemsImportService
             cs.InfluenceDelta72h = influenceDelta72h;
             cs.State = state; // Toujours écraser : state=null nettoie si Inara ne signale plus d'état
             cs.UpdatedAt = DateTime.UtcNow;
+            if (lastUpdatedUtc.HasValue)
+                cs.LastUpdated = lastUpdatedUtc;
         }
+    }
+
+    /// <summary>Date dernière maj Inara : champ ISO envoyé par le userscript (<c>lastUpdatedAt</c>), déduit de la colonne Updated.</summary>
+    private static DateTime? ParseImportLastUpdatedUtc(GuildSystemImportItem raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw.LastUpdatedAt))
+            return null;
+        if (!DateTime.TryParse(raw.LastUpdatedAt, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
+            return null;
+        return dt.Kind switch
+        {
+            DateTimeKind.Utc => dt,
+            DateTimeKind.Local => dt.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc),
+        };
     }
 
     /// <summary>Reconstruit les catégories après import : Origine (originSystemName du payload = source de vérité, sinon fallback premier système).</summary>
@@ -449,6 +468,11 @@ public class GuildSystemImportItem
     /// <summary>Tags de ligne (ctrl, colony, etc.).</summary>
     public List<string>? Tags { get; set; }
     public string? LastUpdatedText { get; set; }
+
+    /// <summary>UTC ISO 8601 — dernière mise à jour Inara (userscript : <c>parseUpdatedToUtcIso</c> sur la cellule Updated).</summary>
+    [JsonPropertyName("lastUpdatedAt")]
+    public string? LastUpdatedAt { get; set; }
+
     public string? Category { get; set; }
     public bool? IsClean { get; set; }
     /// <summary>URL Inara du système (ex: https://inara.cz/elite/starsystem/123/).</summary>
