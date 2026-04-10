@@ -538,6 +538,68 @@
   flex-wrap: nowrap;
 }
 
+/*
+ * Fraîcheur Inara : visible uniquement au survol / focus dans la ligne (pas de saut de mise en page : opacity).
+ */
+.inara-freshness {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 0;
+  height: auto;
+  padding: 0.14rem 0.38rem;
+  box-sizing: border-box;
+  border-radius: 6px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.55rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  letter-spacing: 0.03em;
+  border: 1px solid transparent;
+  color: #fff;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+
+  .system-row:hover &,
+  .system-row:focus-within & {
+    opacity: 1;
+  }
+
+  &--fresh {
+    background: rgba(0, 255, 136, 0.2);
+    border-color: rgba(0, 255, 136, 0.45);
+  }
+
+  &--medium {
+    background: rgba(251, 191, 36, 0.2);
+    border-color: rgba(251, 191, 36, 0.45);
+  }
+
+  &--stale {
+    background: rgba(248, 113, 113, 0.2);
+    border-color: rgba(248, 113, 113, 0.5);
+  }
+
+  &--stale15 {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.55);
+  }
+
+  &--stale30 {
+    background: rgba(220, 38, 38, 0.22);
+    border-color: rgba(220, 38, 38, 0.65);
+    font-weight: 800;
+  }
+
+  &--unknown {
+    background: rgba(8, 10, 14, 0.94);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+}
+
 .system-name {
   font-family: 'Exo 2', sans-serif;
   font-weight: 500;
@@ -656,6 +718,12 @@
   border-radius: 3px;
   color: #00d4ff;
   white-space: nowrap;
+}
+
+.state-badge--rumor {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fbbf24;
 }
 
 .indicators {

@@ -457,7 +457,7 @@ public class FrontierController : ControllerBase
     }
 
     /// <summary>
-    /// POST /api/integrations/frontier/chantiers-declared/refresh-all — met à jour tous les chantiers actifs (GET /market puis /market?marketId= par ligne), sans exiger d’être docké.
+    /// POST /api/integrations/frontier/chantiers-declared/refresh-all — d’abord GET /market?marketId= par ligne (hors station), puis GET /market courant pour le reste.
     /// </summary>
     [HttpPost("chantiers-declared/refresh-all")]
     public async Task<IActionResult> PostDeclaredChantiersRefreshAll(CancellationToken ct)
@@ -482,40 +482,8 @@ public class FrontierController : ControllerBase
 
         const string capMarket = "/market";
 
-        var (marketStatus, marketBody) = await _auth.FetchCapiRawAsync(access!, capMarket, ct);
-        if (marketStatus == 422)
-        {
-            var res = await _oauthSession.ResolveEffectiveTokenAsync(ct);
-            var refreshed = await _auth.RefreshTokenAsync(res.Token?.RefreshToken ?? "", ct);
-            if (refreshed != null)
-            {
-                await _oauthSession.PersistAndSetAsync(refreshed, null, ct);
-                access = refreshed.AccessToken;
-                (marketStatus, marketBody) = await _auth.FetchCapiRawAsync(access, capMarket, ct);
-            }
-        }
-
-        if (marketStatus == 200 && !string.IsNullOrEmpty(marketBody))
-        {
-            var marketBiz = FrontierMarketBusinessParser.TryParse(marketBody, out _);
-            if (marketBiz != null && marketBiz.HasConstructionResources && marketBiz.ConstructionResourcesCount > 0)
-            {
-                var matches = DeclaredChantiersService.FindRowsMatchingMarketSummary(rows, marketBiz, profileSystemKey);
-                if (matches.Count > 0)
-                {
-                    var (u, d) = await _declaredChantiers.ApplyMarketSummaryToRowsAsync(matches, marketBiz, ct);
-                    totalUpdated += u;
-                    totalDeactivated += d;
-                    foreach (var m in matches)
-                        pending.Remove(m.Id);
-                }
-            }
-        }
-
         foreach (var snapshot in rows)
         {
-            if (!pending.Contains(snapshot.Id))
-                continue;
             var mid = snapshot.MarketId?.Trim();
             if (string.IsNullOrEmpty(mid))
                 continue;
@@ -533,18 +501,58 @@ public class FrontierController : ControllerBase
                 continue;
 
             var mkt = FrontierMarketBusinessParser.TryParse(body, out _);
-            if (mkt == null || !mkt.HasConstructionResources || mkt.ConstructionResourcesCount <= 0)
+            if (mkt == null || (mkt.ConstructionResourcesCount <= 0 && !mkt.RequiredConstructionBlockPresent))
                 continue;
 
             var one = new List<DeclaredChantier> { row };
             var match = DeclaredChantiersService.FindRowsMatchingMarketSummary(one, mkt, profileSystemKey);
             if (match.Count == 0)
-                continue;
+            {
+                _log.LogWarning(
+                    "[DeclaredChantiersRefreshAll] correspondance vide id={Id} — forçage ligne (GET /market?marketId=)",
+                    snapshot.Id);
+                match = one;
+            }
 
             var (u2, d2) = await _declaredChantiers.ApplyMarketSummaryToRowsAsync(match, mkt, ct);
             totalUpdated += u2;
             totalDeactivated += d2;
             pending.Remove(snapshot.Id);
+        }
+
+        var rowsStill = await _declaredChantiers.GetActiveTrackedRowsAsync(guildId, ct);
+        var (marketStatus, marketBody) = await _auth.FetchCapiRawAsync(access!, capMarket, ct);
+        if (marketStatus == 422)
+        {
+            var res = await _oauthSession.ResolveEffectiveTokenAsync(ct);
+            var refreshed = await _auth.RefreshTokenAsync(res.Token?.RefreshToken ?? "", ct);
+            if (refreshed != null)
+            {
+                await _oauthSession.PersistAndSetAsync(refreshed, null, ct);
+                access = refreshed.AccessToken;
+                (marketStatus, marketBody) = await _auth.FetchCapiRawAsync(access, capMarket, ct);
+            }
+        }
+
+        if (marketStatus == 200 && !string.IsNullOrEmpty(marketBody))
+        {
+            var marketBiz = FrontierMarketBusinessParser.TryParse(marketBody, out _);
+            if (marketBiz != null && (marketBiz.ConstructionResourcesCount > 0 || marketBiz.RequiredConstructionBlockPresent))
+            {
+                var candidates = rowsStill.Where(r => pending.Contains(r.Id)).ToList();
+                if (candidates.Count > 0)
+                {
+                    var matches = DeclaredChantiersService.FindRowsMatchingMarketSummary(candidates, marketBiz, profileSystemKey);
+                    if (matches.Count > 0)
+                    {
+                        var (u, d) = await _declaredChantiers.ApplyMarketSummaryToRowsAsync(matches, marketBiz, ct);
+                        totalUpdated += u;
+                        totalDeactivated += d;
+                        foreach (var m in matches)
+                            pending.Remove(m.Id);
+                    }
+                }
+            }
         }
 
         sw.Stop();
@@ -567,7 +575,7 @@ public class FrontierController : ControllerBase
     }
 
     /// <summary>
-    /// POST /api/integrations/frontier/chantiers-declared/refresh-one — rafraîchit un chantier actif par id SQL (marketId puis /market courant).
+    /// POST /api/integrations/frontier/chantiers-declared/refresh-one — rafraîchit un chantier actif par id SQL (GET /market?marketId= si marketId, sinon /market courant).
     /// </summary>
     [HttpPost("chantiers-declared/refresh-one")]
     public async Task<IActionResult> PostDeclaredChantiersRefreshOne([FromBody] DeclaredChantierRefreshOneRequest? body, CancellationToken ct)
@@ -595,21 +603,65 @@ public class FrontierController : ControllerBase
         {
             var endpoint = $"{capMarket}?marketId={Uri.EscapeDataString(mid)}";
             var (st, mbody) = await _auth.FetchCapiRawAsync(access!, endpoint, ct);
-            if (st == 200 && !string.IsNullOrEmpty(mbody))
+            if (st == 422)
             {
-                var mkt = FrontierMarketBusinessParser.TryParse(mbody, out _);
-                if (mkt != null && mkt.HasConstructionResources && mkt.ConstructionResourcesCount > 0)
+                var resTok = await _oauthSession.ResolveEffectiveTokenAsync(ct);
+                var refreshed = await _auth.RefreshTokenAsync(resTok.Token?.RefreshToken ?? "", ct);
+                if (refreshed != null)
                 {
-                    var match = DeclaredChantiersService.FindRowsMatchingMarketSummary(
-                        new List<DeclaredChantier> { row },
-                        mkt,
-                        profileSystemKey);
-                    if (match.Count > 0)
-                    {
-                        await _declaredChantiers.ApplyMarketSummaryToRowsAsync(match, mkt, ct);
-                        applied = mkt;
-                    }
+                    await _oauthSession.PersistAndSetAsync(refreshed, null, ct);
+                    access = refreshed.AccessToken;
+                    (st, mbody) = await _auth.FetchCapiRawAsync(access!, endpoint, ct);
                 }
+            }
+
+            if (st != 200 || string.IsNullOrEmpty(mbody))
+            {
+                sw.Stop();
+                _log.LogWarning("[DeclaredChantiersRefreshOne] marketId path id={Id} HTTP {Status}", body.Id, st);
+                return BadRequest(new
+                {
+                    message =
+                        $"Marché distant indisponible (HTTP {st}). Vérifiez le marketId enregistré ou réessayez plus tard.",
+                });
+            }
+
+            var mkt = FrontierMarketBusinessParser.TryParse(mbody, out var parseErr);
+            if (mkt == null)
+            {
+                sw.Stop();
+                return BadRequest(new { message = parseErr ?? "Impossible d’analyser la réponse /market?marketId=." });
+            }
+
+            var match = DeclaredChantiersService.FindRowsMatchingMarketSummary(
+                new List<DeclaredChantier> { row },
+                mkt,
+                profileSystemKey);
+            if (match.Count == 0)
+            {
+                // Réponse obtenue avec GET /market?marketId= — même si parsing id/nom diffère du DTO, c’est ce marché.
+                _log.LogWarning(
+                    "[DeclaredChantiersRefreshOne] correspondance marché vide id={Id} rowMid={RowMid} mktMid={MktMid} mktStation={St} — forçage ligne unique",
+                    body.Id,
+                    row.MarketId ?? "(null)",
+                    mkt.MarketId ?? "(null)",
+                    mkt.StationName ?? "(null)");
+                match = new List<DeclaredChantier> { row };
+            }
+
+            if (mkt.ConstructionResourcesCount > 0 || mkt.RequiredConstructionBlockPresent)
+            {
+                await _declaredChantiers.ApplyMarketSummaryToRowsAsync(match, mkt, ct);
+                applied = mkt;
+            }
+            else
+            {
+                sw.Stop();
+                return BadRequest(new
+                {
+                    message =
+                        "Ce marché (marketId) ne contient pas de bloc chantier CAPI. Docké une fois à la station pour enregistrer un marketId à jour, ou vérifiez en jeu.",
+                });
             }
         }
 
@@ -632,7 +684,11 @@ public class FrontierController : ControllerBase
             {
                 sw.Stop();
                 _log.LogWarning("[DeclaredChantiersRefreshOne] id={Id} fail: market HTTP {Status} ms={Ms}", body.Id, marketStatus, sw.ElapsedMilliseconds);
-                return BadRequest(new { message = $"Marché indisponible (HTTP {marketStatus})." });
+                return BadRequest(new
+                {
+                    message =
+                        $"Marché « courant » indisponible (HTTP {marketStatus}). Enregistrez un marketId (depuis la station du chantier) pour rafraîchir à distance.",
+                });
             }
 
             var marketBiz = FrontierMarketBusinessParser.TryParse(marketBody, out var parseErr);
@@ -642,10 +698,14 @@ public class FrontierController : ControllerBase
                 return BadRequest(new { message = parseErr ?? "Impossible d’analyser le marché CAPI." });
             }
 
-            if (!marketBiz.HasConstructionResources || marketBiz.ConstructionResourcesCount <= 0)
+            if (marketBiz.ConstructionResourcesCount <= 0 && !marketBiz.RequiredConstructionBlockPresent)
             {
                 sw.Stop();
-                return BadRequest(new { message = "Aucune ressource de construction sur ce marché." });
+                return BadRequest(new
+                {
+                    message =
+                        "Aucune ressource de construction sur le marché courant (docké à la station du chantier), ou enregistrez un marketId pour le rafraîchissement à distance.",
+                });
             }
 
             var rowAgain = await _declaredChantiers.GetActiveTrackedByIdAsync(guildId, body.Id, ct);

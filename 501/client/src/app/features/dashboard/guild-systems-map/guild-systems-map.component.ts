@@ -19,6 +19,8 @@ import type { SystemsFilterValue } from '../../../core/models/guild-systems.mode
 import { GuildSystemsSyncService } from '../../../core/services/guild-systems-sync.service';
 import type { FrontierJournalSystemDerivedDto } from '../../../core/services/frontier-journal-api.service';
 import type { BridgeRoute } from '@elite-bridge-shared/bridge-planner-route';
+import { hasConflictState } from '../../../core/utils/guild-systems.util';
+import { isInaraWithoutNewsCategory } from '../../../core/utils/inara-data-derivation.util';
 
 export type MapCategoryKey =
   | 'origin'
@@ -892,7 +894,6 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   private updateVisualHighlight(): void {
     if (!this.scene) return;
     const filter = this.systemsFilter;
-    const highlightCat = filter === 'all' ? null : (FILTER_TO_CATEGORY[filter] ?? null);
     const journalOn = this.journalLayersActive();
     const cmdr = this.mapViewMode === 'cmdr';
 
@@ -936,7 +937,19 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
           r2Op *= DIM_FACTOR_RING2;
         }
       } else {
-        const matchCat = !highlightCat || sys.mapCategory === highlightCat;
+        // Conflits : aligné sur le panneau (hasConflictState) — un même système peut être sain + conflit
+        // ou avoir mapCategory « surveillance » / autre alors qu’il est en guerre ; le filtre carte doit quand même le mettre en avant.
+        // « Systèmes sans nouvelles » : uniquement selon l’ancienneté Inara (> 30 j), pas la catégorie carte.
+        const matchCat =
+          filter === 'all' ||
+          (filter === 'withoutNews'
+            ? isInaraWithoutNewsCategory(sys)
+            : filter === 'conflicts'
+              ? hasConflictState(sys) || sys.mapCategory === 'conflicts'
+              : (() => {
+                  const hc = FILTER_TO_CATEGORY[filter];
+                  return hc != null && sys.mapCategory === hc;
+                })());
         const matchJ = !journalOn || this.journalMatchesActiveLayers(sys);
         const visible = matchCat && matchJ;
         const accent = this.journalAccentColor(sys);

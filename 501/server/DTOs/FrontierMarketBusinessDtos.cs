@@ -8,10 +8,12 @@ public record FrontierConstructionResourceItem(
     long Remaining);
 
 /// <summary>Résumé métier compact CAPI /market (pas de JSON brut).</summary>
+/// <param name="RequiredConstructionBlockPresent">True si la clé <c>requiredConstructionResources</c> est présente (chantier terminé = commodities vides possibles).</param>
 public record FrontierMarketBusinessSummary(
     string? StationName,
     string? MarketId,
     bool HasConstructionResources,
     int ConstructionResourcesCount,
     IReadOnlyList<string> ConstructionResourcesSample,
-    IReadOnlyList<FrontierConstructionResourceItem> ConstructionResources);
+    IReadOnlyList<FrontierConstructionResourceItem> ConstructionResources,
+    bool RequiredConstructionBlockPresent = false);
