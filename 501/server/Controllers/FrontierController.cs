@@ -17,6 +17,7 @@ public class FrontierController : ControllerBase
     private readonly FrontierJournalUnifiedSyncService _journalUnifiedSync;
     private readonly CurrentGuildService _currentGuild;
     private readonly DeclaredChantiersService _declaredChantiers;
+    private readonly FrontierLogisticsInventoryService _logisticsInventory;
     private readonly ILogger<FrontierController> _log;
 
     public FrontierController(
@@ -27,6 +28,7 @@ public class FrontierController : ControllerBase
         FrontierJournalUnifiedSyncService journalUnifiedSync,
         CurrentGuildService currentGuild,
         DeclaredChantiersService declaredChantiers,
+        FrontierLogisticsInventoryService logisticsInventory,
         ILogger<FrontierController> log)
     {
         _auth = auth;
@@ -36,7 +38,22 @@ public class FrontierController : ControllerBase
         _journalUnifiedSync = journalUnifiedSync;
         _currentGuild = currentGuild;
         _declaredChantiers = declaredChantiers;
+        _logisticsInventory = logisticsInventory;
         _log = log;
+    }
+
+    /// <summary>
+    /// GET /api/integrations/frontier/chantiers-logistics-inventory — soutes vaisseau + FC (CAPI /profile + /fleetcarrier).
+    /// </summary>
+    [HttpGet("chantiers-logistics-inventory")]
+    public async Task<IActionResult> GetChantiersLogisticsInventory(CancellationToken ct)
+    {
+        var res = await _oauthSession.ResolveEffectiveTokenAsync(ct);
+        if (res.Token == null || string.IsNullOrEmpty(res.Token.AccessToken))
+            return Unauthorized(new { message = "Connexion Frontier requise pour l’inventaire soute." });
+
+        var dto = await _logisticsInventory.FetchInventoryAsync(res.Token.AccessToken, ct);
+        return Ok(dto);
     }
 
     /// <summary>POST /api/integrations/frontier/logout — déconnexion Frontier (efface le token mémoire + session persistée).</summary>

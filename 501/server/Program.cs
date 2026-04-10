@@ -34,6 +34,7 @@ builder.Services.AddSingleton<FrontierTokenStore>();
 builder.Services.AddHostedService<FrontierOAuthRehydrationHostedService>();
 builder.Services.AddSingleton<CurrentGuildService>();
 builder.Services.AddScoped<DeclaredChantiersService>();
+builder.Services.AddScoped<FrontierLogisticsInventoryService>();
 builder.Services.AddScoped<GuildSystemsService>();
 builder.Services.AddScoped<BgsSyncService>();
 builder.Services.AddScoped<EliteBgsDiagnosticService>();
