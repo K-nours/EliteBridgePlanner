@@ -228,11 +228,19 @@ public class FrontierAuthService
     }
 
     /// <summary>Récupère le JSON brut d'un endpoint CAPI (ex. /profile). Pour parsing complet.</summary>
-    public async Task<(int StatusCode, string? Body)> FetchCapiRawAsync(string accessToken, string capiEndpoint = "/profile", CancellationToken ct = default)
+    public Task<(int StatusCode, string? Body)> FetchCapiRawAsync(string accessToken, string capiEndpoint = "/profile", CancellationToken ct = default) =>
+        FetchCapiRawAsync(accessToken, capiEndpoint, TimeSpan.FromSeconds(15), ct);
+
+    /// <summary>Récupère le JSON brut CAPI avec délai maximal personnalisable (ex. /fleetcarrier, réponses lentes).</summary>
+    public async Task<(int StatusCode, string? Body)> FetchCapiRawAsync(
+        string accessToken,
+        string capiEndpoint,
+        TimeSpan timeout,
+        CancellationToken ct = default)
     {
         var url = $"{CapiHost}{capiEndpoint}";
         using var client = _httpFactory.CreateClient();
-        client.Timeout = TimeSpan.FromSeconds(15);
+        client.Timeout = timeout <= TimeSpan.Zero ? TimeSpan.FromSeconds(15) : timeout;
         client.DefaultRequestHeaders.Clear();
         client.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
         try

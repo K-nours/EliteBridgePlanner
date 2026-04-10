@@ -18,14 +18,6 @@ import { GuildSettingsService } from '../../core/services/guild-settings.service
 import { InaraSyncBridgeService } from '../../core/services/inara-sync-bridge.service';
 import { SyncHelpModalService } from '../../core/services/sync-help-modal.service';
 import { FrontierJournalApiService } from '../../core/services/frontier-journal-api.service';
-import { DeclaredChantiersApiService } from '../../core/services/declared-chantiers-api.service';
-import { ActiveChantiersStore } from '../../core/state/active-chantiers.store';
-import { ChantierLogisticsUiService } from '../../core/services/chantier-logistics-ui.service';
-import { mapDeclaredListItemApiToSite } from '../../core/utils/declared-chantiers-site-map';
-import type {
-  DeclaredChantierListItemApi,
-  DeclaredChantierRefreshAllResultApi,
-} from '../../core/models/declared-chantiers-api.model';
 import { BridgeRouteApiService } from '../../core/services/bridge-route-api.service';
 import type { BridgeRoute } from '@elite-bridge-shared/bridge-planner-route';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
@@ -1910,14 +1902,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly guildSystemsSync = inject(GuildSystemsSyncService);
   private readonly guildSystemsApi = inject(GuildSystemsApiService);
   private readonly bridgeRouteApi = inject(BridgeRouteApiService);
-  private readonly declaredChantiersApi = inject(DeclaredChantiersApiService);
-  private readonly activeChantiersStore = inject(ActiveChantiersStore);
-  private readonly chantierLogisticsUi = inject(ChantierLogisticsUiService);
   /** Route BridgePlanner (GET /api/bridge-route) pour la vue Pont galactique. */
   protected readonly bridgePlannerRoute = signal<BridgeRoute | null>(null);
   private bridgeRoutePollRef: ReturnType<typeof setInterval> | null = null;
-  private chantiersAutoRefreshIntervalRef: ReturnType<typeof setInterval> | null = null;
-  private chantiersAutoRefreshRunning = false;
   private journalUnifiedPollingRef: ReturnType<typeof setInterval> | null = null;
   private journalUnifiedExpectComplete = false;
   /** Évite les doublons dans les logs pour le même libellé de progression. */
@@ -1945,77 +1932,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.loadJournalUnifiedStatus();
       }
     });
-    effect(() => {
-      if (this.frontierAuth.isConnected()) {
-        this.startChantiersAutoRefreshTimer();
-      } else {
-        this.stopChantiersAutoRefreshTimer();
-      }
-    });
-  }
-
-  private startChantiersAutoRefreshTimer(): void {
-    if (this.chantiersAutoRefreshIntervalRef != null) return;
-    const fiveMin = 5 * 60 * 1000;
-    this.chantiersAutoRefreshIntervalRef = setInterval(() => this.runChantiersAutoRefresh(), fiveMin);
-  }
-
-  private stopChantiersAutoRefreshTimer(): void {
-    if (this.chantiersAutoRefreshIntervalRef != null) {
-      clearInterval(this.chantiersAutoRefreshIntervalRef);
-      this.chantiersAutoRefreshIntervalRef = null;
-    }
-  }
-
-  private runChantiersAutoRefresh(): void {
-    if (this.chantiersAutoRefreshRunning) return;
-    if (!this.frontierAuth.isConnected()) return;
-    this.chantiersAutoRefreshRunning = true;
-    this.declaredChantiersApi
-      .refreshAll()
-      .pipe(
-        switchMap((res) =>
-          forkJoin({
-            mine: this.declaredChantiersApi.listMine().pipe(catchError(() => of([] as DeclaredChantierListItemApi[]))),
-            others: this.declaredChantiersApi.listOthers().pipe(catchError(() => of([] as DeclaredChantierListItemApi[]))),
-          }).pipe(map((lists) => ({ res, ...lists }))),
-        ),
-        take(1),
-      )
-      .subscribe({
-        next: (payload: {
-          res: DeclaredChantierRefreshAllResultApi;
-          mine: DeclaredChantierListItemApi[];
-          others: DeclaredChantierListItemApi[];
-        }) => {
-          const { res, mine, others } = payload;
-          const prevSel = this.chantierLogisticsUi.selectedSiteId();
-          this.activeChantiersStore.replaceMineAndOthers(
-            mine.map(mapDeclaredListItemApiToSite),
-            others.map(mapDeclaredListItemApiToSite),
-          );
-          if (prevSel && !this.activeChantiersStore.entries().some((e: { id: string }) => e.id === prevSel)) {
-            this.chantierLogisticsUi.selectedSiteId.set(null);
-            this.syncLog.addLog(`[Chantiers] chantier terminé — sélection effacée (inactive)`);
-          }
-          let line = `[Chantiers] refresh auto OK — ${res.updated} chantier(s) mis à jour`;
-          if (res.deactivated > 0) line += ` — ${res.deactivated} terminé(s)`;
-          this.syncLog.addLog(line);
-          this.chantiersAutoRefreshRunning = false;
-        },
-        error: (err: unknown) => {
-          let msg = 'erreur réseau';
-          if (err instanceof HttpErrorResponse) {
-            const e = err.error as { message?: string } | undefined;
-            if (typeof e?.message === 'string') msg = e.message;
-            else if (err.status === 0) msg = 'serveur injoignable';
-          } else if (err && typeof err === 'object' && 'message' in err) {
-            msg = String((err as { message?: string }).message);
-          }
-          this.syncLog.addLog(`[Chantiers] refresh échec — ${msg}`);
-          this.chantiersAutoRefreshRunning = false;
-        },
-      });
   }
   protected strokeDashOffset = computed(() => this.strokeCircumference * (1 - this.refreshProgress() / 100));
 
@@ -2802,6 +2718,5 @@ export class DashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.stopJournalUnifiedPolling();
     this.stopBridgeRoutePolling();
-    this.stopChantiersAutoRefreshTimer();
   }
 }

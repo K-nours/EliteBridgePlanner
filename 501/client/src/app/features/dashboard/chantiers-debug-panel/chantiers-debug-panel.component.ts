@@ -126,11 +126,7 @@ export class ChantiersDebugPanelComponent implements OnInit {
             others: this.declaredApi.listOthers().pipe(catchError(() => of([] as DeclaredChantierListItemApi[]))),
           }).pipe(
             map(({ mine, others }) => {
-              const prev = this.logisticsUi.selectedSiteId();
               this.chantiers.replaceMineAndOthers(mine.map(mapDeclaredListItemApiToSite), others.map(mapDeclaredListItemApiToSite));
-              if (prev && !this.chantiers.entries().some((e) => e.id === prev)) {
-                this.logisticsUi.selectedSiteId.set(null);
-              }
               return { res, mine, others };
             }),
           ),

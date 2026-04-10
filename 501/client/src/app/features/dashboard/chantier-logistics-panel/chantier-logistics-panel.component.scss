@@ -7,10 +7,87 @@
   flex: 1 1 auto;
 }
 
+.chantier-logistics-real-sync-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.32rem 0.5rem;
+  border-radius: 4px;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid rgba(100, 116, 139, 0.45);
+  background: rgba(15, 23, 42, 0.65);
+  color: rgba(148, 163, 184, 0.95);
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    box-shadow 0.15s;
+
+  &:focus-visible {
+    outline: 1px solid rgba(0, 212, 255, 0.55);
+    outline-offset: 1px;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  &--active:not(:disabled) {
+    border-color: rgba(0, 212, 255, 0.55);
+    background: rgba(0, 212, 255, 0.14);
+    color: rgba(226, 232, 240, 0.96);
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.12);
+  }
+
+  &--inactive:not(:disabled) {
+    color: rgba(148, 163, 184, 0.88);
+  }
+
+  &__title {
+    white-space: nowrap;
+  }
+
+  &__pill {
+    flex-shrink: 0;
+    padding: 0.12rem 0.38rem;
+    border-radius: 3px;
+    font-size: 0.52rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    color: rgba(148, 163, 184, 0.95);
+  }
+
+  &--active:not(:disabled) &__pill {
+    border-color: rgba(52, 211, 153, 0.45);
+    background: rgba(16, 185, 129, 0.12);
+    color: rgba(110, 231, 183, 0.98);
+  }
+
+  &--inactive:not(:disabled) &__pill {
+    border-color: rgba(100, 116, 139, 0.35);
+    color: rgba(148, 163, 184, 0.75);
+  }
+}
+
+.chantier-logistics-real-sync-btn--in-header {
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
 .chantier-logistics-header-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -19,8 +96,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   min-height: 28px;
+
+  &--modal {
+    margin-bottom: 8px;
+  }
 
   h3 {
     margin: 0;
@@ -34,6 +115,40 @@
       0 0 4px rgba(0, 234, 255, 0.4),
       0 0 10px rgba(0, 234, 255, 0.22);
   }
+}
+
+.chantier-logistics-header-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.chantier-logistics-header-last-sync {
+  margin: 0;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.62rem;
+  color: rgba(148, 163, 184, 0.95);
+  line-height: 1.35;
+}
+
+.chantier-logistics-header-last-sync__value {
+  color: rgba(226, 232, 240, 0.95);
+  font-weight: 500;
+}
+
+.chantier-logistics-gone {
+  padding: 0.75rem 0.25rem;
+}
+
+.chantier-logistics-gone__text {
+  margin: 0;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: rgba(251, 191, 36, 0.9);
+  text-align: center;
 }
 
 /* Aligné sur .btn-icon-more (panneau faction / chantiers) */
@@ -209,7 +324,7 @@
   display: flex;
   flex-direction: column;
 
-  .chantier-logistics-res__row {
+  .chantier-logistics-res-table {
     font-size: 0.74rem;
   }
 
@@ -293,6 +408,15 @@
   word-break: break-word;
 }
 
+.chantier-logistics-site-prefix {
+  opacity: 0.5;
+}
+
+.chantier-logistics-site-name {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.96);
+}
+
 .chantier-logistics-marketid {
   margin: 0;
   font-family: 'Exo 2', sans-serif;
@@ -328,44 +452,166 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
-.chantier-logistics-res {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+.chantier-logistics-res-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
-.chantier-logistics-res__row {
-  display: flex;
-  align-items: baseline;
-  gap: 0.35rem;
-  margin: 0;
+/* Largeurs colonnes chiffres (1ch ≈ largeur du « 0 » tabulaire). */
+$chantier-res-col-need: 5ch;
+$chantier-res-col-ship: 4ch;
+$chantier-res-col-fc: 5ch;
+$chantier-res-col-global: 6ch;
+$chantier-res-col-total: 6ch;
+
+/** Colonnes vides entre les compteurs. */
+$chantier-res-gap-width: 40px;
+
+.chantier-logistics-res-table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
   font-family: 'Exo 2', sans-serif;
   font-size: 0.68rem;
   line-height: 1.35;
 }
 
-.chantier-logistics-res__name {
-  flex: 0 1 auto;
-  min-width: 0;
+.chantier-logistics-res-col--name {
+  width: auto;
+  min-width: 3.5rem;
+}
+
+.chantier-logistics-res-col--need {
+  width: $chantier-res-col-need;
+}
+
+.chantier-logistics-res-col--ship {
+  width: $chantier-res-col-ship;
+}
+
+.chantier-logistics-res-col--fc {
+  width: $chantier-res-col-fc;
+}
+
+.chantier-logistics-res-col--global {
+  width: $chantier-res-col-global;
+}
+
+.chantier-logistics-res-col--total {
+  width: $chantier-res-col-total;
+}
+
+.chantier-logistics-res-col--gap {
+  width: $chantier-res-gap-width;
+  max-width: $chantier-res-gap-width;
+}
+
+.chantier-logistics-res-th {
+  padding: 0.35rem 0 0.4rem;
+  vertical-align: bottom;
+  font-size: 0.52rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.9);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.18);
+}
+
+.chantier-logistics-res-th--gap {
+  padding: 0;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.18);
+  font-size: 0;
+  line-height: 0;
+}
+
+.chantier-logistics-res-th--name {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.chantier-logistics-res-th--num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.chantier-logistics-res-td {
+  padding: 0.3rem 0;
+  vertical-align: baseline;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.07);
+}
+
+.chantier-logistics-res-td--gap {
+  padding: 0;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.07);
+}
+
+.chantier-logistics-res-table tbody tr > th:first-child {
+  padding-left: 0;
+}
+
+.chantier-logistics-res-td--name {
   color: rgba(255, 255, 255, 0.88);
+  word-break: break-word;
+  font-weight: 500;
 }
 
-.chantier-logistics-res__dots {
-  flex: 1 1 auto;
-  min-width: 0.5rem;
-  border-bottom: 1px dotted rgba(0, 212, 255, 0.22);
-  margin: 0 0.15rem;
-  height: 0;
-  align-self: center;
-  opacity: 0.85;
+.chantier-logistics-res-table th[scope='row'] {
+  text-align: left;
 }
 
-.chantier-logistics-res__qty {
-  flex-shrink: 0;
+.chantier-logistics-res-td--need {
+  text-align: right;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: #00d4ff;
+}
+
+.chantier-logistics-res-td--global {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: rgba(103, 232, 249, 0.92);
+}
+
+.chantier-logistics-res-td--ship,
+.chantier-logistics-res-td--fc,
+.chantier-logistics-res-td--total {
+  text-align: right;
+}
+
+.chantier-logistics-res-num {
+  display: block;
+  width: 100%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.chantier-logistics-res-dash {
+  display: block;
+  width: 100%;
+  text-align: right;
+  color: rgba(148, 163, 184, 0.55);
+  font-weight: 500;
+}
+
+.chantier-logistics-res-tr--ok .chantier-logistics-res-num--ship,
+.chantier-logistics-res-tr--ok .chantier-logistics-res-num--fc,
+.chantier-logistics-res-tr--ok .chantier-logistics-res-num--total {
+  color: rgba(52, 211, 153, 0.95);
+}
+
+.chantier-logistics-res-tr--warn .chantier-logistics-res-num--ship,
+.chantier-logistics-res-tr--warn .chantier-logistics-res-num--fc,
+.chantier-logistics-res-tr--warn .chantier-logistics-res-num--total {
+  color: rgba(251, 191, 36, 0.9);
+}
+
+.chantier-logistics-res-tr--zero .chantier-logistics-res-num--ship,
+.chantier-logistics-res-tr--zero .chantier-logistics-res-num--fc,
+.chantier-logistics-res-tr--zero .chantier-logistics-res-num--total {
+  color: rgba(100, 116, 139, 0.85);
 }

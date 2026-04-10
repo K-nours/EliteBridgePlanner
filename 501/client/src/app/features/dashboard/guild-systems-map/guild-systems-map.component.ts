@@ -18,7 +18,7 @@ import type { GuildSystemBgsDto } from '../../../core/models/guild-systems.model
 import type { SystemsFilterValue } from '../../../core/models/guild-systems.model';
 import { GuildSystemsSyncService } from '../../../core/services/guild-systems-sync.service';
 import type { FrontierJournalSystemDerivedDto } from '../../../core/services/frontier-journal-api.service';
-import type { BridgeRoute } from '@elite-bridge-shared/bridge-planner-route';
+import type { BridgeRoute, BridgeRoutePoint } from '@elite-bridge-shared/bridge-planner-route';
 import { hasConflictState } from '../../../core/utils/guild-systems.util';
 import { isInaraWithoutNewsCategory } from '../../../core/utils/inara-data-derivation.util';
 
@@ -88,6 +88,21 @@ const LANDMARK_LABEL_OFFSET_Y_PX = 40;
 const BRIDGE_ROUTE_NODE_RADIUS = 3.6;
 
 /** Distance caméra ↔ cible : molette OrbitControls et curseur identiques. */
+/**
+ * Indice du point sur lequel centrer la vue au premier affichage Pont galactique :
+ * dernier `systeme_operationnel` dans l’ordre route, sinon dernier point ≠ `fin`, sinon dernier point.
+ */
+function resolveGalacticBridgeInitialFocusIndex(pts: BridgeRoutePoint[]): number {
+  if (pts.length === 0) return 0;
+  for (let i = pts.length - 1; i >= 0; i--) {
+    if (pts[i].type === 'systeme_operationnel') return i;
+  }
+  for (let i = pts.length - 1; i >= 0; i--) {
+    if (pts[i].type !== 'fin') return i;
+  }
+  return pts.length - 1;
+}
+
 const MAP_ZOOM_DISTANCE_MIN = 5;
 const MAP_ZOOM_DISTANCE_MAX = 40000;
 /** Distance par défaut centre (HQ ou barycentre) → caméra : chargement + reset vue. */
@@ -397,6 +412,12 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   /** Ligne + sphères BridgePlanner (vue Pont galactique). */
   private bridgeRouteGroup: THREE.Group | null = null;
 
+  /**
+   * Cadrage automatique du pont (barycentre + distance) : une seule fois tant qu’une route
+   * avec des points est affichée. Les rafraîchissements de données ne doivent pas bouger la caméra.
+   */
+  private galacticBridgeAutoFrameDone = false;
+
   constructor() {
     effect(() => {
       const id = this.guildSync.focusOnSystemId();
@@ -674,7 +695,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
       }
     }
 
-    this.rebuildBridgeRouteLayer(preserveCamera);
+    this.rebuildBridgeRouteLayer();
 
     if (list.length === 0 && !this.hasBridgeRouteToShow()) {
       return;
@@ -697,7 +718,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   /**
    * Pont BridgePlanner : sphères + segments — couleurs = `colorHex` du payload (aucun mapping local).
    */
-  private rebuildBridgeRouteLayer(preserveCamera: boolean): void {
+  private rebuildBridgeRouteLayer(): void {
     if (!this.scene) return;
     if (this.bridgeRouteGroup) {
       this.scene.remove(this.bridgeRouteGroup);
@@ -707,6 +728,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     if (this.mapViewMode !== 'galacticBridge') return;
     const pts = this.bridgePlannerRoute?.points;
     if (!pts?.length) {
+      this.galacticBridgeAutoFrameDone = false;
       console.debug('[GuildSystemsMap] rebuildBridgeRouteLayer — aucun point', {
         hasRoute: !!this.bridgePlannerRoute,
       });
@@ -742,19 +764,25 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     this.scene.add(g);
     this.bridgeRouteGroup = g;
 
-    if (!preserveCamera && this.camera && this.controls) {
-      const center = new THREE.Vector3();
-      for (const v of positions) center.add(v);
-      center.multiplyScalar(1 / positions.length);
+    if (!this.galacticBridgeAutoFrameDone && this.camera && this.controls) {
+      const focusIdx = Math.min(resolveGalacticBridgeInitialFocusIndex(pts), positions.length - 1);
+      const center = positions[focusIdx].clone();
       let maxD = 80;
-      for (const v of positions) maxD = Math.max(maxD, center.distanceTo(v));
-      const dist = Math.min(MAP_ZOOM_DISTANCE_MAX, Math.max(120, maxD * 3.5));
+      for (const v of positions) {
+        maxD = Math.max(maxD, center.distanceTo(v));
+      }
+      /** Zoom lié à l’étendue de la route autour du point focal, plafonné pour rester lisible. */
+      const dist = Math.min(
+        MAP_ZOOM_DISTANCE_MAX,
+        Math.max(120, Math.min(4500, maxD * 2.6)),
+      );
       this.viewCenter.copy(center);
       this.controls.target.copy(center);
       this.viewDistance = dist;
       this.zoomLevel = zoomLevelForViewDistance(dist);
       const dir = new THREE.Vector3(1, 0.55, 1).normalize();
       this.camera.position.copy(center).add(dir.multiplyScalar(dist));
+      this.galacticBridgeAutoFrameDone = true;
     }
   }
 
