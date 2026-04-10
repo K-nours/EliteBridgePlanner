@@ -10,9 +10,13 @@
 .chantier-logistics-real-sync-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  justify-content: center;
+  gap: 0.35rem;
   margin: 0;
-  padding: 0.32rem 0.5rem;
+  height: 28px;
+  min-height: 28px;
+  box-sizing: border-box;
+  padding: 0 0.45rem;
   border-radius: 4px;
   font-family: 'Exo 2', sans-serif;
   font-size: 0.62rem;
@@ -52,11 +56,13 @@
 
   &__title {
     white-space: nowrap;
+    line-height: 1;
   }
 
   &__pill {
     flex-shrink: 0;
-    padding: 0.12rem 0.38rem;
+    padding: 0.08rem 0.32rem;
+    line-height: 1;
     border-radius: 3px;
     font-size: 0.52rem;
     font-weight: 700;
