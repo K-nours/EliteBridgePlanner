@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using GuildDashboard.Server.Data;
@@ -394,7 +395,7 @@ public class DeclaredChantiersService
         if (mId != null)
         {
             var byMid = candidates
-                .Where(r => r.MarketId != null && string.Equals(r.MarketId.Trim(), mId, StringComparison.OrdinalIgnoreCase))
+                .Where(r => r.MarketId != null && MarketIdsEqual(r.MarketId, mId))
                 .ToList();
             if (byMid.Count > 0)
                 return byMid;
@@ -402,15 +403,52 @@ public class DeclaredChantiersService
 
         if (sysKey != null && !string.IsNullOrEmpty(stKey))
         {
-            return candidates
+            var full = candidates
                 .Where(r => r.SystemNameKey == sysKey && r.StationNameKey == stKey)
                 .ToList();
+            if (full.Count > 0)
+                return full;
+        }
+
+        // Profil sans LastSystemName, ou nom système profil ≠ ligne SQL : le /market courant a au moins le nom de station (name).
+        // Si un seul chantier correspond à cette station, on l’associe au marché lu.
+        if (!string.IsNullOrEmpty(stKey))
+        {
+            var byStation = candidates.Where(r => r.StationNameKey == stKey).ToList();
+            if (byStation.Count == 1)
+                return byStation;
+        }
+
+        // CAPI peut renvoyer un nom court (« Cottenot Hub ») alors que la ligne SQL a le libellé complet
+        // (« Planetary Construction Site: Cottenot Hub ») — un seul candidat : suffixe / préfixe compatible.
+        if (candidates.Count == 1 && !string.IsNullOrEmpty(stKey))
+        {
+            var r = candidates[0];
+            var rk = NormalizeKey(r.StationName ?? "");
+            if (rk == stKey
+                || rk.EndsWith(stKey, StringComparison.Ordinal)
+                || stKey.EndsWith(rk, StringComparison.Ordinal))
+                return new List<DeclaredChantier> { r };
         }
 
         return new List<DeclaredChantier>();
     }
 
-    /// <summary>Applique le résumé marché à des lignes suivies — désactive si tout est livré (remaining ≤ 0).</summary>
+    /// <summary>Compare les identifiants marché CAPI (chaînes identiques ou même entier long).</summary>
+    private static bool MarketIdsEqual(string? stored, string parsed)
+    {
+        if (string.IsNullOrWhiteSpace(stored)) return false;
+        var a = stored.Trim();
+        var b = parsed.Trim();
+        if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (long.TryParse(a, NumberStyles.Integer, CultureInfo.InvariantCulture, out var la)
+            && long.TryParse(b, NumberStyles.Integer, CultureInfo.InvariantCulture, out var lb))
+            return la == lb;
+        return false;
+    }
+
+    /// <summary>Applique le résumé marché à des lignes suivies — désactive si tout est livré (remaining ≤ 0) ou bloc chantier vide CAPI.</summary>
     public async Task<(int Updated, int Deactivated)> ApplyMarketSummaryToRowsAsync(
         IReadOnlyList<DeclaredChantier> rows,
         FrontierMarketBusinessSummary market,
@@ -419,41 +457,65 @@ public class DeclaredChantiersService
         if (rows.Count == 0)
             return (0, 0);
 
-        if (!market.HasConstructionResources || market.ConstructionResourcesCount <= 0)
-            return (0, 0);
-
-        var dtos = market.ConstructionResources
-            .Select(x => new DeclaredChantierResourceDto(x.Name, x.Required, x.Provided, x.Remaining))
-            .ToList();
-        var json = SerializeResources(dtos, market.ConstructionResourcesCount);
-        var now = DateTime.UtcNow;
         var mId = string.IsNullOrWhiteSpace(market.MarketId) ? null : market.MarketId.Trim();
+        var now = DateTime.UtcNow;
 
-        var deactivated = 0;
-        foreach (var row in rows)
+        if (market.ConstructionResourcesCount > 0)
         {
-            row.ConstructionResourcesJson = json;
-            row.UpdatedAtUtc = now;
-            if (string.IsNullOrWhiteSpace(row.MarketId) && mId != null)
-                row.MarketId = mId;
+            var dtos = market.ConstructionResources
+                .Select(x => new DeclaredChantierResourceDto(x.Name, x.Required, x.Provided, x.Remaining))
+                .ToList();
+            var json = SerializeResources(dtos, market.ConstructionResourcesCount);
 
-            if (IsConstructionFullyDelivered(dtos))
+            var deactivated = 0;
+            foreach (var row in rows)
             {
-                row.Active = false;
-                deactivated++;
+                row.ConstructionResourcesJson = json;
+                row.UpdatedAtUtc = now;
+                if (string.IsNullOrWhiteSpace(row.MarketId) && mId != null)
+                    row.MarketId = mId;
+
+                if (IsConstructionFullyDelivered(dtos))
+                {
+                    row.Active = false;
+                    deactivated++;
+                }
             }
+
+            await _db.SaveChangesAsync(ct);
+
+            _log.LogInformation(
+                "[DeclaredChantiers] ApplyMarket rows={Rows} resources={Res} deactivated={Off} marketId={Mid}",
+                rows.Count,
+                dtos.Count,
+                deactivated,
+                mId ?? "(null)");
+
+            return (rows.Count, deactivated);
         }
 
-        await _db.SaveChangesAsync(ct);
+        // CAPI : requiredConstructionResources présent mais commodities vides → chantier terminé (hors dock).
+        if (market.RequiredConstructionBlockPresent)
+        {
+            foreach (var row in rows)
+            {
+                row.ConstructionResourcesJson = SerializeResources(Array.Empty<DeclaredChantierResourceDto>(), 0);
+                row.UpdatedAtUtc = now;
+                if (string.IsNullOrWhiteSpace(row.MarketId) && mId != null)
+                    row.MarketId = mId;
+                row.Active = false;
+            }
 
-        _log.LogInformation(
-            "[DeclaredChantiers] ApplyMarket rows={Rows} resources={Res} deactivated={Off} marketId={Mid}",
-            rows.Count,
-            dtos.Count,
-            deactivated,
-            mId ?? "(null)");
+            await _db.SaveChangesAsync(ct);
+            _log.LogInformation(
+                "[DeclaredChantiers] ApplyMarket empty construction commodities — terminé rows={Rows} marketId={Mid}",
+                rows.Count,
+                mId ?? "(null)");
 
-        return (rows.Count, deactivated);
+            return (rows.Count, rows.Count);
+        }
+
+        return (0, 0);
     }
 
     private static bool IsConstructionFullyDelivered(IReadOnlyList<DeclaredChantierResourceDto> dtos)

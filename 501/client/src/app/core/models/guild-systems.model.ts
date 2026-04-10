@@ -55,4 +55,14 @@ export interface GuildSystemsResponseDto {
   tacticalThresholds?: TacticalThresholdsDto;
 }
 
-export type SystemsFilterValue = 'all' | 'origin' | 'hq' | 'surveillance' | 'healthy' | 'conflicts' | 'low' | 'critical' | 'others';
+export type SystemsFilterValue =
+  | 'all'
+  | 'origin'
+  | 'hq'
+  | 'surveillance'
+  | 'healthy'
+  | 'conflicts'
+  | 'low'
+  | 'critical'
+  | 'others'
+  | 'withoutNews';

@@ -327,6 +327,31 @@
       const m = s.match(UPDATED_REGEX);
       return m ? m[1].trim() : (s.length < 50 ? s : null);
     }
+
+    /** Déduit une date UTC ISO depuis le texte brut colonne « Updated » Inara (FR/EN) pour alimenter ControlledSystem.LastUpdated côté API. */
+    function parseUpdatedToUtcIso(str) {
+      if (!str) return null;
+      const s = String(str).trim().toLowerCase();
+      const now = Date.now();
+      if (/^(today|aujourd['']?hui)$/i.test(String(str).trim())) return new Date(now).toISOString();
+      let m = s.match(/il y a\s+(\d+)\s*(?:minute|minutes)/);
+      if (m) return new Date(now - parseInt(m[1], 10) * 60000).toISOString();
+      m = s.match(/il y a\s+(\d+)\s*(?:heure|heures)/);
+      if (m) return new Date(now - parseInt(m[1], 10) * 3600000).toISOString();
+      m = s.match(/il y a\s+(\d+)\s*(?:jour|jours)/);
+      if (m) return new Date(now - parseInt(m[1], 10) * 86400000).toISOString();
+      m = s.match(/il y a\s+(\d+)\s*(?:semaine|semaines)/);
+      if (m) return new Date(now - parseInt(m[1], 10) * 7 * 86400000).toISOString();
+      m = s.match(/(\d+)\s*minutes?\s*ago/);
+      if (m) return new Date(now - parseInt(m[1], 10) * 60000).toISOString();
+      m = s.match(/(\d+)\s*hours?\s*ago/);
+      if (m) return new Date(now - parseInt(m[1], 10) * 3600000).toISOString();
+      m = s.match(/(\d+)\s*days?\s*ago/);
+      if (m) return new Date(now - parseInt(m[1], 10) * 86400000).toISOString();
+      m = s.match(/(\d+)\s*weeks?\s*ago/);
+      if (m) return new Date(now - parseInt(m[1], 10) * 7 * 86400000).toISOString();
+      return null;
+    }
     function extractPower(cell) {
       const link = cell.querySelector('a[href*="/elite/power/"]');
       if (link) return link.textContent?.trim() || null;
@@ -578,6 +603,7 @@
         const href = link.getAttribute('href');
         const inaraUrl = href ? (href.startsWith('http') ? href : 'https://inara.cz' + (href.startsWith('/') ? '' : '/') + href) : undefined;
         const get = (i) => (i >= 0 && cells[i] ? (cells[i].textContent || '').trim() : null);
+        const updRaw = get(iU);
         const infCellEl = iI >= 0 && cells[iI] ? cells[iI] : null;
         const tags = extractTagsFromRow(row);
         const influencePercent = parsePercent(get(iI));
@@ -595,7 +621,8 @@
           influenceDelta72h: undefined,
           states: extractedStates.length ? extractedStates : undefined,
           tags: tags.length ? tags : undefined,
-          lastUpdatedText: parseUpdated(get(iU)),
+          lastUpdatedText: parseUpdated(updRaw),
+          lastUpdatedAt: parseUpdatedToUtcIso(updRaw),
           category: 'Guild',
           isClean: false,
         };

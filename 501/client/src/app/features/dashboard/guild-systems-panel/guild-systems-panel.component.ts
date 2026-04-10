@@ -13,6 +13,12 @@ import { SyncLogService } from '../../../core/services/sync-log.service';
 import type { GuildSystemBgsDto, SystemsFilterValue } from '../../../core/models/guild-systems.model';
 import { getInfluenceClass } from '../../../core/utils/influence-thresholds.util';
 import { hasConflictState } from '../../../core/utils/guild-systems.util';
+import { getInaraFreshnessBadge } from '../../../core/utils/inara-freshness.util';
+import {
+  getOriginalInaraStatusSummary,
+  isInaraWithoutNewsCategory,
+  shouldShowRumorsInsteadOfStatus,
+} from '../../../core/utils/inara-data-derivation.util';
 
 @Component({
   selector: 'app-guild-systems-panel',
@@ -48,6 +54,7 @@ export class GuildSystemsPanelComponent implements OnInit {
   lowExpanded = signal(false);
   healthyExpanded = signal(false);
   othersExpanded = signal(false);
+  withoutNewsExpanded = signal(false);
 
   /**
    * Toutes les sections repliables **affichées** (selon filtre carte / recherche) sont dépliées.
@@ -98,6 +105,18 @@ export class GuildSystemsPanelComponent implements OnInit {
       if (!id) return;
       this.guildSync.systemsFilter.set('all');
       const s = this.systems();
+      const allForWn = [
+        ...(s.origin ?? []),
+        ...(s.headquarter ?? []),
+        ...(s.surveillance ?? []),
+        ...(s.conflicts ?? []),
+        ...(s.critical ?? []),
+        ...(s.low ?? []),
+        ...(s.healthy ?? []),
+        ...(s.others ?? []),
+      ];
+      const hit = allForWn.find((sys) => sys.id === id);
+      if (hit && isInaraWithoutNewsCategory(hit)) this.withoutNewsExpanded.set(true);
       for (const [catKey, arr] of [
         ['low', s.low],
         ['healthy', s.healthy],
@@ -242,8 +261,12 @@ export class GuildSystemsPanelComponent implements OnInit {
     return delta >= 0 ? 'delta--up' : 'delta--down';
   }
 
+  /** Badge circulaire : âge des données Inara (voir inara-freshness.util). */
+  protected readonly inaraFreshness = getInaraFreshnessBadge;
+
   /** Badges d'état affichables sur une ligne système. */
   getStateBadges(sys: GuildSystemBgsDto): string[] {
+    if (shouldShowRumorsInsteadOfStatus(sys)) return ['Rumeurs'];
     const badges: string[] = [];
     const fromStates = sys.states?.length ? sys.states : (sys.state?.trim() ? [sys.state.trim()] : []);
     for (const s of fromStates) {
@@ -252,6 +275,15 @@ export class GuildSystemsPanelComponent implements OnInit {
     if (sys.isExpansionCandidate && !badges.includes('Expansion')) badges.push('Expansion');
     if (sys.isThreatened && !badges.includes('Menacé')) badges.push('Menacé');
     return badges;
+  }
+
+  /** Tooltip : statut Inara d’origine lorsque le libellé affiché est « Rumeurs ». */
+  getStateBadgeTitle(sys: GuildSystemBgsDto, badge: string): string {
+    if (badge !== 'Rumeurs') return '';
+    const orig = getOriginalInaraStatusSummary(sys);
+    return orig
+      ? `Indication Inara (données 7–30 j) : ${orig}`
+      : 'Données Inara entre 7 et 30 jours — statut à prendre avec précaution';
   }
 
   /** Copie le nom du système dans le presse-papiers. Retourne true si succès. */
@@ -295,21 +327,24 @@ export class GuildSystemsPanelComponent implements OnInit {
   protected toggleLow = (): void => this.lowExpanded.update((v) => !v);
   protected toggleHealthy = (): void => this.healthyExpanded.update((v) => !v);
   protected toggleOthers = (): void => this.othersExpanded.update((v) => !v);
+  protected toggleWithoutNews = (): void => this.withoutNewsExpanded.update((v) => !v);
 
   protected toggleSection(catKey: string): void {
     if (catKey === 'low') this.toggleLow();
     else if (catKey === 'healthy') this.toggleHealthy();
     else if (catKey === 'others') this.toggleOthers();
+    else if (catKey === 'withoutNews') this.toggleWithoutNews();
   }
 
   protected isCollapsible(catKey: string): boolean {
-    return catKey === 'low' || catKey === 'healthy' || catKey === 'others';
+    return catKey === 'low' || catKey === 'healthy' || catKey === 'others' || catKey === 'withoutNews';
   }
 
   protected isSectionExpanded(catKey: string): boolean {
     if (catKey === 'low') return this.lowExpanded();
     if (catKey === 'healthy') return this.healthyExpanded();
     if (catKey === 'others') return this.othersExpanded();
+    if (catKey === 'withoutNews') return this.withoutNewsExpanded();
     return true;
   }
 
@@ -341,6 +376,14 @@ export class GuildSystemsPanelComponent implements OnInit {
       conflictSeen.add(sys.id);
       return true;
     });
+    const seenWithoutNews = new Set<number>();
+    const systemsWithoutNews: GuildSystemBgsDto[] = [];
+    for (const sys of allList) {
+      if (seenWithoutNews.has(sys.id)) continue;
+      if (!isInaraWithoutNewsCategory(sys)) continue;
+      seenWithoutNews.add(sys.id);
+      systemsWithoutNews.push(sys);
+    }
     let raw: { key: SystemsFilterValue; label: string; systems: GuildSystemBgsDto[] }[] = [
       { key: 'origin', label: 'Origine', systems: s.origin ?? [] },
       { key: 'hq', label: 'Quartier général', systems: s.headquarter ?? [] },
@@ -350,6 +393,7 @@ export class GuildSystemsPanelComponent implements OnInit {
       { key: 'healthy', label: 'Systèmes sains', systems: s.healthy ?? [] },
       { key: 'low', label: 'Systèmes bas', systems: s.low ?? [] },
       { key: 'others', label: 'Autres', systems: s.others ?? [] },
+      { key: 'withoutNews', label: 'Sans signal', systems: systemsWithoutNews },
     ];
     raw = raw.map((cat) => ({
       ...cat,
@@ -358,6 +402,7 @@ export class GuildSystemsPanelComponent implements OnInit {
     if (filter === 'all') return raw;
     if (filter === 'conflicts') return raw.filter((c) => c.key === 'conflicts');
     if (filter === 'surveillance') return raw.filter((c) => c.key === 'surveillance');
+    if (filter === 'withoutNews') return raw.filter((c) => c.key === 'withoutNews');
     const match = raw.find((c) => c.key === filter);
     return match ? [match] : raw;
   });
