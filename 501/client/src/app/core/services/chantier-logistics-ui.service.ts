@@ -243,6 +243,27 @@ export class ChantierLogisticsUiService {
     this.persistCurrentChantierIfAny();
   }
 
+  /**
+   * Inventaire mis à jour lors d'un cycle dont le refresh chantier a **échoué**.
+   * Met à jour les signaux soute/FC et l'horodatage « Soute / FC » sans effacer l'ERREUR chantier
+   * (ne modifie pas `lastRealSyncAttemptOutcome` ni `realSyncChantierError`).
+   */
+  touchRealSyncInventoryOnChantierError(inventory: ChantierLogisticsInventoryDto): void {
+    this.lastRealSyncSuccessAt.set(new Date().toISOString());
+    const ship429 =
+      inventory.shipRateLimited === true ||
+      inventory.shipCargoError?.includes('429') === true ||
+      inventory.shipCargoError?.includes('rate limit') === true;
+    const fc429 =
+      inventory.carrierRateLimited === true ||
+      inventory.carrierCargoError?.includes('429') === true ||
+      inventory.carrierCargoError?.includes('rate limit') === true;
+    this.realSyncShipCargoError.set(ship429 ? null : (inventory.shipCargoError ?? null));
+    this.realSyncCarrierCargoError.set(fc429 ? null : (inventory.carrierCargoError ?? null));
+    this.realSyncInventoryHttpError.set(null);
+    this.persistCurrentChantierIfAny();
+  }
+
   /** Changement de chantier ou chantier supprimé : réinitialiser les horodatages affichés. */
   clearChantierSyncTimestamps(): void {
     this.lastChantierDataRefreshSuccessAt.set(null);

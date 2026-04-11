@@ -47,6 +47,9 @@ public class FrontierLogisticsInventoryService
             {
                 using var doc = JsonDocument.Parse(shipBody);
                 MergeCargoArraysFromRoot(doc.RootElement, dto.ShipCargoByName);
+                _log.LogInformation("[LogisticsInventory] ship cargo keys={Count} items=[{Keys}]",
+                    dto.ShipCargoByName.Count,
+                    string.Join(", ", dto.ShipCargoByName.Keys));
             }
             catch (Exception ex)
             {
@@ -81,6 +84,9 @@ public class FrontierLogisticsInventoryService
             {
                 using var doc = JsonDocument.Parse(fcBody);
                 MergeCargoArraysFromRoot(doc.RootElement, dto.CarrierCargoByName);
+                _log.LogInformation("[LogisticsInventory] FC cargo keys={Count} items=[{Keys}]",
+                    dto.CarrierCargoByName.Count,
+                    string.Join(", ", dto.CarrierCargoByName.Keys));
             }
             catch (Exception ex)
             {
@@ -134,6 +140,7 @@ public class FrontierLogisticsInventoryService
             "ruthénium" or "ruthenium" => "ruthenium",
             "polonium" => "polonium",
             "vanadium" => "vanadium",
+            "cmmcomposite" or "cmm composite" or "composite mmc" => "cmmcomposite",
             _ => Regex.Replace(lower, @"\s+", " ")
         };
     }
@@ -167,10 +174,38 @@ public class FrontierLogisticsInventoryService
             case JsonValueKind.Object:
                 foreach (var p in el.EnumerateObject())
                 {
-                    if (p.Name.Equals("cargo", StringComparison.OrdinalIgnoreCase) &&
-                        p.Value.ValueKind == JsonValueKind.Array)
+                    if (p.Name.Equals("cargo", StringComparison.OrdinalIgnoreCase))
                     {
-                        MergeCargoArray(p.Value, dict);
+                        if (p.Value.ValueKind == JsonValueKind.Array)
+                        {
+                            // /fleetcarrier : "cargo" est directement un tableau
+                            MergeCargoArray(p.Value, dict);
+                        }
+                        else if (p.Value.ValueKind == JsonValueKind.Object)
+                        {
+                            // /profile : "cargo" est un objet { capacity, qty, items: [...|{}], stolen: [...] }
+                            bool foundItems = false;
+                            foreach (var inner in p.Value.EnumerateObject())
+                            {
+                                if (!inner.Name.Equals("items", StringComparison.OrdinalIgnoreCase)) continue;
+                                if (inner.Value.ValueKind == JsonValueKind.Array)
+                                {
+                                    MergeCargoArray(inner.Value, dict);
+                                    foundItems = true;
+                                }
+                                else if (inner.Value.ValueKind == JsonValueKind.Object)
+                                {
+                                    // items est un dictionnaire : { "polymers": { locName, qty, ... }, ... }
+                                    MergeCargoObjectDict(inner.Value, dict);
+                                    foundItems = true;
+                                }
+                            }
+                            if (!foundItems)
+                            {
+                                // Structure inconnue — walk récursif pour ne rien rater
+                                WalkElement(p.Value, dict, depth + 1);
+                            }
+                        }
                     }
                     else
                     {
@@ -182,6 +217,20 @@ public class FrontierLogisticsInventoryService
                 foreach (var item in el.EnumerateArray())
                     WalkElement(item, dict, depth + 1);
                 break;
+        }
+    }
+
+    private static void MergeCargoObjectDict(JsonElement itemsObject, Dictionary<string, int> dict)
+    {
+        foreach (var prop in itemsObject.EnumerateObject())
+        {
+            if (prop.Value.ValueKind != JsonValueKind.Object) continue;
+            var name = ExtractCommodityName(prop.Value);
+            if (string.IsNullOrWhiteSpace(name)) name = prop.Name;
+            if (string.IsNullOrWhiteSpace(name)) continue;
+            var qty = ExtractQuantity(prop.Value);
+            if (qty <= 0) qty = 1;
+            AddOrMerge(dict, name, qty);
         }
     }
 
