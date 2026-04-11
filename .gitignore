@@ -392,3 +392,7 @@ IMPLEMENTATION_COMPLETE.md
 501/server/Data/edsm-journal-user.json
 501/server/Data/edsm-journal-sync-state.json
 501/server/Data/inara-api-user.json
+
+# Safe-trash folders — never track these
+trash/
+.trash/
