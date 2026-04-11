@@ -674,7 +674,7 @@ public class FrontierController : ControllerBase
             else
             {
                 sw.Stop();
-                const ep = $"{capMarket}?marketId={Uri.EscapeDataString(mid)}";
+                string ep = $"{capMarket}?marketId={Uri.EscapeDataString(mid)}";
                 _log.LogWarning(
                     "[DeclaredChantiersRefreshOne] MARKET_NO_CHANTIER_CAPI_BLOCK id={Id} system={Sys} station={St} marketIdStored={Mid} endpoint={Ep} requiredConstructionBlockPresent=false constructionResourceCount={Cc} rowUpdatedAtUtc={Uat}",
                     body.Id,
