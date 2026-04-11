@@ -1,3 +1,4 @@
+import type { ChantierLogisticsInventoryDto } from '../../../core/models/chantier-logistics-inventory.model';
 import type {
   ActiveChantierSite,
   ConstructionResourceSnapshot,
@@ -14,7 +15,7 @@ export interface InventoryTrust {
 export interface ChantierResourceRowVm {
   name: string;
   need: number;
-  /** Somme des besoins restants pour cette marchandise, tous chantiers du commandant (mine). */
+  /** Somme des besoins restants pour cette marchandise, tous chantiers actifs « mine » du commandant (clé unique chantier). */
   globalNeed: number;
   shipQty: number;
   carrierQty: number;
@@ -26,15 +27,201 @@ function normalizeCommodityKey(s: string): string {
 }
 
 /**
- * Somme des `remaining` par marchandise (clé normalisée), tous chantiers actifs « mine » du commandant.
+ * Groupes de synonymes (FR/EN / orthographe) → même commodité.
+ * La clé canonique est le 1er terme du groupe (normalisé).
  */
+const COMMODITY_EQUIVALENCE_GROUPS: readonly (readonly string[])[] = [
+  ['steel', 'acier'],
+  ['aluminium', 'aluminum'],
+  ['copper', 'cuivre'],
+  ['titanium', 'titane'],
+  ['lead', 'plomb'],
+  ['zinc'],
+  ['nickel'],
+  ['cobalt'],
+  ['molybdenum', 'molybdène', 'molybdene'],
+  ['rhenium', 'rhénium'],
+  ['boron', 'bore'],
+  ['sulphur', 'sulfur', 'soufre'],
+  ['phosphorus', 'phosphore'],
+  ['manganese', 'manganèse'],
+  ['tin', 'étain', 'etain'],
+  ['tungsten', 'wolfram', 'tungstène'],
+  ['tellurium', 'tellure'],
+  ['vanadium'],
+  ['chromium', 'chrome'],
+  ['polonium'],
+  ['ruthenium', 'ruthénium'],
+  ['technetium', 'technétium'],
+  ['yttrium'],
+  ['antimony', 'antimoine'],
+];
+
+function buildCanonicalLookup(): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const group of COMMODITY_EQUIVALENCE_GROUPS) {
+    const canonical = normalizeCommodityKey(group[0]);
+    for (const term of group) {
+      m.set(normalizeCommodityKey(term), canonical);
+    }
+  }
+  return m;
+}
+
+const CANONICAL_LOOKUP = buildCanonicalLookup();
+
+/**
+ * Clé unique pour regrouper besoins / inventaire (soute, FC) malgré FR/EN ou casse différente.
+ */
+export function canonicalCommodityKey(name: string): string {
+  const n = normalizeCommodityKey(name);
+  const direct = CANONICAL_LOOKUP.get(n);
+  if (direct != null) return direct;
+  const nAlnum = n.replace(/[^a-z0-9]/g, '');
+  if (nAlnum.length < 2) return n;
+  for (const [alias, canon] of CANONICAL_LOOKUP) {
+    const aAlnum = alias.replace(/[^a-z0-9]/g, '');
+    if (aAlnum === nAlnum) return canon;
+  }
+  return n;
+}
+
+/** Déduplique les chantiers par `id` (évite double comptage global si l’API renvoie des doublons). */
+export function dedupeChantierSitesById(sites: readonly ActiveChantierSite[]): ActiveChantierSite[] {
+  const seen = new Set<string>();
+  const out: ActiveChantierSite[] = [];
+  for (const site of sites) {
+    if (seen.has(site.id)) continue;
+    seen.add(site.id);
+    out.push(site);
+  }
+  return out;
+}
+
+/**
+ * Somme des `remaining` par marchandise (clé canonique), tous chantiers actifs « mine » du commandant.
+ * Un chantier = une entrée par `chantierId` (pas de fusion ni doublon).
+ */
+/**
+ * Fusionne une réponse inventaire avec le cache : ne remplace pas soute / FC si une erreur CAPI partielle
+ * indique que l’agrégat n’est pas fiable pour cette partie.
+ */
+export function mergeInventoryDtos(
+  previous: ChantierLogisticsInventoryDto | null,
+  incoming: ChantierLogisticsInventoryDto,
+): ChantierLogisticsInventoryDto {
+  const shipOk = !incoming.shipCargoError;
+  const fcOk = !incoming.carrierCargoError;
+  return {
+    shipCargoByName: shipOk ? { ...incoming.shipCargoByName } : { ...(previous?.shipCargoByName ?? {}) },
+    carrierCargoByName: fcOk ? { ...incoming.carrierCargoByName } : { ...(previous?.carrierCargoByName ?? {}) },
+    fetchedAtUtc: incoming.fetchedAtUtc,
+    shipCargoError: incoming.shipCargoError,
+    carrierCargoError: incoming.carrierCargoError,
+    shipRateLimited: incoming.shipRateLimited,
+    carrierRateLimited: incoming.carrierRateLimited,
+    rateLimited: incoming.rateLimited,
+    retryAfterSeconds: incoming.retryAfterSeconds ?? null,
+    fleetCarrierSkippedDueToProfileRateLimit: incoming.fleetCarrierSkippedDueToProfileRateLimit,
+  };
+}
+
+/**
+ * En cas de 429 avec cache fusionné, les quantités restent affichables (pas de « — » généralisé).
+ */
+export function computeInventoryTrust(
+  connected: boolean,
+  inventoryHttpError: boolean,
+  inv: ChantierLogisticsInventoryDto | null,
+): InventoryTrust {
+  if (!connected || inventoryHttpError || !inv) {
+    return { shipKnown: false, carrierKnown: false };
+  }
+  const shipErr = inv.shipCargoError;
+  const fcErr = inv.carrierCargoError;
+  const hasShip = Object.keys(inv.shipCargoByName ?? {}).length > 0;
+  const hasFc = Object.keys(inv.carrierCargoByName ?? {}).length > 0;
+  const shipRl =
+    inv.shipRateLimited === true || (shipErr?.includes('429') === true || shipErr?.includes('rate limit') === true);
+  const fcRl =
+    inv.carrierRateLimited === true ||
+    (fcErr?.includes('429') === true || fcErr?.includes('rate limit') === true);
+  const shipKnown = !shipErr || (shipRl && hasShip);
+  const carrierKnown = !fcErr || (fcRl && hasFc);
+  return { shipKnown, carrierKnown };
+}
+
+/** Log temporaire : payload soute brut vs affichage (test après déplacement cargaison). */
+export function logShipCargoPayloadDiagnostic(inv: ChantierLogisticsInventoryDto | null): void {
+  if (!inv) {
+    console.debug('[Logistics][ShipDebug] inventaire null — pas de payload soute');
+    return;
+  }
+  const raw = inv.shipCargoByName ?? {};
+  console.debug('[Logistics][ShipDebug] soute — payload brut (API fusionnée client)', {
+    fetchedAtUtc: inv.fetchedAtUtc,
+    shipCargoError: inv.shipCargoError,
+    shipRateLimited: inv.shipRateLimited,
+    rawKeyCount: Object.keys(raw).length,
+    shipCargoByName: raw,
+  });
+}
+
+/** Debug : une ligne par ressource avec noms bruts / clé / quantités affichées. */
+export function logInventoryMappingDebug(
+  siteName: string,
+  constructionResources: ConstructionResourceSnapshot[] | undefined,
+  inv: ChantierLogisticsInventoryDto | null,
+  trust: InventoryTrust,
+): void {
+  if (!constructionResources?.length) return;
+  for (const r of constructionResources) {
+    if (r.remaining <= 0) continue;
+    const key = canonicalCommodityKey(r.name);
+    const shipQty = lookupCargoQty(inv?.shipCargoByName, r.name);
+    const fcQty = lookupCargoQty(inv?.carrierCargoByName, r.name);
+    const shipKeys =
+      inv?.shipCargoByName != null
+        ? Object.keys(inv.shipCargoByName).filter((k) => canonicalCommodityKey(k) === key)
+        : [];
+    const fcKeys =
+      inv?.carrierCargoByName != null
+        ? Object.keys(inv.carrierCargoByName).filter((k) => canonicalCommodityKey(k) === key)
+        : [];
+    console.debug('[Logistics] inventory mapping', {
+      siteName,
+      commodityChantier: r.name,
+      canonicalKey: key,
+      commodityRawShipKeys: shipKeys,
+      commodityRawFcKeys: fcKeys,
+      qtyShipFound: shipQty,
+      qtyFcFound: fcQty,
+      qtyShipDisplayed: trust.shipKnown ? shipQty : '—',
+      qtyFcDisplayed: trust.carrierKnown ? fcQty : '—',
+    });
+  }
+}
+
+/** Liste des besoins par chantier (debug global). */
+export function logGlobalRequirementsRawByChantier(mineSites: readonly ActiveChantierSite[]): void {
+  const uniqueSites = dedupeChantierSitesById(mineSites);
+  console.debug('[Logistics] global requirements raw (by chantier):');
+  for (const site of uniqueSites) {
+    if (!site.active) continue;
+    console.debug(`  chantierId=${site.id} siteName=${site.stationName ?? '—'}`, {
+      requirements: site.constructionResources?.map((r) => ({ name: r.name, remaining: r.remaining })),
+    });
+  }
+}
+
 export function buildGlobalNeedByCommodityMap(mineSites: readonly ActiveChantierSite[]): Map<string, number> {
   const map = new Map<string, number>();
-  for (const site of mineSites) {
+  const uniqueSites = dedupeChantierSitesById(mineSites);
+  for (const site of uniqueSites) {
     if (!site.active) continue;
     for (const r of site.constructionResources ?? []) {
       if (r.remaining <= 0) continue;
-      const key = normalizeCommodityKey(r.name);
+      const key = canonicalCommodityKey(r.name);
       map.set(key, (map.get(key) ?? 0) + r.remaining);
     }
   }
@@ -42,35 +229,21 @@ export function buildGlobalNeedByCommodityMap(mineSites: readonly ActiveChantier
 }
 
 function globalNeedForCommodity(globalMap: Map<string, number>, commodityName: string): number {
-  const key = normalizeCommodityKey(commodityName);
-  let v = globalMap.get(key);
-  if (v != null) return v;
-  const keyAlnum = key.replace(/[^a-z0-9]/g, '');
-  if (keyAlnum.length < 2) return 0;
-  for (const [k, sum] of globalMap) {
-    const kAlnum = k.replace(/[^a-z0-9]/g, '');
-    if (kAlnum === keyAlnum) return sum;
-  }
-  return 0;
+  const key = canonicalCommodityKey(commodityName);
+  return globalMap.get(key) ?? 0;
 }
 
 /**
- * Quantité dans une map nom → qty, avec matching insensible à la casse / espaces,
- * puis repli sur comparaison alphanumérique (réduit les faux 0).
+ * Quantité dans une map nom → qty : somme toutes les clés qui se résolvent vers la même commodité canonique.
  */
 export function lookupCargoQty(map: Record<string, number> | undefined, commodityName: string): number {
   if (!map || !commodityName?.trim()) return 0;
-  const n = normalizeCommodityKey(commodityName);
+  const target = canonicalCommodityKey(commodityName);
+  let sum = 0;
   for (const [k, v] of Object.entries(map)) {
-    if (normalizeCommodityKey(k) === n) return Math.max(0, v);
+    if (canonicalCommodityKey(k) === target) sum += Math.max(0, v);
   }
-  const nAlnum = n.replace(/[^a-z0-9]/g, '');
-  if (nAlnum.length < 2) return 0;
-  for (const [k, v] of Object.entries(map)) {
-    const kAlnum = normalizeCommodityKey(k).replace(/[^a-z0-9]/g, '');
-    if (kAlnum === nAlnum) return Math.max(0, v);
-  }
-  return 0;
+  return sum;
 }
 
 function computeStatus(
@@ -90,6 +263,7 @@ function computeStatus(
 
 /**
  * Lignes ressources : besoin chantier vs soute vaisseau / FC (stocks séparés).
+ * `constructionResources` doit être exclusivement ceux du chantier courant (pas de fusion).
  */
 export function buildChantierResourceRows(
   constructionResources: ConstructionResourceSnapshot[] | undefined,

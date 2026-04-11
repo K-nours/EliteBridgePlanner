@@ -37,6 +37,31 @@
           }
         </div>
 
+        @if (ui.chantierServerListStaleDueToRateLimit()) {
+          <div class="chantier-logistics-stale-list" role="status">
+            <p class="chantier-logistics-stale-list__text">
+              Liste des chantiers : données possiblement obsolètes — le dernier rafraîchissement a été limité par l’API
+              Frontier. Un chantier terminé en jeu peut rester affiché jusqu’à un refresh valide. Les besoins ci-dessous
+              peuvent être non à jour.
+            </p>
+          </div>
+        }
+
+        @if (ui.chantierMarketIdCapiIssue(); as capiIssue) {
+          <div class="chantier-logistics-marketid-alert" role="status">
+            <p class="chantier-logistics-marketid-alert__title">MarketId à réenregistrer</p>
+            <p class="chantier-logistics-marketid-alert__text">
+              Le marketId stocké ne renvoie pas de bloc chantier côté CAPI. Les besoins affichés sont un cache — non
+              vérifiés tant que tu n’as pas
+              <strong>redocké</strong> à la station pour enregistrer un marketId valide. Un simple « Real sync » ne suffit
+              généralement pas.
+            </p>
+            @if (capiIssue.message) {
+              <p class="chantier-logistics-marketid-alert__detail">{{ capiIssue.message }}</p>
+            }
+          </div>
+        }
+
         @if (!hasResourceData()) {
           <p class="chantier-logistics-muted">Aucun détail de fournitures en cache pour ce chantier.</p>
         } @else if (allDelivered()) {
@@ -173,10 +198,28 @@
   <div class="chantier-logistics-header">
     <div class="chantier-logistics-header-main">
       <h3>LOGISTIQUE DE CHANTIER</h3>
-      <p class="chantier-logistics-header-last-sync">
-        Dernière synchro :
-        <span class="chantier-logistics-header-last-sync__value">{{ formatLastSyncLabel(ui.lastRealSyncSuccessAt()) }}</span>
-      </p>
+      <div class="chantier-logistics-header-sync-block">
+        <p class="chantier-logistics-header-last-sync">
+          <span class="chantier-logistics-header-last-sync__label">Besoins chantier</span>
+          <span class="chantier-logistics-header-last-sync__value">{{
+            formatLastSyncLabel(ui.lastChantierNeedsVerifiedAt())
+          }}</span>
+          @if (ui.chantierMarketIdCapiIssue()) {
+            <span class="chantier-logistics-header-stale" title="Dernier snapshot affiché — non confirmé par la CAPI"
+              >— non vérifiés</span
+            >
+          }
+        </p>
+        <p class="chantier-logistics-header-last-sync">
+          <span class="chantier-logistics-header-last-sync__label">Soute / FC</span>
+          <span class="chantier-logistics-header-last-sync__value">{{
+            formatLastSyncLabel(ui.lastRealSyncSuccessAt())
+          }}</span>
+          @if (ui.realSyncInventoryHttpError()) {
+            <span class="chantier-logistics-header-stale">— indisponible</span>
+          }
+        </p>
+      </div>
     </div>
     <div class="chantier-logistics-header-actions">
       <button
@@ -189,17 +232,16 @@
         [attr.aria-label]="
           (ui.realSyncEnabled() ? 'Real sync actif, désactiver' : 'Real sync inactif, activer')
         "
-        [attr.title]="
-          ui.realSyncEnabled()
-            ? 'Real sync activé — clic pour désactiver le rafraîchissement automatique'
-            : 'Real sync désactivé — clic pour activer (toutes les 5 min)'
-        "
+        [attr.title]="realSyncButtonTitle()"
         (click)="onRealSyncToggle(!ui.realSyncEnabled())"
       >
         <span class="chantier-logistics-real-sync-btn__title">Real sync</span>
-        <span class="chantier-logistics-real-sync-btn__pill" aria-hidden="true">{{
-          ui.realSyncEnabled() ? 'Actif' : 'Inactif'
-        }}</span>
+        <span
+          class="chantier-logistics-real-sync-btn__pill"
+          [class]="'chantier-logistics-real-sync-btn__pill--state-' + realSyncPillState()"
+          aria-hidden="true"
+          >{{ realSyncPillLabel() }}</span
+        >
       </button>
       <button
         type="button"
@@ -280,10 +322,28 @@
       <div class="chantier-logistics-modal-body">
         <div class="chantier-logistics-header chantier-logistics-header--modal">
           <div class="chantier-logistics-header-main">
-            <p class="chantier-logistics-header-last-sync">
-              Dernière synchro :
-              <span class="chantier-logistics-header-last-sync__value">{{ formatLastSyncLabel(ui.lastRealSyncSuccessAt()) }}</span>
-            </p>
+            <div class="chantier-logistics-header-sync-block">
+              <p class="chantier-logistics-header-last-sync">
+                <span class="chantier-logistics-header-last-sync__label">Besoins chantier</span>
+                <span class="chantier-logistics-header-last-sync__value">{{
+                  formatLastSyncLabel(ui.lastChantierNeedsVerifiedAt())
+                }}</span>
+                @if (ui.chantierMarketIdCapiIssue()) {
+                  <span class="chantier-logistics-header-stale" title="Dernier snapshot affiché — non confirmé par la CAPI"
+                    >— non vérifiés</span
+                  >
+                }
+              </p>
+              <p class="chantier-logistics-header-last-sync">
+                <span class="chantier-logistics-header-last-sync__label">Soute / FC</span>
+                <span class="chantier-logistics-header-last-sync__value">{{
+                  formatLastSyncLabel(ui.lastRealSyncSuccessAt())
+                }}</span>
+                @if (ui.realSyncInventoryHttpError()) {
+                  <span class="chantier-logistics-header-stale">— indisponible</span>
+                }
+              </p>
+            </div>
           </div>
           <div class="chantier-logistics-header-actions">
             <button
@@ -296,17 +356,16 @@
               [attr.aria-label]="
                 (ui.realSyncEnabled() ? 'Real sync actif, désactiver' : 'Real sync inactif, activer')
               "
-              [attr.title]="
-                ui.realSyncEnabled()
-                  ? 'Real sync activé — clic pour désactiver le rafraîchissement automatique'
-                  : 'Real sync désactivé — clic pour activer (toutes les 5 min)'
-              "
+              [attr.title]="realSyncButtonTitle()"
               (click)="onRealSyncToggle(!ui.realSyncEnabled())"
             >
               <span class="chantier-logistics-real-sync-btn__title">Real sync</span>
-              <span class="chantier-logistics-real-sync-btn__pill" aria-hidden="true">{{
-                ui.realSyncEnabled() ? 'Actif' : 'Inactif'
-              }}</span>
+              <span
+                class="chantier-logistics-real-sync-btn__pill"
+                [class]="'chantier-logistics-real-sync-btn__pill--state-' + realSyncPillState()"
+                aria-hidden="true"
+                >{{ realSyncPillLabel() }}</span
+              >
             </button>
           </div>
         </div>

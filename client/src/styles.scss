@@ -1,4 +1,29 @@
 /* You can add global styles to this file, and also import other style files */
+@use './styles/scrollbar-faction' as factionScrollbar;
+
+/** Scrollbar alignée sur le panneau Systèmes / Factions — réutiliser sur listes / panneaux scrollables */
+.eb-scrollbar--faction {
+  @include factionScrollbar.scrollbar-faction-systems;
+}
+
+.col-left-systems-fill--shrink {
+  @include factionScrollbar.scrollbar-faction-systems;
+}
+
+.sync-logs-container {
+  @include factionScrollbar.scrollbar-faction-systems;
+}
+
+.col-right .box-frontier-cmdr.eb-scrollbar--faction {
+  max-height: min(48vh, 560px);
+  overflow-y: auto;
+}
+
+.box-cmdrs .cmdrs-list.eb-scrollbar--faction {
+  max-height: min(40vh, 400px);
+  overflow-y: auto;
+}
+
 html, body {
   margin: 0;
   padding: 0;
