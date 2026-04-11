@@ -40,7 +40,6 @@ import {
   knownStockSum,
   logGlobalRequirementsRawByChantier,
   logInventoryMappingDebug,
-  logShipCargoPayloadDiagnostic,
   mergeInventoryDtos,
   showTotalColumn,
   splitStationDisplayLabel,
@@ -532,7 +531,7 @@ export class ChantierLogisticsPanelComponent {
         if (gen !== this.inventoryFetchGeneration) return;
         this.inventoryPayload.set(merged);
         this.inventoryHttpError.set(false);
-        logShipCargoPayloadDiagnostic(merged);
+        this.logInventoryDiagnosticToSync(merged, 'real-sync');
         if (!merged.rateLimited) {
           this.inventoryCoordinator.markSuccessfulFetch();
         }
@@ -571,6 +570,18 @@ export class ChantierLogisticsPanelComponent {
   /** Logs temporaires de diagnostic Real sync — retirer ou brancher sur SyncLogService une fois stabilisé. */
   private realSyncLog(message: string): void {
     console.debug(`[RealSync] ${message}`);
+  }
+
+  /** Diagnostic inventaire dans le panneau Sync — soute + FC payload résumé. */
+  private logInventoryDiagnosticToSync(inv: ChantierLogisticsInventoryDto, source: 'real-sync' | 'effect'): void {
+    const shipCount = Object.keys(inv.shipCargoByName ?? {}).length;
+    const fcCount = Object.keys(inv.carrierCargoByName ?? {}).length;
+    const shipErr = inv.shipCargoError ? ` ⚠ ${inv.shipCargoError}` : '';
+    const fcErr = inv.carrierCargoError ? ` ⚠ ${inv.carrierCargoError}` : '';
+    const rl = inv.rateLimited ? ' [429]' : '';
+    this.syncLog.addLog(
+      `[Inventaire${rl}] (${source}) soute=${shipCount} clé(s)${shipErr} · FC=${fcCount} clé(s)${fcErr}`,
+    );
   }
 
   private applyRealSyncHttpError(err: unknown, chantierId: number, stationLabel: string): void {
@@ -664,7 +675,7 @@ export class ChantierLogisticsPanelComponent {
           if (gen !== this.inventoryFetchGeneration) return;
           this.inventoryPayload.set(merged);
           this.inventoryHttpError.set(false);
-          logShipCargoPayloadDiagnostic(merged);
+          this.logInventoryDiagnosticToSync(merged, 'effect');
           if (!merged.rateLimited) {
             this.inventoryCoordinator.markSuccessfulFetch();
           }
@@ -911,7 +922,7 @@ export class ChantierLogisticsPanelComponent {
           if (gen !== this.inventoryFetchGeneration) return;
           this.inventoryPayload.set(merged);
           this.inventoryHttpError.set(false);
-          logShipCargoPayloadDiagnostic(merged);
+          this.logInventoryDiagnosticToSync(merged, 'real-sync');
           if (!merged.rateLimited) {
             this.inventoryCoordinator.markSuccessfulFetch();
           }
