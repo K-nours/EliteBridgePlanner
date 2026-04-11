@@ -84,21 +84,6 @@ const HOVER_SCALE = 1.3;
 const LANDMARK_LABEL_OFFSET_Y_PX = 40;
 
 /** Distance caméra ↔ cible : molette OrbitControls et curseur identiques. */
-/**
- * Indice du point sur lequel centrer la vue au premier affichage Pont galactique :
- * dernier `systeme_operationnel` dans l’ordre route, sinon dernier point ≠ `fin`, sinon dernier point.
- */
-function resolveGalacticBridgeInitialFocusIndex(pts: BridgeRoutePoint[]): number {
-  if (pts.length === 0) return 0;
-  for (let i = pts.length - 1; i >= 0; i--) {
-    if (pts[i].type === 'systeme_operationnel') return i;
-  }
-  for (let i = pts.length - 1; i >= 0; i--) {
-    if (pts[i].type !== 'fin') return i;
-  }
-  return pts.length - 1;
-}
-
 const MAP_ZOOM_DISTANCE_MIN = 5;
 const MAP_ZOOM_DISTANCE_MAX = 40000;
 /** Distance par défaut centre (HQ ou barycentre) → caméra : chargement + reset vue. */
@@ -409,12 +394,6 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   private landmarkHitMeshes: THREE.Mesh[] = [];
   private landmarkLayers: SystemVisualLayers[] = [];
   private landmarkPositions: THREE.Vector3[] = [];
-
-  /**
-   * Cadrage automatique du pont (barycentre + distance) : une seule fois tant qu’une route
-   * avec des points est affichée. Les rafraîchissements de données ne doivent pas bouger la caméra.
-   */
-  private galacticBridgeAutoFrameDone = false;
 
   constructor() {
     effect(() => {
@@ -855,8 +834,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
         }
       } else {
         // Conflits : aligné sur le panneau (hasConflictState) — un même système peut être sain + conflit
-        // ou avoir mapCategory « surveillance » / autre alors qu’il est en guerre ; le filtre carte doit quand même le mettre en avant.
-        // « Systèmes sans nouvelles » : uniquement selon l’ancienneté Inara (> 30 j), pas la catégorie carte.
+        // ou avoir mapCategory « surveillance » / autre alors qu'il est en guerre ; le filtre carte doit quand même le mettre en avant.
+        // « Systèmes sans nouvelles » : uniquement selon l'ancienneté Inara (> 30 j), pas la catégorie carte.
         const matchCat =
           filter === 'all' ||
           (filter === 'withoutNews'
