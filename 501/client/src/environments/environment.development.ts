@@ -4,5 +4,6 @@
  */
 export const environment = {
   production: false,
+  bridgePlannerApiUrl: 'https://localhost:7293',
   guildDashboardApiBase: 'http://localhost:5294',
 };
