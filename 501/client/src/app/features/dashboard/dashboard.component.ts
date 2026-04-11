@@ -320,7 +320,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
         </section>
         <aside class="col col-right">
           @if (showCmdrConnected() && dashboard()?.frontierProfile; as fp) {
-          <div class="box box-frontier-cmdr">
+          <div class="box box-frontier-cmdr eb-scrollbar--faction">
             <div class="frontier-cmdr-layout">
             <div class="frontier-cmdr-main">
             <div class="frontier-cmdr-header">
@@ -413,7 +413,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             <div class="box box-reunion"><h3>Prochaine réunion galactique</h3></div>
           <div class="box box-cmdrs">
             <div class="box-cmdrs-header">
-              <h3 class="box-cmdrs-title">CMDRs</h3>
+              <h3 class="box-cmdrs-title">CMDRs de l'escadron</h3>
               <div class="box-cmdrs-actions">
                 <div class="cmdrs-more-dropdown">
                   @if (cmdrsMenuOpen()) {
@@ -441,7 +441,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             </div>
             @if (commandersForList(); as data) {
             @if (data.commanders.length > 0) {
-            <div class="cmdrs-list">
+            <div class="cmdrs-list eb-scrollbar--faction">
               @for (cmdr of data.commanders; track cmdr.name) {
                 @if (cmdr.inaraUrl) {
                   <a [href]="cmdr.inaraUrl" target="_blank" rel="noopener noreferrer"
@@ -1108,20 +1108,6 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       border: 1px solid rgba(0, 212, 255, 0.14);
       border-radius: 0 0 16px 16px;
     }
-    .sync-logs-container::-webkit-scrollbar {
-      width: 6px;
-    }
-    .sync-logs-container::-webkit-scrollbar-track {
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 3px;
-    }
-    .sync-logs-container::-webkit-scrollbar-thumb {
-      background: rgba(0, 212, 255, 0.3);
-      border-radius: 3px;
-    }
-    .sync-logs-container::-webkit-scrollbar-thumb:hover {
-      background: rgba(0, 212, 255, 0.5);
-    }
     .sync-status-row {
       display: flex;
       justify-content: space-between;
@@ -1170,11 +1156,25 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
       gap: 1rem;
+      flex: 0 1 auto;
+      min-height: 0;
+      /* Espace sous la carte + sync : ne pas laisser la ligne pousser la carte hors viewport */
+      max-height: min(46vh, 28rem);
+      overflow: hidden;
+      align-items: stretch;
+    }
+    .center-row > .box {
+      min-height: 0;
+      max-height: 100%;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
     .box-chantier-logistics {
       display: flex;
       flex-direction: column;
-      min-height: 120px;
+      min-height: 0;
+      flex: 1 1 auto;
     }
     .box-pipeline-diplomatique {
       display: flex;

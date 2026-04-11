@@ -674,8 +674,20 @@ public class FrontierController : ControllerBase
             else
             {
                 sw.Stop();
+                const ep = $"{capMarket}?marketId={Uri.EscapeDataString(mid)}";
+                _log.LogWarning(
+                    "[DeclaredChantiersRefreshOne] MARKET_NO_CHANTIER_CAPI_BLOCK id={Id} system={Sys} station={St} marketIdStored={Mid} endpoint={Ep} requiredConstructionBlockPresent=false constructionResourceCount={Cc} rowUpdatedAtUtc={Uat}",
+                    body.Id,
+                    row.SystemName,
+                    row.StationName,
+                    mid,
+                    ep,
+                    mkt.ConstructionResourcesCount,
+                    row.UpdatedAtUtc);
                 return BadRequest(new
                 {
+                    code = "MARKET_NO_CHANTIER_CAPI_BLOCK",
+                    requiresRedock = true,
                     message =
                         "Ce marché (marketId) ne contient pas de bloc chantier CAPI. Docké une fois à la station pour enregistrer un marketId à jour, ou vérifiez en jeu.",
                 });

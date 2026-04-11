@@ -1,3 +1,5 @@
+@use '../../../../styles/scrollbar-faction' as factionScrollbar;
+
 /* Réutilise la grammaire du panneau systèmes (guild-systems-panel) : .systems-list, .category, .system-row, .btn-target */
 
 :host {
@@ -108,7 +110,8 @@
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-gutter: stable;
+
+  @include factionScrollbar.scrollbar-faction-systems;
 }
 
 :host-context(.box-pipeline-dipo--compact) .systems-list {

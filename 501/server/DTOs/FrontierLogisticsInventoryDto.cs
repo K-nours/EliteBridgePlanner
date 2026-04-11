@@ -17,4 +17,19 @@ public sealed class FrontierLogisticsInventoryDto
 
     /// <summary>Erreur ou absence de FC (null si OK ou pas de FC — pas une erreur bloquante).</summary>
     public string? CarrierCargoError { get; set; }
+
+    /// <summary>True si /profile a répondu HTTP 429 (ne pas traiter comme erreur applicative classique côté client).</summary>
+    public bool ShipRateLimited { get; set; }
+
+    /// <summary>True si /fleetcarrier a répondu HTTP 429.</summary>
+    public bool CarrierRateLimited { get; set; }
+
+    /// <summary>Au moins un appel CAPI en rate limit sur ce cycle.</summary>
+    public bool RateLimited { get; set; }
+
+    /// <summary>Secondes suggérées avant retry (Retry-After ou défaut serveur).</summary>
+    public int? RetryAfterSeconds { get; set; }
+
+    /// <summary>FC non interrogé car /profile était déjà en 429 (évite un 2e hit CAPI).</summary>
+    public bool FleetCarrierSkippedDueToProfileRateLimit { get; set; }
 }

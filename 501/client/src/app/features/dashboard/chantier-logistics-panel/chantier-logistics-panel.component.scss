@@ -1,10 +1,22 @@
 /* Panneau natif dashboard : même esprit que .box / sync / titres cyan */
+@use '../../../../styles/scrollbar-faction' as factionScrollbar;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
 
 .chantier-logistics {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  max-height: 100%;
   flex: 1 1 auto;
+  overflow: hidden;
 }
 
 .chantier-logistics-real-sync-btn {
@@ -73,14 +85,53 @@
     color: rgba(148, 163, 184, 0.95);
   }
 
-  &--active:not(:disabled) &__pill {
+  /* Couleurs pilule : toujours via --state-* (évite le conflit avec le bouton Actif/Inactif) */
+  &__pill--state-ok {
     border-color: rgba(52, 211, 153, 0.45);
     background: rgba(16, 185, 129, 0.12);
     color: rgba(110, 231, 183, 0.98);
   }
 
-  &--inactive:not(:disabled) &__pill {
+  &__pill--state-late,
+  &__pill--state-offline {
+    border-color: rgba(251, 191, 36, 0.5);
+    background: rgba(245, 158, 11, 0.12);
+    color: rgba(253, 230, 138, 0.98);
+  }
+
+  &__pill--state-partial {
+    border-color: rgba(96, 165, 250, 0.5);
+    background: rgba(59, 130, 246, 0.12);
+    color: rgba(191, 219, 254, 0.98);
+  }
+
+  &__pill--state-chantierwarn {
+    border-color: rgba(251, 146, 60, 0.55);
+    background: rgba(234, 88, 12, 0.14);
+    color: rgba(254, 215, 170, 0.98);
+  }
+
+  &__pill--state-ratelimit {
+    border-color: rgba(251, 191, 36, 0.55);
+    background: rgba(245, 158, 11, 0.14);
+    color: rgba(253, 230, 138, 0.98);
+  }
+
+  &__pill--state-error {
+    border-color: rgba(248, 113, 113, 0.55);
+    background: rgba(239, 68, 68, 0.14);
+    color: rgba(254, 202, 202, 0.98);
+  }
+
+  &__pill--state-pending {
+    border-color: rgba(56, 189, 248, 0.45);
+    background: rgba(14, 165, 233, 0.12);
+    color: rgba(125, 211, 252, 0.98);
+  }
+
+  &__pill--state-off {
     border-color: rgba(100, 116, 139, 0.35);
+    background: rgba(0, 0, 0, 0.22);
     color: rgba(148, 163, 184, 0.75);
   }
 }
@@ -131,6 +182,13 @@
   gap: 0.35rem;
 }
 
+.chantier-logistics-header-sync-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
 .chantier-logistics-header-last-sync {
   margin: 0;
   font-family: 'Exo 2', sans-serif;
@@ -139,9 +197,70 @@
   line-height: 1.35;
 }
 
+.chantier-logistics-header-last-sync__label {
+  margin-right: 0.35rem;
+  font-weight: 600;
+  color: rgba(148, 163, 184, 0.88);
+}
+
 .chantier-logistics-header-last-sync__value {
   color: rgba(226, 232, 240, 0.95);
   font-weight: 500;
+}
+
+.chantier-logistics-header-stale {
+  margin-left: 0.25rem;
+  font-weight: 600;
+  color: rgba(251, 146, 60, 0.92);
+}
+
+.chantier-logistics-marketid-alert {
+  margin: 0.5rem 0 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 4px;
+  border: 1px solid rgba(251, 146, 60, 0.45);
+  background: rgba(234, 88, 12, 0.1);
+}
+
+.chantier-logistics-marketid-alert__title {
+  margin: 0 0 0.35rem;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(254, 215, 170, 0.98);
+}
+
+.chantier-logistics-marketid-alert__text,
+.chantier-logistics-marketid-alert__detail {
+  margin: 0;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.65rem;
+  line-height: 1.4;
+  color: rgba(226, 232, 240, 0.92);
+}
+
+.chantier-logistics-marketid-alert__detail {
+  margin-top: 0.4rem;
+  font-size: 0.6rem;
+  color: rgba(148, 163, 184, 0.95);
+}
+
+.chantier-logistics-stale-list {
+  margin: 0.45rem 0 0.55rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 4px;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.chantier-logistics-stale-list__text {
+  margin: 0;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.62rem;
+  line-height: 1.35;
+  color: rgba(253, 230, 138, 0.95);
 }
 
 .chantier-logistics-gone {
@@ -193,6 +312,11 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+
+  @include factionScrollbar.scrollbar-faction-systems;
 }
 
 .chantier-logistics-actions-row {
@@ -342,6 +466,8 @@
   .chantier-logistics-detail__body {
     overflow-y: auto;
     min-height: 0;
+
+    @include factionScrollbar.scrollbar-faction-systems;
   }
 }
 
