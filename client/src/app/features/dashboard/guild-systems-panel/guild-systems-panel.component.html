@@ -1,4 +1,5 @@
-<section class="panel guild-systems guild-systems--archived">
+<section class="panel guild-systems guild-systems--archived"
+  [class.guild-systems--all-collapsed]="allCollapsibleSectionsCollapsed()">
   @if (contextMenuOpen()) {
     <div class="context-menu-backdrop" (click)="closeContextMenu()"></div>
     <div class="context-menu" [style.left.px]="contextMenuPos().x" [style.top.px]="contextMenuPos().y" (click)="$event.stopPropagation()">
@@ -84,20 +85,37 @@
               <polyline points="6 9 12 15 18 9"/>
             </svg>
           </button>
+          <div
+            class="category-expand"
+            [class.category-expand--open]="isSectionExpanded(cat.key)"
+            [attr.aria-hidden]="!isSectionExpanded(cat.key)">
+            <div class="category-expand-inner">
+              @if (cat.systems.length > 0) {
+                <div class="category-content">
+                  @for (sys of cat.systems; track sys.id) {
+                    <ng-container
+                      *ngTemplateOutlet="systemRowTpl; context: { $implicit: sys }" />
+                  }
+                </div>
+              } @else {
+                <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
+              }
+            </div>
+          </div>
         } @else {
           <span class="category-header">
             <span class="category-label">{{ cat.label }}</span>
           </span>
-        }
-        @if (cat.systems.length > 0 && (!isCollapsible(cat.key) || isSectionExpanded(cat.key))) {
-          <div class="category-content">
-            @for (sys of cat.systems; track sys.id) {
-              <ng-container
-                *ngTemplateOutlet="systemRowTpl; context: { $implicit: sys }" />
-            }
-          </div>
-        } @else if (cat.systems.length === 0 && (!isCollapsible(cat.key) || isSectionExpanded(cat.key))) {
-          <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
+          @if (cat.systems.length > 0) {
+            <div class="category-content">
+              @for (sys of cat.systems; track sys.id) {
+                <ng-container
+                  *ngTemplateOutlet="systemRowTpl; context: { $implicit: sys }" />
+              }
+            </div>
+          } @else if (cat.systems.length === 0) {
+            <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
+          }
         }
       </div>
     }

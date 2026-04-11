@@ -1,17 +1,25 @@
 /* Harmonisé avec le design system du dashboard (.box) */
 
-/* Quand dans col-left-systems-fill : prendre toute la hauteur dispo, liste scrollable */
+/*
+ * Colonne gauche : le wrapper prend le reste de la hauteur (pipeline plafonné à ⅓ fenêtre).
+ * Liste des systèmes scrollable à l’intérieur.
+ */
 :host-context(.col-left-systems-fill) {
   display: flex;
-  flex: 1;
-  min-height: 0;
   flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  align-self: stretch;
+}
+
+:host-context(.col-left-systems-fill--shrink) {
+  flex: 0 1 auto;
 }
 
 :host-context(.col-left-systems-fill) .panel {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
 }
@@ -23,18 +31,34 @@
   overflow-y: auto;
 }
 
+/* Toutes les sections repliables repliées : pas d’étirement interne, hauteur = contenu (+ scroll si besoin). */
+:host-context(.col-left-systems-fill) .panel.guild-systems--all-collapsed {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+:host-context(.col-left-systems-fill) .panel.guild-systems--all-collapsed .systems-list {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
 .panel {
   position: relative;
   overflow: hidden;
   background: rgba(6, 20, 35, 0.88);
   border: 1px solid rgba(0, 212, 255, 0.14);
   border-radius: 16px;
-  padding: calc(1rem + 4px) 1.25rem 1rem 1.25rem;
+  padding: 1.25rem;
   min-height: 80px;
   box-shadow:
     0 0 5px rgba(0, 234, 255, 0.03),
     0 0 10px rgba(0, 234, 255, 0.02),
     0 0 20px rgba(0, 234, 255, 0.01);
+  transition:
+    box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.35s ease;
 }
 
 .panel-header {
@@ -187,7 +211,10 @@
   text-transform: uppercase;
   letter-spacing: 0.1em;
   margin: 0;
-  color: #00d4ff;
+  color: #00eaff;
+  text-shadow:
+    0 0 4px rgba(0, 234, 255, 0.4),
+    0 0 10px rgba(0, 234, 255, 0.22);
 }
 
 .systems-filter-wrap {
@@ -287,6 +314,7 @@
 
 .category {
   margin-bottom: 1rem;
+  transition: margin-bottom 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:last-child {
     margin-bottom: 0;
@@ -294,6 +322,39 @@
 
   &.category--collapsed {
     margin-bottom: 0.25rem;
+  }
+}
+
+/* Sections repliables (Bas / Sains / Autres) : animation hauteur (grid 0fr → 1fr) */
+.category-expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  interpolate-size: allow-keywords;
+  transition: grid-template-rows 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &--open {
+    grid-template-rows: 1fr;
+  }
+}
+
+.category-expand-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .category-expand {
+    transition: none;
+  }
+  .category-expand--open {
+    transition: none;
+  }
+  .category,
+  .category-chevron {
+    transition: none;
+  }
+  .panel {
+    transition: none;
   }
 }
 
@@ -336,9 +397,9 @@
 
 .category-chevron {
   flex-shrink: 0;
-  color: #ff8c00;
-  opacity: 0.9;
-  transition: transform 0.2s ease;
+  color: rgba(255, 255, 255, 0.92);
+  opacity: 0.95;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 
   .category-header--expanded & {
     transform: rotate(0deg);

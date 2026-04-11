@@ -1,0 +1,304 @@
+/* Panneau natif dashboard : même esprit que .box / sync / titres cyan */
+
+.chantier-logistics {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.chantier-logistics-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.chantier-logistics-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 12px;
+  min-height: 28px;
+
+  h3 {
+    margin: 0;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #00eaff;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    text-shadow:
+      0 0 4px rgba(0, 234, 255, 0.4),
+      0 0 10px rgba(0, 234, 255, 0.22);
+  }
+}
+
+/* Aligné sur .btn-icon-more (panneau faction / chantiers) */
+.chantier-logistics-icon-btn--busy {
+  opacity: 0.55;
+}
+
+.chantier-logistics-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex-shrink: 0;
+  font-family: 'Orbitron', sans-serif;
+  background: rgba(0, 212, 255, 0.2);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  color: #00d4ff;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover {
+    background: rgba(0, 212, 255, 0.3);
+  }
+
+  &:focus-visible {
+    outline: 1px solid rgba(0, 212, 255, 0.5);
+    outline-offset: 1px;
+  }
+}
+
+.chantier-logistics-panel-body {
+  min-height: 0;
+}
+
+/* Modale plein écran — au-dessus du dashboard */
+.chantier-logistics-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.chantier-logistics-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.chantier-logistics-modal-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(92vw, 720px);
+  max-height: min(88vh, 900px);
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  background: rgba(6, 20, 35, 0.97);
+  border: 1px solid rgba(0, 212, 255, 0.35);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.chantier-logistics-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.18);
+  flex-shrink: 0;
+
+  h3 {
+    margin: 0;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #00eaff;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    text-shadow:
+      0 0 4px rgba(0, 234, 255, 0.35),
+      0 0 10px rgba(0, 234, 255, 0.18);
+  }
+}
+
+.chantier-logistics-modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: rgba(0, 212, 255, 0.12);
+  color: #94a3b8;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+
+  &:hover {
+    background: rgba(0, 212, 255, 0.22);
+    color: #e2e8f0;
+  }
+
+  &:focus-visible {
+    outline: 1px solid rgba(0, 212, 255, 0.5);
+    outline-offset: 1px;
+  }
+}
+
+.chantier-logistics-modal-body {
+  padding: 1rem;
+  overflow-y: auto;
+  min-height: 0;
+
+  .chantier-logistics-res__row {
+    font-size: 0.74rem;
+  }
+}
+
+.chantier-logistics-empty {
+  padding: 0.35rem 0 0.15rem;
+}
+
+.chantier-logistics-empty__title {
+  margin: 0 0 0.35rem;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(0, 212, 255, 0.85);
+  text-transform: uppercase;
+}
+
+.chantier-logistics-empty__text {
+  margin: 0;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.chantier-logistics-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 0;
+}
+
+.chantier-logistics-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.12);
+}
+
+.chantier-logistics-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.7rem;
+}
+
+.chantier-logistics-label {
+  flex-shrink: 0;
+  color: rgba(148, 163, 184, 0.95);
+  font-weight: 500;
+}
+
+.chantier-logistics-value {
+  text-align: right;
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.chantier-logistics-marketid {
+  margin: 0;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.52rem;
+  color: rgba(148, 163, 184, 0.45);
+}
+
+.chantier-logistics-muted {
+  margin: 0;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.65rem;
+  color: rgba(148, 163, 184, 0.9);
+  font-style: italic;
+}
+
+.chantier-logistics-complete {
+  padding: 0.25rem 0;
+}
+
+.chantier-logistics-complete__title {
+  margin: 0 0 0.3rem;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: rgba(0, 255, 136, 0.85);
+}
+
+.chantier-logistics-complete__text {
+  margin: 0;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.chantier-logistics-res {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.chantier-logistics-res__row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin: 0;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.chantier-logistics-res__name {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.chantier-logistics-res__dots {
+  flex: 1 1 auto;
+  min-width: 0.5rem;
+  border-bottom: 1px dotted rgba(0, 212, 255, 0.22);
+  margin: 0 0.15rem;
+  height: 0;
+  align-self: center;
+  opacity: 0.85;
+}
+
+.chantier-logistics-res__qty {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: #00d4ff;
+}

@@ -12,24 +12,27 @@ public class FrontierUserService
     private readonly GuildDashboardDbContext _db;
     private readonly FrontierAuthService _auth;
     private readonly FrontierTokenStore _store;
+    private readonly FrontierOAuthSessionService _oauthSession;
     private readonly ILogger<FrontierUserService> _log;
 
     public FrontierUserService(
         GuildDashboardDbContext db,
         FrontierAuthService auth,
         FrontierTokenStore store,
+        FrontierOAuthSessionService oauthSession,
         ILogger<FrontierUserService> log)
     {
         _db = db;
         _auth = auth;
         _store = store;
+        _oauthSession = oauthSession;
         _log = log;
     }
 
     /// <summary>Récupère le profil CAPI si un token Frontier valide existe. Parse, mappe squadron→guild, persiste et retourne.</summary>
     public async Task<FrontierProfileDto?> GetProfileAsync(CancellationToken ct = default)
     {
-        var token = _store.GetToken();
+        var token = await _oauthSession.GetEffectiveTokenAsync(ct);
         if (token == null || string.IsNullOrEmpty(token.AccessToken))
             return await GetCachedProfileAsync(ct);
 
@@ -42,7 +45,7 @@ public class FrontierUserService
                 var refreshed = await _auth.RefreshTokenAsync(token.RefreshToken ?? "", ct);
                 if (refreshed != null)
                 {
-                    _store.SetToken(refreshed);
+                    await _oauthSession.PersistAndSetAsync(refreshed, null, ct);
                     return await GetProfileAsync(ct);
                 }
             }
@@ -71,6 +74,22 @@ public class FrontierUserService
             .Include(p => p.Guild)
             .FirstOrDefaultAsync(ct);
         return latest == null ? null : ToDto(latest);
+    }
+
+    /// <summary>Parse le JSON CAPI /profile avec la même logique que la persistance (inspection / chantiers debug).</summary>
+    public (FrontierProfileParseResult? Fields, string? Error) TryParseCapiProfileFields(string json)
+    {
+        var (parsed, err) = ParseCapiProfile(json);
+        if (parsed == null)
+            return (null, err);
+        return (new FrontierProfileParseResult(
+            parsed.FrontierCustomerId,
+            parsed.CommanderName,
+            parsed.SquadronName,
+            parsed.LastSystemName,
+            parsed.ShipName,
+            parsed.IsDocked,
+            parsed.StationName), null);
     }
 
     private static (CapiParsed? Parsed, string? Error) ParseCapiProfile(string json)
@@ -106,6 +125,9 @@ public class FrontierUserService
                     ? shn3.GetString()
                     : null;
 
+            var isDocked = ParseDocked(root, commander);
+            var stationName = ParseStationName(root, commander);
+
             if (string.IsNullOrEmpty(commanderName) && string.IsNullOrEmpty(frontierId))
                 return (null, "commander.name et commander.id manquants");
 
@@ -114,7 +136,9 @@ public class FrontierUserService
                 commanderName,
                 squadronName,
                 lastSystemName,
-                shipName
+                shipName,
+                isDocked,
+                stationName
             ), null);
         }
         catch (Exception ex)
@@ -218,5 +242,143 @@ public class FrontierUserService
         );
     }
 
-    private record CapiParsed(string FrontierCustomerId, string CommanderName, string? SquadronName, string? LastSystemName, string? ShipName);
+    private static bool? ParseDocked(JsonElement root, JsonElement commander)
+    {
+        static bool? Bool(JsonElement e)
+        {
+            if (e.ValueKind == JsonValueKind.True) return true;
+            if (e.ValueKind == JsonValueKind.False) return false;
+            return null;
+        }
+
+        if (root.TryGetProperty("docked", out var d) && Bool(d) is { } r0) return r0;
+
+        if (commander.ValueKind == JsonValueKind.Object && commander.TryGetProperty("docked", out var d2) &&
+            Bool(d2) is { } r1)
+            return r1;
+
+        if (commander.ValueKind == JsonValueKind.Object &&
+            commander.TryGetProperty("location", out var cmdLoc) &&
+            cmdLoc.ValueKind == JsonValueKind.Object &&
+            cmdLoc.TryGetProperty("docked", out var d4) &&
+            Bool(d4) is { } r2)
+            return r2;
+
+        if (root.TryGetProperty("location", out var loc) && loc.ValueKind == JsonValueKind.Object &&
+            loc.TryGetProperty("docked", out var d3) &&
+            Bool(d3) is { } r3)
+            return r3;
+
+        if (root.TryGetProperty("ship", out var shipRoot) && shipRoot.ValueKind == JsonValueKind.Object &&
+            shipRoot.TryGetProperty("docked", out var sd) &&
+            Bool(sd) is { } r4)
+            return r4;
+
+        return null;
+    }
+
+    private static string? ParseStationName(JsonElement root, JsonElement commander)
+    {
+        static string? NameFromObject(JsonElement el)
+        {
+            if (el.ValueKind == JsonValueKind.String)
+            {
+                var s = el.GetString();
+                return string.IsNullOrWhiteSpace(s) ? null : s;
+            }
+
+            if (el.ValueKind != JsonValueKind.Object) return null;
+
+            foreach (var prop in new[] { "name", "Name", "stationName", "StationName", "marketName", "MarketName" })
+            {
+                if (el.TryGetProperty(prop, out var n) && n.ValueKind == JsonValueKind.String)
+                {
+                    var s = n.GetString();
+                    if (!string.IsNullOrWhiteSpace(s)) return s;
+                }
+            }
+
+            return null;
+        }
+
+        static string? TryLastStarport(JsonElement container)
+        {
+            if (container.ValueKind != JsonValueKind.Object) return null;
+            if (!container.TryGetProperty("lastStarport", out var lsp)) return null;
+            return NameFromObject(lsp);
+        }
+
+        static string? TryStarport(JsonElement container)
+        {
+            if (container.ValueKind != JsonValueKind.Object) return null;
+            if (!container.TryGetProperty("starport", out var sp)) return null;
+            return NameFromObject(sp);
+        }
+
+        // Ordre : structures les plus spécifiques d’abord (CAPI / profile variables).
+        var fromCmdLastStarport = TryLastStarport(commander);
+        if (!string.IsNullOrWhiteSpace(fromCmdLastStarport)) return fromCmdLastStarport;
+
+        var fromRootLastStarport = TryLastStarport(root);
+        if (!string.IsNullOrWhiteSpace(fromRootLastStarport)) return fromRootLastStarport;
+
+        if (root.TryGetProperty("lastStation", out var ls))
+        {
+            var x = NameFromObject(ls);
+            if (!string.IsNullOrWhiteSpace(x)) return x;
+        }
+
+        if (root.TryGetProperty("station", out var st))
+        {
+            var x = NameFromObject(st);
+            if (!string.IsNullOrWhiteSpace(x)) return x;
+        }
+
+        var fromCmdStarport = TryStarport(commander);
+        if (!string.IsNullOrWhiteSpace(fromCmdStarport)) return fromCmdStarport;
+
+        var fromRootStarport = TryStarport(root);
+        if (!string.IsNullOrWhiteSpace(fromRootStarport)) return fromRootStarport;
+
+        if (commander.ValueKind == JsonValueKind.Object && commander.TryGetProperty("lastStation", out var cls))
+        {
+            var x = NameFromObject(cls);
+            if (!string.IsNullOrWhiteSpace(x)) return x;
+        }
+
+        if (root.TryGetProperty("ship", out var ship) && ship.ValueKind == JsonValueKind.Object)
+        {
+            if (ship.TryGetProperty("station", out var shipSt))
+            {
+                var x = NameFromObject(shipSt);
+                if (!string.IsNullOrWhiteSpace(x)) return x;
+            }
+        }
+
+        if (root.TryGetProperty("location", out var loc) && loc.ValueKind == JsonValueKind.Object)
+        {
+            if (loc.TryGetProperty("station", out var lst))
+            {
+                var x = NameFromObject(lst);
+                if (!string.IsNullOrWhiteSpace(x)) return x;
+            }
+
+            if (loc.TryGetProperty("name", out var ln) && ln.ValueKind == JsonValueKind.String)
+            {
+                var s = ln.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) return s;
+            }
+        }
+
+        return null;
+    }
+
+    private record CapiParsed(
+        string FrontierCustomerId,
+        string CommanderName,
+        string? SquadronName,
+        string? LastSystemName,
+        string? ShipName,
+        bool? IsDocked,
+        string? StationName);
 }

@@ -160,12 +160,14 @@ public class FrontierAuthService
             if (result == null || string.IsNullOrEmpty(result.AccessToken))
                 return null;
 
+            var expiresAt = DateTime.UtcNow.AddSeconds(Math.Max(result.ExpiresIn, 60));
             return new FrontierTokenResult(
                 result.AccessToken,
                 result.RefreshToken ?? "",
                 result.ExpiresIn,
                 result.TokenType ?? "Bearer",
-                result.Scope);
+                result.Scope,
+                expiresAt);
         }
         catch (Exception ex)
         {
@@ -209,7 +211,14 @@ public class FrontierAuthService
             var result = System.Text.Json.JsonSerializer.Deserialize<FrontierTokenResponse>(json);
             if (result == null || string.IsNullOrEmpty(result.AccessToken))
                 return null;
-            return new FrontierTokenResult(result.AccessToken, result.RefreshToken ?? refreshToken, result.ExpiresIn, result.TokenType ?? "Bearer", result.Scope);
+            var expiresAt = DateTime.UtcNow.AddSeconds(Math.Max(result.ExpiresIn, 60));
+            return new FrontierTokenResult(
+                result.AccessToken,
+                result.RefreshToken ?? refreshToken,
+                result.ExpiresIn,
+                result.TokenType ?? "Bearer",
+                result.Scope,
+                expiresAt);
         }
         catch (Exception ex)
         {
@@ -407,7 +416,14 @@ public class FrontierAuthService
     }
 }
 
-public record FrontierTokenResult(string AccessToken, string RefreshToken, int ExpiresIn, string TokenType, string? Scope = null);
+/// <param name="AccessTokenExpiresAtUtc">Absolu UTC pour expiration access (préféré pour restauration après redémarrage).</param>
+public record FrontierTokenResult(
+    string AccessToken,
+    string RefreshToken,
+    int ExpiresIn,
+    string TokenType,
+    string? Scope = null,
+    DateTime? AccessTokenExpiresAtUtc = null);
 
 public class FrontierAuthEndpointResult
 {

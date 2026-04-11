@@ -1,9 +1,13 @@
 import { Component, OnInit, OnDestroy, inject, signal, computed, effect, ViewChild, ElementRef } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
+import { catchError, forkJoin, map, of, switchMap, take } from 'rxjs';
 import { TruncateTooltipDirective } from '../../shared/directives/truncate-tooltip.directive';
 import { SettingsModalComponent } from '../../shared/components/settings-modal/settings-modal.component';
 import { SyncHelpModalComponent } from '../../shared/components/sync-help-modal/sync-help-modal.component';
 import { GuildSystemsPanelComponent } from './guild-systems-panel/guild-systems-panel.component';
 import { GuildSystemsMapComponent } from './guild-systems-map/guild-systems-map.component';
+import { ChantiersDebugPanelComponent } from './chantiers-debug-panel/chantiers-debug-panel.component';
+import { ChantierLogisticsPanelComponent } from './chantier-logistics-panel/chantier-logistics-panel.component';
 import { DashboardApiService } from '../../core/services/dashboard-api.service';
 import { CommandersApiService } from '../../core/services/commanders-api.service';
 import { SyncLogService } from '../../core/services/sync-log.service';
@@ -14,6 +18,14 @@ import { GuildSettingsService } from '../../core/services/guild-settings.service
 import { InaraSyncBridgeService } from '../../core/services/inara-sync-bridge.service';
 import { SyncHelpModalService } from '../../core/services/sync-help-modal.service';
 import { FrontierJournalApiService } from '../../core/services/frontier-journal-api.service';
+import { DeclaredChantiersApiService } from '../../core/services/declared-chantiers-api.service';
+import { ActiveChantiersStore } from '../../core/state/active-chantiers.store';
+import { ChantierLogisticsUiService } from '../../core/services/chantier-logistics-ui.service';
+import { mapDeclaredListItemApiToSite } from '../../core/utils/declared-chantiers-site-map';
+import type {
+  DeclaredChantierListItemApi,
+  DeclaredChantierRefreshAllResultApi,
+} from '../../core/models/declared-chantiers-api.model';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
 import type { SystemsFilterValue } from '../../core/models/guild-systems.model';
@@ -28,7 +40,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [TruncateTooltipDirective, SettingsModalComponent, SyncHelpModalComponent, GuildSystemsPanelComponent, GuildSystemsMapComponent],
+  imports: [TruncateTooltipDirective, SettingsModalComponent, SyncHelpModalComponent, GuildSystemsPanelComponent, GuildSystemsMapComponent, ChantiersDebugPanelComponent, ChantierLogisticsPanelComponent],
   template: `
     <div class="page">
       <div class="page-bg">
@@ -114,11 +126,15 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
         </div>
       </header>
       <main class="main-grid">
-        <aside class="col col-left">
-          <div class="col-left-systems-fill">
-            <app-guild-systems-panel />
+        <aside class="col col-left" [class.col-left--systems-all-expanded]="systemsPanelAllExpanded()">
+          <div class="col-left-systems-fill" [class.col-left-systems-fill--shrink]="systemsPanelAllSectionsCollapsed()">
+            <app-guild-systems-panel
+              (allSectionsExpandedChange)="systemsPanelAllExpanded.set($event)"
+              (allCollapsibleSectionsCollapsedChange)="systemsPanelAllSectionsCollapsed.set($event)" />
           </div>
-          <div class="box box-pipeline-dipo"><h3>Pipeline diplomatique</h3></div>
+          <div class="box box-pipeline-dipo" [class.box-pipeline-dipo--compact]="systemsPanelAllExpanded()">
+            <app-chantiers-debug-panel />
+          </div>
         </aside>
         <section class="col col-center">
           <div class="map-section">
@@ -225,46 +241,80 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
               }
             </div>
           </div>
-          <div class="box box-sync-status">
+          <div class="box box-sync-status" [class.box-sync-status--collapsed]="syncStatusCollapsed()">
             <div class="sync-status-header">
               <h3>État de la synchronisation</h3>
-              <div class="sync-status-more-dropdown">
-                @if (syncStatusMenuOpen()) {
-                  <div class="sync-status-menu-backdrop" (click)="syncStatusMenuOpen.set(false)"></div>
-                }
-                <button type="button"
-                  class="btn-icon-more-sync"
-                  title="Actions"
-                  (click)="syncStatusMenuOpen.set(!syncStatusMenuOpen())">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                    <circle cx="12" cy="6" r="1.5"/>
-                    <circle cx="12" cy="12" r="1.5"/>
-                    <circle cx="12" cy="18" r="1.5"/>
+              <div class="sync-status-header-actions">
+                <div class="sync-status-more-dropdown">
+                  @if (syncStatusMenuOpen()) {
+                    <div class="sync-status-menu-backdrop" (click)="syncStatusMenuOpen.set(false)"></div>
+                  }
+                  <button type="button"
+                    class="btn-icon-more-sync"
+                    title="Actions"
+                    (click)="syncStatusMenuOpen.set(!syncStatusMenuOpen())">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                      <circle cx="12" cy="6" r="1.5"/>
+                      <circle cx="12" cy="12" r="1.5"/>
+                      <circle cx="12" cy="18" r="1.5"/>
+                    </svg>
+                  </button>
+                  @if (syncStatusMenuOpen()) {
+                    <div class="sync-status-menu">
+                      <button type="button" class="sync-status-menu-item" [disabled]="!syncLogsWithRecap()" (click)="copyLogsToClipboard(); syncStatusMenuOpen.set(false)">Copier</button>
+                      <button type="button" class="sync-status-menu-item sync-status-menu-item--danger" [disabled]="syncLog.logs().length === 0" (click)="clearLogs(); syncStatusMenuOpen.set(false)">Effacer</button>
+                    </div>
+                  }
+                </div>
+                <button
+                  type="button"
+                  class="btn-icon-more-sync btn-sync-collapse"
+                  [title]="syncStatusCollapsed() ? 'Déplier le panneau' : 'Replier le panneau'"
+                  [attr.aria-expanded]="!syncStatusCollapsed()"
+                  [attr.aria-label]="syncStatusCollapsed() ? 'Déplier le panneau' : 'Replier le panneau'"
+                  (click)="toggleSyncStatusCollapsed()"
+                >
+                  <svg
+                    class="btn-sync-collapse-chevron"
+                    [class.btn-sync-collapse-chevron--collapsed]="syncStatusCollapsed()"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <polyline points="6 9 12 15 18 9" />
                   </svg>
                 </button>
-                @if (syncStatusMenuOpen()) {
-                  <div class="sync-status-menu">
-                    <button type="button" class="sync-status-menu-item" [disabled]="!syncLogsWithRecap()" (click)="copyLogsToClipboard(); syncStatusMenuOpen.set(false)">Copier</button>
-                    <button type="button" class="sync-status-menu-item sync-status-menu-item--danger" [disabled]="syncLog.logs().length === 0" (click)="clearLogs(); syncStatusMenuOpen.set(false)">Effacer</button>
-                  </div>
-                }
               </div>
             </div>
-            <div class="sync-logs-container">
-              @if (mapViewMode() === 'cmdr') {
-                <p class="sync-status-cmdr-hint">
-                  Carte : uniquement les positions StarPos du journal CAPI (raw). Vue Faction colore selon la guilde si le nom correspond ; vue Cmdr : calques visité / découvert / full scan.
-                </p>
-              }
-              <div class="sync-logs">
-                @for (line of syncLogLines(); track $index) {
-                  <div class="log-line" [class.log-line--error]="isErrorLine(line)">{{ line }}</div>
+            @if (!syncStatusCollapsed()) {
+              <div class="sync-logs-container">
+                @if (mapViewMode() === 'cmdr') {
+                  <p class="sync-status-cmdr-hint">
+                    Carte : uniquement les positions StarPos du journal CAPI (raw). Vue Faction colore selon la guilde si le nom correspond ; vue Cmdr : calques visité / découvert / full scan.
+                  </p>
                 }
+                <div class="sync-logs">
+                  @for (line of syncLogLines(); track $index) {
+                    <div class="log-line" [class.log-line--error]="isErrorLine(line)">{{ line }}</div>
+                  }
+                </div>
               </div>
-            </div>
+            }
           </div>
           <div class="center-row">
-            <div class="box box-no-title"></div>
+            <div class="box box-chantier-logistics">
+              <app-chantier-logistics-panel />
+            </div>
+            <div class="box box-pipeline-diplomatique">
+              <h3>Pipeline diplomatique</h3>
+            </div>
             <div class="box"><h3>Guerre Thargoid</h3></div>
           </div>
         </section>
@@ -275,6 +325,32 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             <div class="frontier-cmdr-main">
             <div class="frontier-cmdr-header">
               <h3 class="frontier-cmdr-title">CMDR CONNECTÉ</h3>
+              <div class="frontier-cmdr-header-actions">
+                <div class="cmdrs-more-dropdown">
+                  @if (cmdrJournalMenuOpen()) {
+                    <div class="cmdrs-menu-backdrop" (click)="cmdrJournalMenuOpen.set(false)"></div>
+                  }
+                  <button type="button"
+                    class="btn-icon-more"
+                    title="Journal"
+                    [disabled]="journalUnifiedRunning()"
+                    (click)="cmdrJournalMenuOpen.update((o) => !o)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                      <circle cx="12" cy="6" r="1.5"/>
+                      <circle cx="12" cy="12" r="1.5"/>
+                      <circle cx="12" cy="18" r="1.5"/>
+                    </svg>
+                  </button>
+                  @if (cmdrJournalMenuOpen()) {
+                    <div class="cmdrs-menu">
+                      <button type="button" class="cmdrs-menu-item"
+                        (click)="onJournalExportClick(); cmdrJournalMenuOpen.set(false)">Exporter le journal</button>
+                      <button type="button" class="cmdrs-menu-item"
+                        (click)="triggerJournalImportReplace(); cmdrJournalMenuOpen.set(false)">Importer le journal</button>
+                    </div>
+                  }
+                </div>
+              </div>
             </div>
             <div class="frontier-cmdr-data">
               <div class="frontier-cmdr-row frontier-cmdr-row--avatar">
@@ -312,46 +388,14 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
               }
             </div>
             <div class="frontier-cmdr-journal-sync">
-              @if (journalFrontierStatusLines(); as lines) {
-                <div class="journal-cmdr-status" role="status">
-                  @for (line of lines; track line) {
-                    <div class="journal-cmdr-status-line">{{ line }}</div>
-                  }
-                </div>
-              }
-              <div class="journal-sync-actions">
               <button type="button" class="btn-journal-sync btn-journal-sync--single"
+                [attr.title]="journalFrontierTooltip()"
                 [disabled]="journalUnifiedRunning()"
                 (click)="onSyncJournalClick()">
                 <span class="btn-journal-sync-text">
                   {{ journalUnifiedRunning() ? (journalUnifiedStatus()?.lastMessage ?? 'Journal Frontier…') : 'Synchronisation du journal' }}
                 </span>
               </button>
-              <div class="journal-backup-dropdown">
-                @if (journalBackupMenuOpen()) {
-                  <div class="journal-backup-backdrop" (click)="journalBackupMenuOpen.set(false)"></div>
-                }
-                <button type="button"
-                  class="btn-journal-more"
-                  title="Sauvegarde du journal"
-                  [disabled]="journalUnifiedRunning()"
-                  (click)="journalBackupMenuOpen.update((o) => !o)">
-                  <span class="btn-journal-more-icon" aria-hidden="true">⋮</span>
-                </button>
-                @if (journalBackupMenuOpen()) {
-                  <div class="journal-backup-menu" role="menu">
-                    <button type="button" class="journal-backup-item" role="menuitem"
-                      (click)="onJournalExportClick(); journalBackupMenuOpen.set(false)">Exporter le journal</button>
-                    <button type="button" class="journal-backup-item" role="menuitem"
-                      (click)="triggerJournalImportReplace(); journalBackupMenuOpen.set(false)">Importer (remplacer)</button>
-                    <button type="button" class="journal-backup-item" role="menuitem"
-                      (click)="triggerJournalImportMergeSkip(); journalBackupMenuOpen.set(false)">Importer (fusionner — garder les doublons locaux)</button>
-                    <button type="button" class="journal-backup-item" role="menuitem"
-                      (click)="triggerJournalImportMergePreferBackup(); journalBackupMenuOpen.set(false)">Importer (fusionner — priorité sauvegarde)</button>
-                  </div>
-                }
-              </div>
-              </div>
               <input #journalImportInput type="file" accept=".zip,application/zip" class="journal-import-file-input"
                 (change)="onJournalImportFileSelected($event)" />
               @if (journalUnifiedStatus()?.phase === 'error' && journalUnifiedStatus()?.frontierSessionUxAction) {
@@ -502,7 +546,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       width: 100%;
       background: rgba(6, 20, 35, 0.88);
       border-bottom: 1px solid rgba(0, 212, 255, 0.22);
-      padding: 8px 1rem 8px 1rem;
+      padding: 1rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -763,7 +807,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       box-sizing: border-box;
     }
     @media (min-width: 1200px) {
-      .header-zone { padding: 8px 1.5rem 8px 1.5rem; }
+      .header-zone { padding: 1.5rem; }
       .main-grid {
         width: 100%;
         grid-template-columns: minmax(200px, 400px) minmax(0, 1fr) minmax(200px, 400px);
@@ -773,7 +817,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       }
     }
     @media (min-width: 900px) and (max-width: 1199px) {
-      .header-zone { padding: 8px 1.5rem 8px 1.5rem; }
+      .header-zone { padding: 1.5rem; }
       .main-grid {
         gap: 1.5rem;
         padding: 63px 1.5rem 1.5rem;
@@ -796,6 +840,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .col-left {
       min-height: 0;
+      height: 100%;
+      align-self: stretch;
     }
     .col-center {
       width: 100%;
@@ -812,17 +858,49 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       flex: 1 1 auto;
       min-height: 0;
     }
+    .col-right .box-frontier-cmdr {
+      flex: 0 0 auto;
+      min-height: 0;
+    }
+    /* Panneau systèmes : ~85 % de la hauteur de la colonne (flex 17 vs chantiers 3) */
     .col-left-systems-fill {
-      flex: 1 1 auto;
+      flex: 17 1 0;
       min-height: 0;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
+      transition:
+        flex-grow 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+        flex-shrink 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+        flex-basis 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    /* Sections Bas / Sains / Autres toutes repliées : le pavé ne remplit plus toute la colonne. */
+    .col-left-systems-fill--shrink {
+      flex: 0 1 auto;
+      overflow-y: auto;
     }
     .col-left .box-reunion {
       max-height: 80px;
     }
+    /* Chantiers en cours : ~15 % de la hauteur de la colonne (flex 3 vs systèmes 17) */
     .col-left .box-pipeline-dipo {
-      max-height: 80px;
+      flex: 3 1 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition:
+        flex-grow 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+        flex-shrink 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+        flex-basis 0.45s cubic-bezier(0.4, 0, 0.2, 1),
+        padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        min-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .box-pipeline-dipo--compact {
+      padding: 0.45rem;
+    }
+    .box-pipeline-dipo--compact > h3 {
+      margin: 0;
     }
     .box {
       background: rgba(6, 20, 35, 0.88);
@@ -832,20 +910,30 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
         0 0 5px rgba(0, 234, 255, 0.03),
         0 0 10px rgba(0, 234, 255, 0.02),
         0 0 20px rgba(0, 234, 255, 0.01);
-      padding: calc(1rem + 4px) 1.25rem 1rem 1.25rem;
+      padding: 1.25rem;
       min-height: 80px;
+      transition:
+        box-shadow 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.35s ease,
+        padding 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .box h3 {
+    /* Titres de blocs : même lueur cyan que le panneau chantiers */
+    .box h3,
+    .frontier-cmdr-title,
+    .box-cmdrs-title {
       margin: 0;
       font-family: 'Orbitron', sans-serif;
       font-size: 0.75rem;
       font-weight: 600;
-      color: #00d4ff;
+      color: #00eaff;
       text-transform: uppercase;
       letter-spacing: 0.1em;
+      text-shadow:
+        0 0 4px rgba(0, 234, 255, 0.4),
+        0 0 10px rgba(0, 234, 255, 0.22);
     }
     .box > h3:first-child {
-      margin-top: 7px;
+      margin-top: 0;
     }
     .box-sync-status {
       display: flex;
@@ -853,6 +941,13 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       flex: 0 1 16.666%;
       max-height: 16.666%;
       min-height: 0;
+    }
+    .box-sync-status--collapsed {
+      flex: 0 0 auto;
+      max-height: none;
+    }
+    .box-sync-status--collapsed .sync-status-header {
+      margin-bottom: 0;
     }
     .sync-status-header {
       display: flex;
@@ -864,6 +959,27 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .sync-status-header h3 {
       margin: 0;
+      min-width: 0;
+    }
+    .sync-status-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-shrink: 0;
+    }
+    .btn-sync-collapse-chevron {
+      display: block;
+      flex-shrink: 0;
+      color: inherit;
+      opacity: 1;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .btn-sync-collapse-chevron--collapsed {
+      transform: rotate(-90deg);
+    }
+    .btn-sync-collapse:focus-visible {
+      outline: 1px solid rgba(0, 212, 255, 0.5);
+      outline-offset: 1px;
     }
     .sync-status-cmdr-hint {
       margin: 0 0 0.5rem;
@@ -1048,8 +1164,18 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .center-row {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 1rem;
+    }
+    .box-chantier-logistics {
+      display: flex;
+      flex-direction: column;
+      min-height: 120px;
+    }
+    .box-pipeline-diplomatique {
+      display: flex;
+      flex-direction: column;
+      min-height: 120px;
     }
     .map-section {
       position: relative;
@@ -1275,11 +1401,12 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .box-frontier-cmdr {
       display: flex;
       flex-direction: column;
+      align-self: flex-start;
+      width: 100%;
       min-height: 0;
-      padding-bottom: 16px;
     }
     .frontier-cmdr-layout {
-      flex: 1;
+      flex: 0 0 auto;
       display: flex;
       flex-direction: row;
       align-items: stretch;
@@ -1296,18 +1423,15 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .frontier-cmdr-header {
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
       margin-bottom: 1rem;
     }
-    .frontier-cmdr-title {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      margin: 0;
-      color: #00d4ff;
+    .frontier-cmdr-header-actions {
+      display: flex;
+      gap: 0.4rem;
+      flex-shrink: 0;
     }
     .frontier-cmdr-data {
       display: flex;
@@ -1360,23 +1484,10 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       color: rgba(255, 255, 255, 0.9);
     }
     .frontier-cmdr-journal-sync {
-      margin-top: auto;
       width: 100%;
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
-    }
-    .journal-cmdr-status {
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-      font-size: 0.62rem;
-      font-family: 'Exo 2', sans-serif;
-      color: rgba(255, 255, 255, 0.72);
-      line-height: 1.35;
-    }
-    .journal-cmdr-status-line {
-      word-break: break-word;
     }
     .btn-journal-sync {
       display: flex;
@@ -1413,85 +1524,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .btn-journal-sync--single {
       flex-direction: row;
       min-height: 2.35rem;
-      flex: 1;
-      min-width: 0;
-    }
-    .journal-sync-actions {
-      display: flex;
-      align-items: stretch;
-      gap: 0.35rem;
       width: 100%;
-    }
-    .journal-backup-dropdown {
-      position: relative;
-      flex-shrink: 0;
-    }
-    .journal-backup-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 9996;
-    }
-    .btn-journal-more {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 2.35rem;
-      min-height: 2.35rem;
-      padding: 0;
-      font-size: 1.1rem;
-      line-height: 1;
-      color: #00d4ff;
-      background: rgba(0, 212, 255, 0.1);
-      border: 1px solid rgba(0, 212, 255, 0.35);
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .btn-journal-more:hover:not(:disabled) {
-      background: rgba(0, 212, 255, 0.22);
-      border-color: rgba(0, 212, 255, 0.55);
-    }
-    .btn-journal-more:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-    }
-    .btn-journal-more-icon {
-      display: block;
-      transform: translateY(-1px);
-      font-weight: 700;
-    }
-    .journal-backup-menu {
-      position: absolute;
-      right: 0;
-      bottom: 100%;
-      margin-bottom: 0.28rem;
-      z-index: 9997;
-      min-width: 220px;
-      padding: 0.35rem;
-      background: rgba(6, 20, 35, 0.98);
-      border: 1px solid rgba(0, 212, 255, 0.38);
-      border-radius: 8px;
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-    }
-    .journal-backup-item {
-      padding: 0.4rem 0.55rem;
-      font-size: 0.58rem;
-      font-family: 'Exo 2', sans-serif;
-      line-height: 1.35;
-      text-align: left;
-      color: rgba(255, 255, 255, 0.92);
-      background: rgba(0, 212, 255, 0.08);
-      border: 1px solid rgba(0, 212, 255, 0.2);
-      border-radius: 4px;
-      cursor: pointer;
-      transition: background 0.15s;
-    }
-    .journal-backup-item:hover {
-      background: rgba(0, 212, 255, 0.18);
-      color: #00eaff;
+      min-width: 0;
     }
     .journal-import-file-input {
       position: absolute;
@@ -1597,15 +1631,6 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .box-cmdrs {
       min-width: 0;
-    }
-    .box-cmdrs-title {
-      font-family: 'Orbitron', sans-serif;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      margin: 0;
-      color: #00d4ff;
     }
     .cmdrs-empty {
       font-family: 'Exo 2', sans-serif;
@@ -1724,6 +1749,13 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
         font-size: 0.7rem;
       }
     }
+    @media (prefers-reduced-motion: reduce) {
+      .col-left-systems-fill,
+      .col-left .box-pipeline-dipo,
+      .box {
+        transition: none !important;
+      }
+    }
   `],
 })
 export class DashboardComponent implements OnInit, OnDestroy {
@@ -1798,14 +1830,26 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     return lines.length ? lines : null;
   });
+  /** Texte tooltip sur le bouton de synchro journal (état Frontier / dernière synchro). */
+  protected readonly journalFrontierTooltip = computed(() => {
+    const lines = this.journalFrontierStatusLines();
+    if (lines?.length) return lines.join(' — ');
+    return 'Journal Frontier';
+  });
+  /** Toutes les sections Bas / Sains / Autres dépliées → panneau systèmes pleine hauteur, pipeline réduit. */
+  protected readonly systemsPanelAllExpanded = signal(false);
+  /** Toutes les sections repliables visibles sont repliées → zone systèmes en hauteur contenu (aligné avec l’état initial). */
+  protected readonly systemsPanelAllSectionsCollapsed = signal(true);
   protected readonly cmdrsMenuOpen = signal(false);
-  protected readonly journalBackupMenuOpen = signal(false);
+  protected readonly cmdrJournalMenuOpen = signal(false);
   /** Importer : 'replace' | merge + duplicatePolicy */
   private readonly journalImportPending = signal<{
     strategy: 'replace' | 'merge';
     duplicatePolicy: 'skip' | 'import';
   } | null>(null);
   protected readonly syncStatusMenuOpen = signal(false);
+  /** true = zone des logs masquée (titre + boutons visibles uniquement). */
+  protected readonly syncStatusCollapsed = signal(true);
   protected readonly headerAvatarError = signal(false);
   protected readonly boxAvatarError = signal(false);
   protected readonly cmdrAvatarError = signal<Set<string>>(new Set());
@@ -1816,6 +1860,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly AVATAR_DEFAULT_FALLBACK_URL = AVATAR_DEFAULT_FALLBACK_URL;
   protected readonly guildSystemsSync = inject(GuildSystemsSyncService);
   private readonly guildSystemsApi = inject(GuildSystemsApiService);
+  private readonly declaredChantiersApi = inject(DeclaredChantiersApiService);
+  private readonly activeChantiersStore = inject(ActiveChantiersStore);
+  private readonly chantierLogisticsUi = inject(ChantierLogisticsUiService);
+  private chantiersAutoRefreshIntervalRef: ReturnType<typeof setInterval> | null = null;
+  private chantiersAutoRefreshRunning = false;
   private journalUnifiedPollingRef: ReturnType<typeof setInterval> | null = null;
   private journalUnifiedExpectComplete = false;
   /** Évite les doublons dans les logs pour le même libellé de progression. */
@@ -1843,6 +1892,77 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.loadJournalUnifiedStatus();
       }
     });
+    effect(() => {
+      if (this.frontierAuth.isConnected()) {
+        this.startChantiersAutoRefreshTimer();
+      } else {
+        this.stopChantiersAutoRefreshTimer();
+      }
+    });
+  }
+
+  private startChantiersAutoRefreshTimer(): void {
+    if (this.chantiersAutoRefreshIntervalRef != null) return;
+    const fiveMin = 5 * 60 * 1000;
+    this.chantiersAutoRefreshIntervalRef = setInterval(() => this.runChantiersAutoRefresh(), fiveMin);
+  }
+
+  private stopChantiersAutoRefreshTimer(): void {
+    if (this.chantiersAutoRefreshIntervalRef != null) {
+      clearInterval(this.chantiersAutoRefreshIntervalRef);
+      this.chantiersAutoRefreshIntervalRef = null;
+    }
+  }
+
+  private runChantiersAutoRefresh(): void {
+    if (this.chantiersAutoRefreshRunning) return;
+    if (!this.frontierAuth.isConnected()) return;
+    this.chantiersAutoRefreshRunning = true;
+    this.declaredChantiersApi
+      .refreshAll()
+      .pipe(
+        switchMap((res) =>
+          forkJoin({
+            mine: this.declaredChantiersApi.listMine().pipe(catchError(() => of([] as DeclaredChantierListItemApi[]))),
+            others: this.declaredChantiersApi.listOthers().pipe(catchError(() => of([] as DeclaredChantierListItemApi[]))),
+          }).pipe(map((lists) => ({ res, ...lists }))),
+        ),
+        take(1),
+      )
+      .subscribe({
+        next: (payload: {
+          res: DeclaredChantierRefreshAllResultApi;
+          mine: DeclaredChantierListItemApi[];
+          others: DeclaredChantierListItemApi[];
+        }) => {
+          const { res, mine, others } = payload;
+          const prevSel = this.chantierLogisticsUi.selectedSiteId();
+          this.activeChantiersStore.replaceMineAndOthers(
+            mine.map(mapDeclaredListItemApiToSite),
+            others.map(mapDeclaredListItemApiToSite),
+          );
+          if (prevSel && !this.activeChantiersStore.entries().some((e: { id: string }) => e.id === prevSel)) {
+            this.chantierLogisticsUi.selectedSiteId.set(null);
+            this.syncLog.addLog(`[Chantiers] chantier terminé — sélection effacée (inactive)`);
+          }
+          let line = `[Chantiers] refresh auto OK — ${res.updated} chantier(s) mis à jour`;
+          if (res.deactivated > 0) line += ` — ${res.deactivated} terminé(s)`;
+          this.syncLog.addLog(line);
+          this.chantiersAutoRefreshRunning = false;
+        },
+        error: (err: unknown) => {
+          let msg = 'erreur réseau';
+          if (err instanceof HttpErrorResponse) {
+            const e = err.error as { message?: string } | undefined;
+            if (typeof e?.message === 'string') msg = e.message;
+            else if (err.status === 0) msg = 'serveur injoignable';
+          } else if (err && typeof err === 'object' && 'message' in err) {
+            msg = String((err as { message?: string }).message);
+          }
+          this.syncLog.addLog(`[Chantiers] refresh échec — ${msg}`);
+          this.chantiersAutoRefreshRunning = false;
+        },
+      });
   }
   protected strokeDashOffset = computed(() => this.strokeCircumference * (1 - this.refreshProgress() / 100));
 
@@ -1990,6 +2110,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.syncLog.clearLogs();
   }
 
+  protected toggleSyncStatusCollapsed(): void {
+    this.syncStatusCollapsed.update((v) => !v);
+  }
+
   protected formatSyncDate(d: Date | null): string {
     if (!d) return '—';
     const dt = d instanceof Date ? d : new Date(d);
@@ -2056,7 +2180,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const all = text.split('\n');
     const recapEnd = all.findIndex((l) => l.startsWith('['));
     const recapLines = recapEnd >= 0 ? all.slice(0, recapEnd).filter((l) => l.trim() !== '') : all;
-    const logLines = recapEnd >= 0 ? all.slice(recapEnd) : [];
+    const rawLogLines = recapEnd >= 0 ? all.slice(recapEnd) : [];
+    const maxLogLines = 400;
+    const logLines =
+      rawLogLines.length > maxLogLines
+        ? [...rawLogLines.slice(0, maxLogLines), '[… tronqué : trop de lignes de journal …]']
+        : rawLogLines;
     const progress = this.systemsImportProgress();
     const journalProgress = this.journalBackfillProgress();
     const progressLine = progress ? [`[${new Date().toISOString().slice(11, 23)}] ${progress}`] : [];
@@ -2571,13 +2700,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
       error: (err) => {
         cancelAnimationFrame(frameId);
         this.refreshProgress.set(0);
-        const msg = err?.error?.error ?? err?.error?.message ?? err?.message ?? JSON.stringify(err);
-        this.addLog('Erreur rafraîchissement : ' + msg);
+        const msg =
+          err?.error?.error ??
+          err?.error?.message ??
+          err?.message ??
+          (err instanceof Error ? err.message : 'Erreur inconnue');
+        this.addLog('Erreur rafraîchissement : ' + String(msg).slice(0, 500));
       },
     });
   }
 
   ngOnDestroy(): void {
     this.stopJournalUnifiedPolling();
+    this.stopChantiersAutoRefreshTimer();
   }
 }
