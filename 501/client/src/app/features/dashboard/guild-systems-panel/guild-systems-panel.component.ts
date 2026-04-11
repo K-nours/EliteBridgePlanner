@@ -2,7 +2,7 @@
  * Feature archived – no reliable external data source for Faction → Systems → Influence %.
  * Panneau conservé avec marquage "Feature en pause". Voir docs/GUILD-SYSTEMS.md.
  */
-import { Component, inject, OnInit, signal, computed, effect } from '@angular/core';
+import { Component, inject, OnInit, signal, computed, effect, output } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { GuildSystemsApiService } from '../../../core/services/guild-systems-api.service';
 import { GuildSystemsSyncService } from '../../../core/services/guild-systems-sync.service';
@@ -49,6 +49,31 @@ export class GuildSystemsPanelComponent implements OnInit {
   healthyExpanded = signal(false);
   othersExpanded = signal(false);
 
+  /**
+   * Toutes les sections repliables **affichées** (selon filtre carte / recherche) sont dépliées.
+   * Si aucune section repliable n’est dans la liste courante → false (pipeline prend de la place).
+   */
+  readonly allCollapsibleSectionsExpanded = computed(() => {
+    const cats = this.categoryConfig();
+    const collapsible = cats.filter((c) => this.isCollapsible(c.key));
+    if (collapsible.length === 0) return false;
+    return collapsible.every((c) => this.isSectionExpanded(c.key));
+  });
+  /**
+   * Toutes les sections repliables présentes dans la liste courante sont repliées.
+   * Utilisé pour réduire la hauteur du pavé au contenu (sans flex pleine colonne).
+   */
+  readonly allCollapsibleSectionsCollapsed = computed(() => {
+    const cats = this.categoryConfig();
+    const collapsible = cats.filter((c) => this.isCollapsible(c.key));
+    if (collapsible.length === 0) return false;
+    return collapsible.every((c) => !this.isSectionExpanded(c.key));
+  });
+  /** Notifie le dashboard pour adapter la grille (pipeline vs panneau systèmes). */
+  readonly allSectionsExpandedChange = output<boolean>();
+  /** Notifie le dashboard : replier la zone systèmes à la hauteur du contenu. */
+  readonly allCollapsibleSectionsCollapsedChange = output<boolean>();
+
   panelState = this.guildSync.panelState;
   systems = this.guildSync.systems;
   lastError = this.guildSync.lastError;
@@ -89,6 +114,12 @@ export class GuildSystemsPanelComponent implements OnInit {
         const el = document.querySelector(`[data-system-id="${id}"]`);
         (el as HTMLElement)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }, 100);
+    });
+    effect(() => {
+      this.allSectionsExpandedChange.emit(this.allCollapsibleSectionsExpanded());
+    });
+    effect(() => {
+      this.allCollapsibleSectionsCollapsedChange.emit(this.allCollapsibleSectionsCollapsed());
     });
   }
 

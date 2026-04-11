@@ -1,0 +1,309 @@
+<section class="chantiers-panel-root">
+  <div class="panel-header">
+    <h3 class="panel-title">CHANTIERS EN COURS</h3>
+    <div class="chantiers-header-actions">
+      <button
+        type="button"
+        class="btn-icon-more"
+        aria-label="Ajouter un chantier"
+        [disabled]="loading() || hydrating()"
+        truncateTooltip="Ajouter un chantier (dockez-vous sur une station de construction)"
+        [truncateTooltipForce]="true"
+        (click)="onAddChantierClick($event)"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  @if (hydrating()) {
+    <p class="chantiers-hint chantiers-hint--loading">Chargement des chantiers…</p>
+  }
+  @if (loading()) {
+    <p class="chantiers-hint chantiers-hint--loading">Lecture du profil et du marché Frontier…</p>
+  }
+  @if (!loading() && !hydrating() && shortStatus(); as msg) {
+    <p class="chantiers-hint" [class.chantiers-hint--err]="statusIsError()">{{ msg }}</p>
+  }
+
+  @if (!hydrating()) {
+    <div class="systems-list">
+      <!-- Niveau 1 : Chantiers en cours (CMDR connecté) -->
+      <div
+        class="category category--collapsible"
+        [class.category--collapsed]="!mineSectionExpanded()"
+      >
+        <button
+          type="button"
+          class="category-header category-header--clickable"
+          [class.category-header--expanded]="mineSectionExpanded()"
+          (click)="toggleMineSection()"
+          [attr.aria-expanded]="mineSectionExpanded()"
+          aria-label="Chantiers en cours, déplier ou replier"
+        >
+          <span class="category-label">Chantiers en cours</span>
+          @if (mineSiteCount() > 0) {
+            <span class="category-count">({{ mineSiteCount() }})</span>
+          }
+          <svg
+            class="category-chevron"
+            xmlns="http://www.w3.org/2000/svg"
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        <div
+          class="category-expand"
+          [class.category-expand--open]="mineSectionExpanded()"
+          [attr.aria-hidden]="!mineSectionExpanded()"
+        >
+          <div class="category-expand-inner">
+            @if (groupedMine().length === 0) {
+              <p class="empty">Aucun chantier pour votre CMDR</p>
+            } @else {
+              <div class="category-content">
+                @for (g of groupedMine(); track g.systemName) {
+                  <div
+                    class="category chantiers-nested"
+                    [class.category--collapsed]="!isSystemExpanded(systemRowKey('m', g.systemName))"
+                  >
+                    <div
+                      class="system-row chantiers-system-row"
+                      [class.chantiers-system-row--expanded]="isSystemExpanded(systemRowKey('m', g.systemName))"
+                      role="button"
+                      tabindex="0"
+                      (click)="toggleSystem(systemRowKey('m', g.systemName))"
+                      (keydown.enter)="toggleSystem(systemRowKey('m', g.systemName))"
+                      (keydown.space)="$event.preventDefault(); toggleSystem(systemRowKey('m', g.systemName))"
+                      [attr.aria-expanded]="isSystemExpanded(systemRowKey('m', g.systemName))"
+                    >
+                      <span class="system-row-left">
+                        <span class="system-name">{{ g.systemName }}</span>
+                      </span>
+                      <span class="system-row-right">
+                        <span class="chantiers-count"
+                          >{{ g.count }} chantier{{ g.count > 1 ? 's' : '' }} en cours</span
+                        >
+                        <button
+                          type="button"
+                          class="btn-target chantiers-refresh-btn"
+                          [class.chantiers-refresh-btn--busy]="refreshingSystem() === systemRowKey('m', g.systemName)"
+                          title="Rafraîchir les données chantier"
+                          aria-label="Rafraîchir les données chantier"
+                          (click)="refreshSystemData($event, systemRowKey('m', g.systemName))"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="10"
+                            height="10"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                          >
+                            <path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-6.36-2.64" />
+                            <path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 6.36 2.64" />
+                            <polyline points="21 3 21 9 15 9" />
+                            <polyline points="3 21 3 15 9 15" />
+                          </svg>
+                        </button>
+                        <svg
+                          class="category-chevron chantiers-system-chevron"
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="10"
+                          height="10"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          aria-hidden="true"
+                        >
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </span>
+                    </div>
+                    <div
+                      class="category-expand"
+                      [class.category-expand--open]="isSystemExpanded(systemRowKey('m', g.systemName))"
+                    >
+                      <div class="category-expand-inner">
+                        <ul class="chantiers-station-list">
+                          @for (s of g.sites; track s.id) {
+                            <li class="chantiers-station-block">
+                              <button
+                                type="button"
+                                class="chantiers-station-line"
+                                [class.chantiers-station-line--selected]="logisticsUi.selectedSiteId() === s.id"
+                                (click)="selectConstructionSite(s, $event)"
+                                [attr.aria-pressed]="logisticsUi.selectedSiteId() === s.id"
+                              >
+                                <span class="chantiers-station-line__label">{{ s.stationName }}</span>
+                              </button>
+                            </li>
+                          }
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Niveau 1 : Autres CMDRs -->
+      <div
+        class="category category--collapsible"
+        [class.category--collapsed]="!othersSectionExpanded()"
+      >
+        <button
+          type="button"
+          class="category-header category-header--clickable"
+          [class.category-header--expanded]="othersSectionExpanded()"
+          (click)="toggleOthersSection()"
+          [attr.aria-expanded]="othersSectionExpanded()"
+          aria-label="Autres chantiers des CMDRs, déplier ou replier"
+        >
+          <span class="category-label">Autres chantiers des CMDRs</span>
+          @if (othersSiteCount() > 0) {
+            <span class="category-count">({{ othersSiteCount() }})</span>
+          }
+          <svg
+            class="category-chevron"
+            xmlns="http://www.w3.org/2000/svg"
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        <div
+          class="category-expand"
+          [class.category-expand--open]="othersSectionExpanded()"
+          [attr.aria-hidden]="!othersSectionExpanded()"
+        >
+          <div class="category-expand-inner">
+            @if (groupedOthers().length === 0) {
+              <p class="empty">Aucun autre chantier déclaré</p>
+            } @else {
+              <div class="category-content">
+                @for (g of groupedOthers(); track g.systemName) {
+                  <div
+                    class="category chantiers-nested"
+                    [class.category--collapsed]="!isSystemExpanded(systemRowKey('o', g.systemName))"
+                  >
+                    <div
+                      class="system-row chantiers-system-row"
+                      [class.chantiers-system-row--expanded]="isSystemExpanded(systemRowKey('o', g.systemName))"
+                      role="button"
+                      tabindex="0"
+                      (click)="toggleSystem(systemRowKey('o', g.systemName))"
+                      (keydown.enter)="toggleSystem(systemRowKey('o', g.systemName))"
+                      (keydown.space)="$event.preventDefault(); toggleSystem(systemRowKey('o', g.systemName))"
+                      [attr.aria-expanded]="isSystemExpanded(systemRowKey('o', g.systemName))"
+                    >
+                      <span class="system-row-left">
+                        <span class="system-name">{{ g.systemName }}</span>
+                      </span>
+                      <span class="system-row-right">
+                        <span class="chantiers-count"
+                          >{{ g.count }} chantier{{ g.count > 1 ? 's' : '' }} en cours</span
+                        >
+                        <button
+                          type="button"
+                          class="btn-target chantiers-refresh-btn"
+                          [class.chantiers-refresh-btn--busy]="refreshingSystem() === systemRowKey('o', g.systemName)"
+                          title="Rafraîchir les données chantier"
+                          aria-label="Rafraîchir les données chantier"
+                          (click)="refreshSystemData($event, systemRowKey('o', g.systemName))"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="10"
+                            height="10"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                          >
+                            <path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-6.36-2.64" />
+                            <path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 6.36 2.64" />
+                            <polyline points="21 3 21 9 15 9" />
+                            <polyline points="3 21 3 15 9 15" />
+                          </svg>
+                        </button>
+                        <svg
+                          class="category-chevron chantiers-system-chevron"
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="10"
+                          height="10"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          aria-hidden="true"
+                        >
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </span>
+                    </div>
+                    <div
+                      class="category-expand"
+                      [class.category-expand--open]="isSystemExpanded(systemRowKey('o', g.systemName))"
+                    >
+                      <div class="category-expand-inner">
+                        <ul class="chantiers-station-list">
+                          @for (s of g.sites; track s.id) {
+                            <li class="chantiers-station-block">
+                              <button
+                                type="button"
+                                class="chantiers-station-line"
+                                [class.chantiers-station-line--selected]="logisticsUi.selectedSiteId() === s.id"
+                                (click)="selectConstructionSite(s, $event)"
+                                [attr.aria-pressed]="logisticsUi.selectedSiteId() === s.id"
+                              >
+                                <span class="chantiers-station-line__label">{{ s.stationName }}</span>
+                              </button>
+                            </li>
+                          }
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</section>

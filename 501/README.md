@@ -39,7 +39,17 @@ Le panneau **CMDRs** affiche les membres du squadron depuis un cache DB aliment�
 
 - .NET 10
 - Node.js 18+
-- SQL Server (ex. Docker : `docker run -e ACCEPT_EULA=Y -e SA_PASSWORD=YourStrong!Passw0rd -p 1434:1433 mcr.microsoft.com/mssql/server:2022-latest`)
+- SQL Server
+
+**SQL Server pour ce dashboard** — fichier `501/docker-compose.yml`, port hôte **1434** (mot de passe identique à `appsettings`) :
+
+```bash
+docker compose -f 501/docker-compose.yml up -d
+```
+
+Le conteneur `guild_dashboard_sqlserver` a `restart: unless-stopped`. **EliteBridgePlanner** utilise un SQL séparé : `docker compose up -d` **à la racine** du dépôt (port **1433**, conteneur `elitebridge_sqlserver`). **Un `git push` ne lance pas Docker** : après une mise en veille ou un reboot, relancer les deux commandes ci-dessus si besoin (ou ouvrir Docker Desktop puis attendre « healthy »).
+
+Alternative manuelle pour le 501 : `docker run -e ACCEPT_EULA=Y -e SA_PASSWORD=YourStrong!Passw0rd -p 1434:1433 mcr.microsoft.com/mssql/server:2022-latest`
 
 ### Backend
 
