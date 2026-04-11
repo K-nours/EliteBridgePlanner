@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -238,6 +239,17 @@ public class FrontierAuthService
         TimeSpan timeout,
         CancellationToken ct = default)
     {
+        var (status, body, _) = await FetchCapiRawWithRetryAsync(accessToken, capiEndpoint, timeout, ct);
+        return (status, body);
+    }
+
+    /// <summary>Même chose que <see cref="FetchCapiRawAsync"/> + entête Retry-After si présent (rate limit HTTP 429).</summary>
+    public async Task<(int StatusCode, string? Body, int? RetryAfterSeconds)> FetchCapiRawWithRetryAsync(
+        string accessToken,
+        string capiEndpoint,
+        TimeSpan timeout,
+        CancellationToken ct = default)
+    {
         var url = $"{CapiHost}{capiEndpoint}";
         using var client = _httpFactory.CreateClient();
         client.Timeout = timeout <= TimeSpan.Zero ? TimeSpan.FromSeconds(15) : timeout;
@@ -247,12 +259,22 @@ public class FrontierAuthService
         {
             var response = await client.GetAsync(url, ct);
             var body = await response.Content.ReadAsStringAsync(ct);
-            return ((int)response.StatusCode, body);
+            int? retryAfter = null;
+            if (response.Headers.RetryAfter?.Delta is { } delta)
+                retryAfter = (int)Math.Ceiling(Math.Max(1, delta.TotalSeconds));
+            else if (response.Headers.TryGetValues("Retry-After", out var values))
+            {
+                var v = values.FirstOrDefault();
+                if (int.TryParse(v, out var sec) && sec > 0)
+                    retryAfter = sec;
+            }
+
+            return ((int)response.StatusCode, body, retryAfter);
         }
         catch (Exception ex)
         {
             _log.LogWarning(ex, "[FrontierCapi] Fetch failed: {Url}", url);
-            return (0, null);
+            return (0, null, null);
         }
     }
 

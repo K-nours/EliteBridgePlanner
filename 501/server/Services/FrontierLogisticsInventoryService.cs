@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using GuildDashboard.Server.DTOs;
 
 namespace GuildDashboard.Server.Services;
@@ -21,7 +22,20 @@ public class FrontierLogisticsInventoryService
     {
         var dto = new FrontierLogisticsInventoryDto();
 
-        var (shipStatus, shipBody) = await _auth.FetchCapiRawAsync(accessToken, "/profile", ct);
+        var (shipStatus, shipBody, shipRetryAfter) =
+            await _auth.FetchCapiRawWithRetryAsync(accessToken, "/profile", TimeSpan.FromSeconds(15), ct);
+
+        if (shipStatus == 429)
+        {
+            dto.ShipRateLimited = true;
+            dto.RateLimited = true;
+            dto.RetryAfterSeconds = shipRetryAfter ?? 60;
+            dto.ShipCargoError = "Profil Frontier (rate limit)";
+            dto.FleetCarrierSkippedDueToProfileRateLimit = true;
+            _log.LogWarning("[LogisticsInventory] /profile HTTP 429 — skip /fleetcarrier, RetryAfter={Ra}s", dto.RetryAfterSeconds);
+            return dto;
+        }
+
         if (shipStatus != 200 || string.IsNullOrEmpty(shipBody))
         {
             dto.ShipCargoError = shipStatus == 0 ? "Profil Frontier indisponible (réseau)" : $"HTTP {shipStatus}";
@@ -41,11 +55,20 @@ public class FrontierLogisticsInventoryService
             }
         }
 
-        // /fleetcarrier peut être lent ou absent (pas de FC) — timeout long, 404 = pas de FC.
-        var (fcStatus, fcBody) = await _auth.FetchCapiRawAsync(accessToken, "/fleetcarrier", TimeSpan.FromSeconds(60), ct);
+        // /fleetcarrier : seulement si /profile n’a pas été limité (évite 2 hits CAPI inutiles).
+        var (fcStatus, fcBody, fcRetryAfter) =
+            await _auth.FetchCapiRawWithRetryAsync(accessToken, "/fleetcarrier", TimeSpan.FromSeconds(60), ct);
         if (fcStatus == 404)
         {
             dto.CarrierCargoError = null;
+        }
+        else if (fcStatus == 429)
+        {
+            dto.CarrierRateLimited = true;
+            dto.RateLimited = true;
+            dto.RetryAfterSeconds = fcRetryAfter ?? dto.RetryAfterSeconds ?? 60;
+            dto.CarrierCargoError = "Fleet Carrier (rate limit)";
+            _log.LogWarning("[LogisticsInventory] /fleetcarrier HTTP 429 RetryAfter={Ra}s", dto.RetryAfterSeconds);
         }
         else if (fcStatus != 200 || string.IsNullOrEmpty(fcBody))
         {
@@ -77,14 +100,52 @@ public class FrontierLogisticsInventoryService
         WalkElement(root, dict, depth: 0);
     }
 
+    /// <summary>
+    /// Aligné sur la logique client (chantier-logistics.vm) : FR/EN et casse unique pour lookup inventaire.
+    /// </summary>
+    private static string NormalizeCommodityKey(string name)
+    {
+        var s = name.Trim();
+        if (string.IsNullOrEmpty(s)) return s;
+        var lower = s.ToLowerInvariant();
+        return lower switch
+        {
+            "acier" or "steel" => "steel",
+            "aluminium" or "aluminum" => "aluminium",
+            "cuivre" or "copper" => "copper",
+            "titane" or "titanium" => "titanium",
+            "plomb" or "lead" => "lead",
+            "zinc" => "zinc",
+            "nickel" => "nickel",
+            "cobalt" => "cobalt",
+            "soufre" or "sulphur" or "sulfur" => "sulphur",
+            "phosphore" or "phosphorus" => "phosphorus",
+            "bore" or "boron" => "boron",
+            "tellure" or "tellurium" => "tellurium",
+            "chrome" or "chromium" => "chromium",
+            "antimoine" or "antimony" => "antimony",
+            "étain" or "etain" or "tin" => "tin",
+            "manganèse" or "manganese" => "manganese",
+            "molybdène" or "molybdene" or "molybdenum" => "molybdenum",
+            "rhénium" or "rhenium" => "rhenium",
+            "wolfram" or "tungstène" or "tungsten" => "tungsten",
+            "yttrium" => "yttrium",
+            "technétium" or "technetium" => "technetium",
+            "ruthénium" or "ruthenium" => "ruthenium",
+            "polonium" => "polonium",
+            "vanadium" => "vanadium",
+            _ => Regex.Replace(lower, @"\s+", " ")
+        };
+    }
+
     private static void AddOrMerge(Dictionary<string, int> dict, string name, int qty)
     {
-        var key = name.Trim();
+        var key = NormalizeCommodityKey(name);
         if (string.IsNullOrEmpty(key)) return;
         string? existingKey = null;
         foreach (var kv in dict)
         {
-            if (string.Equals(kv.Key, key, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(NormalizeCommodityKey(kv.Key), key, StringComparison.Ordinal))
             {
                 existingKey = kv.Key;
                 break;
@@ -106,7 +167,8 @@ public class FrontierLogisticsInventoryService
             case JsonValueKind.Object:
                 foreach (var p in el.EnumerateObject())
                 {
-                    if (p.NameEquals("cargo") && p.Value.ValueKind == JsonValueKind.Array)
+                    if (p.Name.Equals("cargo", StringComparison.OrdinalIgnoreCase) &&
+                        p.Value.ValueKind == JsonValueKind.Array)
                     {
                         MergeCargoArray(p.Value, dict);
                     }
@@ -144,7 +206,7 @@ public class FrontierLogisticsInventoryService
 
     private static string? ExtractCommodityName(JsonElement item)
     {
-        foreach (var nk in new[] { "name", "Name", "locName", "LocName" })
+        foreach (var nk in new[] { "name", "Name", "locName", "LocName", "localizedName", "LocalizedName", "title", "Title" })
         {
             if (item.TryGetProperty(nk, out var n) && n.ValueKind == JsonValueKind.String)
             {
@@ -155,7 +217,7 @@ public class FrontierLogisticsInventoryService
 
         if (item.TryGetProperty("commodity", out var comm) && comm.ValueKind == JsonValueKind.Object)
         {
-            foreach (var nk in new[] { "name", "Name", "locName" })
+            foreach (var nk in new[] { "name", "Name", "locName", "LocName", "localizedName", "LocalizedName" })
             {
                 if (comm.TryGetProperty(nk, out var n) && n.ValueKind == JsonValueKind.String)
                 {

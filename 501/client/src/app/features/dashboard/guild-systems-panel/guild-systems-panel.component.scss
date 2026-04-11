@@ -1,3 +1,5 @@
+@use '../../../../styles/scrollbar-faction' as factionScrollbar;
+
 /* Harmonisé avec le design system du dashboard (.box) */
 
 /*
@@ -296,20 +298,7 @@
   /* Scrollbar à 4px du bord droit visible du panneau */
   margin-right: calc(-1.25rem + 4px);
 
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-  &::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 3px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: rgba(0, 212, 255, 0.3);
-    border-radius: 3px;
-  }
-  &::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 212, 255, 0.5);
-  }
+  @include factionScrollbar.scrollbar-faction-systems;
 }
 
 .category {

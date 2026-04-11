@@ -36,8 +36,27 @@ export class ActiveChantiersStore {
   /** Autres CMDRs (GET chantiers-declared/others). */
   readonly others = this._others.asReadonly();
 
-  /** Vue combinée pour sélection logistique / résolution par id. */
-  readonly entries = computed(() => [...this._mine(), ...this._others()]);
+  /**
+   * Chantiers uniques par `id` : d’abord « mine » (ordre conservé), puis « others » sans doublon d’id.
+   * Évite deux lignes avec le même chantier (double comptage global / mauvaise résolution).
+   */
+  readonly entries = computed(() => {
+    const mine = this._mine();
+    const others = this._others();
+    const seen = new Set<string>();
+    const out: ActiveChantierSite[] = [];
+    for (const s of mine) {
+      if (seen.has(s.id)) continue;
+      seen.add(s.id);
+      out.push(s);
+    }
+    for (const s of others) {
+      if (seen.has(s.id)) continue;
+      seen.add(s.id);
+      out.push(s);
+    }
+    return out;
+  });
 
   /** Remplace entièrement les listes (source de vérité serveur après GET / persist / delete). */
   replaceMineAndOthers(mine: ActiveChantierSite[], others: ActiveChantierSite[]): void {
