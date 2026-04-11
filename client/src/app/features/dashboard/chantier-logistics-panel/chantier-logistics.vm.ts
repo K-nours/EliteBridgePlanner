@@ -55,6 +55,7 @@ const COMMODITY_EQUIVALENCE_GROUPS: readonly (readonly string[])[] = [
   ['technetium', 'technétium'],
   ['yttrium'],
   ['antimony', 'antimoine'],
+  ['CMMComposite', 'CMM Composite', 'composite mmc', 'cmmcomposite'],
 ];
 
 function buildCanonicalLookup(): Map<string, string> {

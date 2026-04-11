@@ -440,6 +440,7 @@ export class ChantierLogisticsPanelComponent {
     this.chantierRefreshVerifiedThisCycle = false;
     this.inventoryCoordinator.beginRealSyncCycle();
     console.debug(`[RealSync] cycle start chantierId=${chantierId}`);
+    let chantierPipelineFailed = false;
     return this.refreshChantierPipeline(chantierId, stationLabel, 'realSync').pipe(
       tap(() => {
         if (this.chantierRefreshVerifiedThisCycle) {
@@ -450,15 +451,39 @@ export class ChantierLogisticsPanelComponent {
           );
         }
       }),
+      // Gestion d'erreur pipeline chantier AVANT le switchMap inventaire :
+      // — 429 chantier → EMPTY (pas d'appel CAPI inventaire non plus)
+      // — autre erreur → marquer échec + continuer vers l'inventaire (indépendant du chantier)
+      catchError((err: unknown) => {
+        if (err instanceof HttpErrorResponse && err.status === 429) {
+          console.debug('[RealSync] HTTP 429 received (refresh chantier)');
+          this.applyRealSyncHttpError(err, chantierId, stationLabel);
+          this.ui.touchRealSyncRateLimitNoFailure();
+          console.debug(`[RealSync] cycle end (rate limit chantier, pas d'échec Real sync) chantierId=${chantierId}`);
+          return EMPTY;
+        }
+        const reason =
+          err instanceof HttpErrorResponse
+            ? `HTTP ${err.status} ${typeof err.error === 'object' && err.error && 'message' in err.error ? String((err.error as { message?: string }).message) : ''}`
+            : String(err);
+        console.debug(`[RealSync] chantier refresh fail chantierId=${chantierId} reason=${reason}`);
+        this.applyRealSyncHttpError(err, chantierId, stationLabel);
+        this.ui.touchRealSyncChantierCycleFailure();
+        chantierPipelineFailed = true;
+        console.debug(`[RealSync] cycle fail chantier — tentative inventaire quand même chantierId=${chantierId}`);
+        return of(void 0);
+      }),
       switchMap(() => {
         const skipChantierTs = !this.chantierRefreshVerifiedThisCycle;
         if (!this.capiRateLimit.canFetchInventory()) {
           const left = this.capiRateLimit.secondsUntilAllowed();
           console.debug(`[RealSync] skipping call due to cooldown (${left}s left)`);
-          this.ui.touchRealSyncCycleSuccess({
-            inventorySkippedDueToCooldown: true,
-            skipChantierVerifiedTimestamp: skipChantierTs,
-          });
+          if (!chantierPipelineFailed) {
+            this.ui.touchRealSyncCycleSuccess({
+              inventorySkippedDueToCooldown: true,
+              skipChantierVerifiedTimestamp: skipChantierTs,
+            });
+          }
           console.debug(`[RealSync] cycle success final (inventory skipped — cooldown) chantierId=${chantierId}`);
           return of(void 0);
         }
@@ -478,34 +503,24 @@ export class ChantierLogisticsPanelComponent {
             } else {
               console.debug(`[RealSync] inventory HTTP fail chantierId=${chantierId} (cache soute/FC conservé)`);
             }
-            this.ui.touchRealSyncCycleSuccess({
-              inventory: dto,
-              inventoryHttpFailed: dto == null && !this.lastInventoryFetchWasHttp429,
-              skipChantierVerifiedTimestamp: skipChantierTs,
-            });
+            if (chantierPipelineFailed) {
+              // Chantier en échec mais inventaire accessible : mettre à jour soute/FC sans effacer ERREUR
+              if (dto) {
+                this.ui.touchRealSyncInventoryOnChantierError(dto);
+                console.debug(`[RealSync] inventaire mis à jour malgré erreur chantier chantierId=${chantierId}`);
+              }
+            } else {
+              this.ui.touchRealSyncCycleSuccess({
+                inventory: dto,
+                inventoryHttpFailed: dto == null && !this.lastInventoryFetchWasHttp429,
+                skipChantierVerifiedTimestamp: skipChantierTs,
+              });
+            }
             this.lastInventoryFetchWasHttp429 = false;
             console.debug(`[RealSync] cycle success final chantierId=${chantierId}`);
           }),
           map(() => void 0),
         );
-      }),
-      catchError((err: unknown) => {
-        if (err instanceof HttpErrorResponse && err.status === 429) {
-          console.debug('[RealSync] HTTP 429 received (refresh chantier)');
-          this.applyRealSyncHttpError(err, chantierId, stationLabel);
-          this.ui.touchRealSyncRateLimitNoFailure();
-          console.debug(`[RealSync] cycle end (rate limit chantier, pas d’échec Real sync) chantierId=${chantierId}`);
-          return of(void 0);
-        }
-        const reason =
-          err instanceof HttpErrorResponse
-            ? `HTTP ${err.status} ${typeof err.error === 'object' && err.error && 'message' in err.error ? String((err.error as { message?: string }).message) : ''}`
-            : String(err);
-        console.debug(`[RealSync] chantier refresh fail chantierId=${chantierId} reason=${reason}`);
-        this.applyRealSyncHttpError(err, chantierId, stationLabel);
-        this.ui.touchRealSyncChantierCycleFailure();
-        console.debug(`[RealSync] cycle fail final chantierId=${chantierId}`);
-        return of(void 0);
       }),
       finalize(() => {
         this.inventoryCoordinator.logRealSyncCycleVolume(chantierId);
