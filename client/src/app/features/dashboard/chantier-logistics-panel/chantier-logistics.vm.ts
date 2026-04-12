@@ -56,6 +56,14 @@ const COMMODITY_EQUIVALENCE_GROUPS: readonly (readonly string[])[] = [
   ['yttrium'],
   ['antimony', 'antimoine'],
   ['CMMComposite', 'CMM Composite', 'composite mmc', 'cmmcomposite'],
+  ['LiquidOxygen', 'Liquid Oxygen', 'oxygène liquide', 'oxygene liquide', 'liquidoxygen'],
+  ['CeramicComposites', 'Ceramic Composites', 'composites céramiques', 'composites ceramiques', 'ceramiccomposites'],
+  ['Polymers', 'polymères', 'polymeres'],
+  ['Semiconductors', 'semi-conducteurs', 'semiconducteurs'],
+  ['Superconductors', 'supraconducteurs'],
+  ['BuildingFabricators', 'Building Fabricators', 'fabricants de bâtiments', 'fabricants de batiments', 'buildingfabricators'],
+  ['InsulatingMembrane', 'Insulating Membrane', 'membrane isolante', 'insulatingmembrane'],
+  ['ReactiveArmour', 'Reactive Armour', 'Reactive Armor', 'armure réactive', 'armure reactive', 'reactivearmour'],
 ];
 
 function buildCanonicalLookup(): Map<string, string> {

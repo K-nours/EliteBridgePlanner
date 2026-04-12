@@ -46,7 +46,7 @@ public class FrontierLogisticsInventoryService
             try
             {
                 using var doc = JsonDocument.Parse(shipBody);
-                MergeCargoArraysFromRoot(doc.RootElement, dto.ShipCargoByName);
+                MergeCargoArraysFromRoot(doc.RootElement, dto.ShipCargoByName, _log);
                 _log.LogInformation("[LogisticsInventory] ship cargo keys={Count} items=[{Keys}]",
                     dto.ShipCargoByName.Count,
                     string.Join(", ", dto.ShipCargoByName.Keys));
@@ -83,7 +83,7 @@ public class FrontierLogisticsInventoryService
             try
             {
                 using var doc = JsonDocument.Parse(fcBody);
-                MergeCargoArraysFromRoot(doc.RootElement, dto.CarrierCargoByName);
+                MergeCargoArraysFromRoot(doc.RootElement, dto.CarrierCargoByName, _log);
                 _log.LogInformation("[LogisticsInventory] FC cargo keys={Count} items=[{Keys}]",
                     dto.CarrierCargoByName.Count,
                     string.Join(", ", dto.CarrierCargoByName.Keys));
@@ -101,9 +101,9 @@ public class FrontierLogisticsInventoryService
     /// <summary>
     /// Parcourt le JSON pour des tableaux <c>cargo</c> (vaisseau / FC) et somme par nom de commodité.
     /// </summary>
-    private static void MergeCargoArraysFromRoot(JsonElement root, Dictionary<string, int> dict)
+    private static void MergeCargoArraysFromRoot(JsonElement root, Dictionary<string, int> dict, ILogger? log = null)
     {
-        WalkElement(root, dict, depth: 0);
+        WalkElement(root, dict, depth: 0, log);
     }
 
     /// <summary>
@@ -141,6 +141,15 @@ public class FrontierLogisticsInventoryService
             "polonium" => "polonium",
             "vanadium" => "vanadium",
             "cmmcomposite" or "cmm composite" or "composite mmc" => "cmmcomposite",
+            "liquidoxygen" or "liquid oxygen" or "oxygène liquide" or "oxygene liquide" => "liquidoxygen",
+            "ceramiccomposites" or "ceramic composites" or "composites céramiques" or "composites ceramiques" => "ceramiccomposites",
+            "polymers" or "polymères" or "polymeres" => "polymers",
+            "semiconductors" or "semi-conducteurs" or "semiconducteurs" => "semiconductors",
+            "superconductors" or "supraconducteurs" => "superconductors",
+            "buildingfabricators" or "building fabricators" or "fabricants de bâtiments" or "fabricants de batiments" => "buildingfabricators",
+            "insulatingmembrane" or "insulating membrane" or "membrane isolante" => "insulatingmembrane",
+            "reactivearmour" or "reactive armour" or "reactive armor" or "armure réactive" or "armure reactive" => "reactivearmour",
+            "landenviromentalsystems" or "land enrichment systems" or "systèmes d'enrichissement" => "landenviromentalsystems",
             _ => Regex.Replace(lower, @"\s+", " ")
         };
     }
@@ -165,7 +174,7 @@ public class FrontierLogisticsInventoryService
             dict[key] = qty;
     }
 
-    private static void WalkElement(JsonElement el, Dictionary<string, int> dict, int depth)
+    private static void WalkElement(JsonElement el, Dictionary<string, int> dict, int depth, ILogger? log = null)
     {
         if (depth > 24) return;
 
@@ -179,7 +188,7 @@ public class FrontierLogisticsInventoryService
                         if (p.Value.ValueKind == JsonValueKind.Array)
                         {
                             // /fleetcarrier : "cargo" est directement un tableau
-                            MergeCargoArray(p.Value, dict);
+                            MergeCargoArray(p.Value, dict, log);
                         }
                         else if (p.Value.ValueKind == JsonValueKind.Object)
                         {
@@ -190,37 +199,37 @@ public class FrontierLogisticsInventoryService
                                 if (!inner.Name.Equals("items", StringComparison.OrdinalIgnoreCase)) continue;
                                 if (inner.Value.ValueKind == JsonValueKind.Array)
                                 {
-                                    MergeCargoArray(inner.Value, dict);
+                                    MergeCargoArray(inner.Value, dict, log);
                                     foundItems = true;
                                 }
                                 else if (inner.Value.ValueKind == JsonValueKind.Object)
                                 {
                                     // items est un dictionnaire : { "polymers": { locName, qty, ... }, ... }
-                                    MergeCargoObjectDict(inner.Value, dict);
+                                    MergeCargoObjectDict(inner.Value, dict, log);
                                     foundItems = true;
                                 }
                             }
                             if (!foundItems)
                             {
                                 // Structure inconnue — walk récursif pour ne rien rater
-                                WalkElement(p.Value, dict, depth + 1);
+                                WalkElement(p.Value, dict, depth + 1, log);
                             }
                         }
                     }
                     else
                     {
-                        WalkElement(p.Value, dict, depth + 1);
+                        WalkElement(p.Value, dict, depth + 1, log);
                     }
                 }
                 break;
             case JsonValueKind.Array:
                 foreach (var item in el.EnumerateArray())
-                    WalkElement(item, dict, depth + 1);
+                    WalkElement(item, dict, depth + 1, log);
                 break;
         }
     }
 
-    private static void MergeCargoObjectDict(JsonElement itemsObject, Dictionary<string, int> dict)
+    private static void MergeCargoObjectDict(JsonElement itemsObject, Dictionary<string, int> dict, ILogger? log = null)
     {
         foreach (var prop in itemsObject.EnumerateObject())
         {
@@ -234,7 +243,7 @@ public class FrontierLogisticsInventoryService
         }
     }
 
-    private static void MergeCargoArray(JsonElement cargoArray, Dictionary<string, int> dict)
+    private static void MergeCargoArray(JsonElement cargoArray, Dictionary<string, int> dict, ILogger? log = null)
     {
         foreach (var item in cargoArray.EnumerateArray())
         {
@@ -243,7 +252,10 @@ public class FrontierLogisticsInventoryService
 
             var name = ExtractCommodityName(item);
             if (string.IsNullOrWhiteSpace(name))
+            {
+                log?.LogWarning("[LogisticsInventory] item sans nom reconnu — JSON brut : {Raw}", item.GetRawText());
                 continue;
+            }
 
             var qty = ExtractQuantity(item);
             if (qty <= 0)
@@ -264,14 +276,23 @@ public class FrontierLogisticsInventoryService
             }
         }
 
-        if (item.TryGetProperty("commodity", out var comm) && comm.ValueKind == JsonValueKind.Object)
+        // "commodity" peut être une string directe (ex. "liquidoxygen") ou un objet
+        if (item.TryGetProperty("commodity", out var comm))
         {
-            foreach (var nk in new[] { "name", "Name", "locName", "LocName", "localizedName", "LocalizedName" })
+            if (comm.ValueKind == JsonValueKind.String)
             {
-                if (comm.TryGetProperty(nk, out var n) && n.ValueKind == JsonValueKind.String)
+                var s = comm.GetString();
+                if (!string.IsNullOrWhiteSpace(s)) return s;
+            }
+            else if (comm.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var nk in new[] { "name", "Name", "locName", "LocName", "localizedName", "LocalizedName" })
                 {
-                    var s = n.GetString();
-                    if (!string.IsNullOrWhiteSpace(s)) return s;
+                    if (comm.TryGetProperty(nk, out var n) && n.ValueKind == JsonValueKind.String)
+                    {
+                        var s = n.GetString();
+                        if (!string.IsNullOrWhiteSpace(s)) return s;
+                    }
                 }
             }
         }
