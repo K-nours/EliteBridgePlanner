@@ -323,7 +323,8 @@ export class ChantierLogisticsUiService {
   private restoreSliceForChantierId(chantierId: string): void {
     const s = readSliceForChantier(chantierId);
     if (s) {
-      this.realSyncEnabled.set(s.enabled);
+      // Real sync toujours désactivé au chargement — l'utilisateur doit l'activer manuellement.
+      this.realSyncEnabled.set(false);
       this.lastChantierDataRefreshSuccessAt.set(s.lastChantierDataRefreshSuccessAt);
       this.lastChantierNeedsVerifiedAt.set(s.lastChantierNeedsVerifiedAt ?? null);
       this.lastRealSyncSuccessAt.set(s.lastRealSyncSuccessAt);
