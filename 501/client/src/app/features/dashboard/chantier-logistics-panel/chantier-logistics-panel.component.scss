@@ -7,7 +7,9 @@
   flex: 1 1 auto;
   min-height: 0;
   max-height: 100%;
-  overflow: hidden;
+  /* Pas de overflow: hidden — on laisse .box-chantier-logistics (overflow: hidden) clipper,
+   * pour que .chantier-logistics-panel-body puisse étendre ses marges négatives
+   * jusqu'au bord du box et coller la scrollbar au bord droit. */
 }
 
 .chantier-logistics {
@@ -16,7 +18,7 @@
   min-height: 0;
   max-height: 100%;
   flex: 1 1 auto;
-  overflow: hidden;
+  /* Même raison que :host */
 }
 
 .chantier-logistics-real-sync-btn {
@@ -308,13 +310,22 @@
 }
 
 .chantier-logistics-panel-body {
+  /* flex: 1 1 auto — préserve la hauteur via flex-grow dans un conteneur column.
+   * Les marges négatives left/right agissent sur l'axe transversal (width) indépendamment
+   * du flex-basis, donc la scrollbar est bien poussée au bord du box. */
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
+  /* Même pattern exact que .systems-list (guild/chantiers) :
+   * padding intérieur pour ne pas rogner les ombres/hover,
+   * marges négatives pour faire déborder l'élément dans le padding du box
+   * et placer la scrollbar au bord droit. */
+  padding: 4px 6px 10px 4px;
+  margin-left: calc(-1.25rem + 12px);
+  margin-right: calc(-1.25rem + 4px);
 
   @include factionScrollbar.scrollbar-faction-systems;
 }
@@ -394,6 +405,8 @@
   border: 1px solid rgba(0, 212, 255, 0.35);
   border-radius: 12px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  /* Clip boundary pour les marges négatives de .chantier-logistics-detail__body */
+  overflow: hidden;
 }
 
 .chantier-logistics-modal-header {
@@ -449,7 +462,9 @@
 .chantier-logistics-modal-body {
   flex: 1 1 auto;
   padding: 1rem;
-  overflow: hidden;
+  /* Pas de overflow: hidden — on laisse .chantier-logistics-modal-dialog (overflow: hidden) clipper,
+   * pour que .chantier-logistics-detail__body puisse étendre ses marges négatives
+   * jusqu'au bord du dialog et coller la scrollbar au bord droit. */
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -466,6 +481,12 @@
   .chantier-logistics-detail__body {
     overflow-y: auto;
     min-height: 0;
+    /* Même pattern que .systems-list / .chantier-logistics-panel-body :
+     * padding intérieur + marges négatives pour placer la scrollbar au bord du dialog.
+     * Le dialog (overflow: hidden) fait le clip. Padding du modal-body = 1rem. */
+    padding: 4px 6px 10px 4px;
+    margin-left: calc(-1rem + 12px);
+    margin-right: calc(-1rem + 4px);
 
     @include factionScrollbar.scrollbar-faction-systems;
   }
