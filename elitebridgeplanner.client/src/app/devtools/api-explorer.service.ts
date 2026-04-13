@@ -86,8 +86,8 @@ export class ApiExplorerService {
    */
   private readonly SPANSH_PLOTTER_URL = 'https://spansh.co.uk/api/galaxy/plot';
 
-  /** API Spansh Colonisation — proxifié via Angular (ng serve) ou backend (.NET) */
-  private readonly SPANSH_COLONISATION_URL = '/spansh-api/api/colonisation/route';
+  /** API Spansh Colonisation — proxifié via le backend .NET (SpanshProxyController) */
+  private readonly SPANSH_COLONISATION_URL = '/api/spansh/colonisation/route';
 
   /**
    * Teste l'API EDSM — récupère les infos d'un système.
@@ -216,10 +216,10 @@ export class ApiExplorerService {
 
   /**
    * Récupère le résultat d'une route colonisation Spansh (étape 2).
-   * GET /spansh-api/api/results/{jobId}
+   * GET /api/spansh/results/{jobId}
    */
   getSpanshColonisationResult(jobId: string): Observable<unknown> {
-    const url = `/spansh-api/api/results/${jobId}`;
+    const url = `/api/spansh/results/${jobId}`;
     return this.http.get<unknown>(url).pipe(
       tap((response) => {
         console.log('[ApiExplorer] Spansh result:', response);
