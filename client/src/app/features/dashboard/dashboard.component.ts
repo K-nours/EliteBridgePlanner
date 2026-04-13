@@ -118,15 +118,12 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
           }
         </div>
       </header>
-      <main class="main-grid">
+      <main class="main-grid" [class.main-grid--bottom-expanded]="systemsPanelAllSectionsCollapsed()">
         <aside class="col col-left" [class.col-left--systems-all-expanded]="systemsPanelAllExpanded()">
           <div class="col-left-systems-fill" [class.col-left-systems-fill--shrink]="systemsPanelAllSectionsCollapsed()">
             <app-guild-systems-panel
               (allSectionsExpandedChange)="systemsPanelAllExpanded.set($event)"
               (allCollapsibleSectionsCollapsedChange)="systemsPanelAllSectionsCollapsed.set($event)" />
-          </div>
-          <div class="box box-pipeline-dipo" [class.box-pipeline-dipo--compact]="systemsPanelAllExpanded()">
-            <app-chantiers-debug-panel />
           </div>
         </aside>
         <section class="col col-center">
@@ -305,15 +302,6 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
               </div>
             }
           </div>
-          <div class="center-row">
-            <div class="box box-chantier-logistics">
-              <app-chantier-logistics-panel />
-            </div>
-            <div class="box box-pipeline-diplomatique">
-              <h3>Pipeline diplomatique</h3>
-            </div>
-            <div class="box"><h3>Guerre Thargoid</h3></div>
-          </div>
         </section>
         <aside class="col col-right">
           @if (showCmdrConnected() && dashboard()?.frontierProfile; as fp) {
@@ -406,8 +394,6 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             </div>
           </div>
           }
-<div class="box"><h3>Missions en cours</h3></div>
-            <div class="box box-reunion"><h3>Prochaine réunion galactique</h3></div>
           <div class="box box-cmdrs">
             <div class="box-cmdrs-header">
               <h3 class="box-cmdrs-title">CMDRs de l'escadron</h3>
@@ -438,8 +424,10 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             </div>
             @if (commandersForList(); as data) {
             @if (data.commanders.length > 0) {
-            <div class="cmdrs-list eb-scrollbar--faction">
-              @for (cmdr of data.commanders; track cmdr.name) {
+            @let totalPages = Math.ceil(data.commanders.length / CMDRS_PER_PAGE);
+            @let pageStart = cmdrPage() * CMDRS_PER_PAGE;
+            <div class="cmdrs-list">
+              @for (cmdr of data.commanders.slice(pageStart, pageStart + CMDRS_PER_PAGE); track cmdr.name) {
                 @if (cmdr.inaraUrl) {
                   <a [href]="cmdr.inaraUrl" target="_blank" rel="noopener noreferrer"
                     class="cmdr-item cmdr-item--link" [class.is-current]="(frontierAuth.commanderName() ?? '').trim().toLowerCase() === cmdr.name.trim().toLowerCase()"
@@ -479,6 +467,23 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
                 }
               }
             </div>
+            @if (totalPages > 1) {
+              <div class="cmdrs-pagination">
+                <button type="button" class="btn-icon-more cmdrs-page-btn"
+                  [disabled]="cmdrPage() === 0"
+                  aria-label="Page précédente"
+                  (click)="cmdrPage.update(p => p - 1)">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+                <span class="cmdrs-page-label">{{ cmdrPage() + 1 }} / {{ totalPages }}</span>
+                <button type="button" class="btn-icon-more cmdrs-page-btn"
+                  [disabled]="cmdrPage() >= totalPages - 1"
+                  aria-label="Page suivante"
+                  (click)="cmdrPage.update(p => p + 1)">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+              </div>
+            }
           } @else {
             <div class="cmdrs-empty">Aucun CMDR. Cliquez sur Synchronisation pour importer le roster.</div>
           }
@@ -486,7 +491,21 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             <div class="cmdrs-empty">Chargement...</div>
           }
           </div>
+            <div class="box box-reunion"><h3>Prochaine réunion galactique</h3></div>
         </aside>
+        <div class="bottom-row">
+          <div class="box box-pipeline-dipo" [class.box-pipeline-dipo--compact]="systemsPanelAllExpanded()">
+            <app-chantiers-debug-panel />
+          </div>
+          <div class="box box-chantier-logistics">
+            <app-chantier-logistics-panel />
+          </div>
+          <div class="box box-pipeline-diplomatique">
+            <h3>Pipeline diplomatique</h3>
+          </div>
+          <div class="box"><h3>Guerre Thargoid</h3></div>
+          <div class="box"><h3>Missions en cours</h3></div>
+        </div>
       </main>
       <app-settings-modal #settingsModal />
       <app-sync-help-modal
@@ -799,8 +818,12 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       display: grid;
       /* minmax(0, 1fr) pour que le centre prenne l'espace restant */
       grid-template-columns: minmax(160px, 1fr) minmax(0, 2fr) minmax(160px, 1fr);
+      /* Ligne du haut remplit la hauteur dispo ; bottom-row prend sa hauteur naturelle */
+      grid-template-rows: 1fr auto;
       align-items: stretch;
-      gap: 1rem;
+      /* Variable CSS partagée par .col et .bottom-row — garantit un espacement identique partout */
+      --layout-gap: 1rem;
+      gap: var(--layout-gap);
       width: 100%;
       max-width: 100%;
       margin: 0;
@@ -812,7 +835,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       .main-grid {
         width: 100%;
         grid-template-columns: minmax(200px, 400px) minmax(0, 1fr) minmax(200px, 400px);
-        gap: 1.5rem;
+        --layout-gap: 1.5rem;
+        gap: var(--layout-gap);
         padding: calc(36px + 0.75rem) 1.5rem 1.5rem;
         box-sizing: border-box;
       }
@@ -820,7 +844,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     @media (min-width: 900px) and (max-width: 1199px) {
       .header-zone { padding: 1.5rem; }
       .main-grid {
-        gap: 1.5rem;
+        --layout-gap: 1.5rem;
+        gap: var(--layout-gap);
         padding: calc(36px + 0.75rem) 1.5rem 1.5rem;
       }
     }
@@ -829,14 +854,14 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
         grid-template-columns: 1fr;
       }
       .box-row,
-      .center-row {
+      .bottom-row {
         grid-template-columns: 1fr;
       }
     }
     .col {
       display: flex;
       flex-direction: column;
-      gap: 1rem;
+      gap: var(--layout-gap, 1rem);
       min-width: 0;
     }
     .col-left {
@@ -850,7 +875,6 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .col-center .map-section,
     .col-center .box-sync-status,
-    .col-center .center-row,
     .col-center .box {
       width: 100%;
     }
@@ -884,18 +908,9 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       max-height: 80px;
     }
     /* Chantiers en cours : ~15 % de la hauteur de la colonne (flex 3 vs systèmes 17) */
-    .col-left .box-pipeline-dipo {
-      flex: 3 1 0;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      transition:
-        flex-grow 0.45s cubic-bezier(0.4, 0, 0.2, 1),
-        flex-shrink 0.45s cubic-bezier(0.4, 0, 0.2, 1),
-        flex-basis 0.45s cubic-bezier(0.4, 0, 0.2, 1),
-        padding 0.4s cubic-bezier(0.4, 0, 0.2, 1),
-        min-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    /* box-pipeline-dipo est maintenant dans .bottom-row — overflow: hidden géré par .bottom-row > .box */
+    .box-pipeline-dipo {
+      transition: padding 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .box-pipeline-dipo--compact {
       padding: 0.45rem;
@@ -1149,18 +1164,27 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       color: #ff6b6b;
       font-weight: 500;
     }
-    .center-row {
+    /* Ligne du bas : 5 boîtes à même hauteur, pleine largeur du grid.
+     * Hérite --layout-gap du .main-grid parent — espacement toujours identique. */
+    .bottom-row {
+      grid-column: 1 / -1;
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 1rem;
-      flex: 0 1 auto;
+      grid-template-columns: repeat(5, 1fr);
+      gap: var(--layout-gap, 1rem);
       min-height: 0;
-      /* Espace sous la carte + sync : ne pas laisser la ligne pousser la carte hors viewport */
       max-height: min(46vh, 28rem);
-      overflow: hidden;
       align-items: stretch;
     }
-    .center-row > .box {
+    /* Quand toutes les sections de Systèmes Faction sont repliées :
+     * - grid-template-rows passe à "auto 1fr" → bottom-row reçoit tout l'espace restant
+     * - max-height retiré pour ne pas contraindre le 1fr */
+    .main-grid--bottom-expanded {
+      grid-template-rows: auto 1fr;
+    }
+    .main-grid--bottom-expanded .bottom-row {
+      max-height: none;
+    }
+    .bottom-row > .box {
       min-height: 0;
       max-height: 100%;
       overflow: hidden;
@@ -1172,11 +1196,11 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       flex-direction: column;
       min-height: 0;
       flex: 1 1 auto;
+      overflow: hidden;
     }
     .box-pipeline-diplomatique {
       display: flex;
       flex-direction: column;
-      min-height: 120px;
     }
     .map-section {
       position: relative;
@@ -1669,6 +1693,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .box-cmdrs {
       min-width: 0;
+      display: flex;
+      flex-direction: column;
     }
     .cmdrs-empty {
       font-family: 'Exo 2', sans-serif;
@@ -1680,9 +1706,35 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .box-cmdrs .cmdrs-list {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+      /* Limité à 2 rangées exactes, hauteur fixe même si la page est incomplète */
+      grid-template-rows: repeat(2, auto);
+      grid-auto-rows: 0;
+      overflow: hidden;
       gap: 8px;
       padding-top: 0.5rem;
       min-width: 0;
+      /* 2 × (padding 16px + avatar 40px + gap 0.5rem + nom 0.9rem) + row-gap 8px */
+      min-height: calc(2 * (16px + 40px + 0.5rem + 0.9rem) + 8px);
+    }
+    .cmdrs-pagination {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 0.5rem;
+      margin-top: 0.65rem;
+      flex-shrink: 0;
+    }
+    .cmdrs-page-btn {
+      width: 24px;
+      height: 24px;
+    }
+    .cmdrs-page-label {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: rgba(148, 163, 184, 0.9);
+      min-width: 2.5rem;
+      text-align: center;
     }
     .cmdr-item {
       display: flex;
@@ -1879,6 +1931,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   /** Toutes les sections repliables visibles sont repliées → zone systèmes en hauteur contenu (aligné avec l’état initial). */
   protected readonly systemsPanelAllSectionsCollapsed = signal(true);
   protected readonly cmdrsMenuOpen = signal(false);
+  protected readonly cmdrPage = signal(0);
+  protected readonly CMDRS_PER_PAGE = 10;
+  protected readonly Math = Math;
   protected readonly cmdrJournalMenuOpen = signal(false);
   /** Importer : 'replace' | merge + duplicatePolicy */
   private readonly journalImportPending = signal<{
