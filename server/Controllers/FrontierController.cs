@@ -614,6 +614,9 @@ public class FrontierController : ControllerBase
         const string capMarket = "/market";
 
         FrontierMarketBusinessSummary? applied = null;
+        // Vrai si la CAPI a répondu 200 via marketId mais sans bloc chantier (cache CAPI partiel).
+        // Dans ce cas on ne tente pas le fallback /market et on retourne le DTO en cache.
+        var capiRespondedButNoBlock = false;
 
         var mid = row.MarketId?.Trim();
         if (!string.IsNullOrEmpty(mid))
@@ -673,28 +676,22 @@ public class FrontierController : ControllerBase
             }
             else
             {
-                sw.Stop();
+                // La CAPI a répondu 200 pour ce marketId mais sans bloc requiredConstructionResources.
+                // C'est un comportement de cache intermittent connu côté Frontier — le marketId est valide.
+                // On retourne le DTO en cache sans modifier les besoins : Real sync reste actif.
                 string ep = $"{capMarket}?marketId={Uri.EscapeDataString(mid)}";
-                _log.LogWarning(
-                    "[DeclaredChantiersRefreshOne] MARKET_NO_CHANTIER_CAPI_BLOCK id={Id} system={Sys} station={St} marketIdStored={Mid} endpoint={Ep} requiredConstructionBlockPresent=false constructionResourceCount={Cc} rowUpdatedAtUtc={Uat}",
+                _log.LogInformation(
+                    "[DeclaredChantiersRefreshOne] CAPI 200 sans bloc chantier (cache partiel) — données en cache conservées id={Id} system={Sys} station={St} marketIdStored={Mid} constructionResourceCount={Cc}",
                     body.Id,
                     row.SystemName,
                     row.StationName,
                     mid,
-                    ep,
-                    mkt.ConstructionResourcesCount,
-                    row.UpdatedAtUtc);
-                return BadRequest(new
-                {
-                    code = "MARKET_NO_CHANTIER_CAPI_BLOCK",
-                    requiresRedock = true,
-                    message =
-                        "Ce marché (marketId) ne contient pas de bloc chantier CAPI. Docké une fois à la station pour enregistrer un marketId à jour, ou vérifiez en jeu.",
-                });
+                    mkt.ConstructionResourcesCount);
+                capiRespondedButNoBlock = true;
             }
         }
 
-        if (applied == null)
+        if (applied == null && !capiRespondedButNoBlock)
         {
             var (marketStatus, marketBody) = await _auth.FetchCapiRawAsync(access!, capMarket, ct);
             if (marketStatus == 422)
@@ -730,10 +727,14 @@ public class FrontierController : ControllerBase
             if (marketBiz.ConstructionResourcesCount <= 0 && !marketBiz.RequiredConstructionBlockPresent)
             {
                 sw.Stop();
+                var hasMid = !string.IsNullOrEmpty(row.MarketId?.Trim());
                 return BadRequest(new
                 {
-                    message =
-                        "Aucune ressource de construction sur le marché courant (docké à la station du chantier), ou enregistrez un marketId pour le rafraîchissement à distance.",
+                    code = hasMid ? "MARKET_NO_CHANTIER_CAPI_BLOCK" : (object?)null,
+                    requiresRedock = hasMid,
+                    message = hasMid
+                        ? "Le marketId stocké ne renvoie pas de bloc chantier côté CAPI. Dockez à la station du chantier pour réenregistrer le marketId."
+                        : "Aucune ressource de construction sur le marché courant. Dockez à la station du chantier pour rafraîchir.",
                 });
             }
 
