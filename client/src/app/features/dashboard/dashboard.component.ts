@@ -899,9 +899,9 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
         flex-shrink 0.45s cubic-bezier(0.4, 0, 0.2, 1),
         flex-basis 0.45s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    /* Sections Bas / Sains / Autres toutes repliées : le pavé ne remplit plus toute la colonne. */
+    /* Sections toutes repliées : on garde la hauteur max, le contenu est scrollable. */
     .col-left-systems-fill--shrink {
-      flex: 0 1 auto;
+      flex: 17 1 0;
       overflow-y: auto;
     }
     .col-left .box-reunion {
@@ -1172,17 +1172,14 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       grid-template-columns: repeat(5, 1fr);
       gap: var(--layout-gap, 1rem);
       min-height: 0;
-      max-height: min(46vh, 28rem);
+      max-height: 33vh;
       align-items: stretch;
     }
     /* Quand toutes les sections de Systèmes Faction sont repliées :
      * - grid-template-rows passe à "auto 1fr" → bottom-row reçoit tout l'espace restant
      * - max-height retiré pour ne pas contraindre le 1fr */
-    .main-grid--bottom-expanded {
-      grid-template-rows: auto 1fr;
-    }
     .main-grid--bottom-expanded .bottom-row {
-      max-height: none;
+      max-height: 33vh;
     }
     .bottom-row > .box {
       min-height: 0;

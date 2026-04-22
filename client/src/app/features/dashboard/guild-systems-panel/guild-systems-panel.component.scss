@@ -15,7 +15,7 @@
 }
 
 :host-context(.col-left-systems-fill--shrink) {
-  flex: 0 1 auto;
+  flex: 1 1 0;
 }
 
 :host-context(.col-left-systems-fill) .panel {
@@ -35,8 +35,8 @@
 
 /* Toutes les sections repliables repliées : pas d’étirement interne, hauteur = contenu (+ scroll si besoin). */
 :host-context(.col-left-systems-fill) .panel.guild-systems--all-collapsed {
-  flex: 0 0 auto;
-  overflow: visible;
+  flex: 1 1 0;
+  overflow: hidden;
 }
 
 :host-context(.col-left-systems-fill) .panel.guild-systems--all-collapsed .systems-list {
