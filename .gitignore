@@ -369,6 +369,9 @@ MigrationBackup/
 # Cursor IDE rules and context (local only)
 .cursor/
 
+# Claude Code — paramètres locaux (local only)
+.claude/settings.local.json
+
 # Documentation (local only)
 docs/
 
