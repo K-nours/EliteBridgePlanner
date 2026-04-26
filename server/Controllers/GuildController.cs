@@ -24,9 +24,10 @@ public class GuildController : ControllerBase
     private readonly IConfiguration _config;
     private readonly InaraApiUserSettingsStore _inaraApiUserStore;
     private readonly DiplomaticPipelineService _diplomaticPipeline;
+    private readonly InaraSystemFactionService _inaraSystemFaction;
     private readonly ILogger<GuildController> _log;
 
-    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader, SystemsImportProgressStore importProgressStore, IServiceScopeFactory scopeFactory, IConfiguration config, InaraApiUserSettingsStore inaraApiUserStore, DiplomaticPipelineService diplomaticPipeline, ILogger<GuildController> log)
+    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader, SystemsImportProgressStore importProgressStore, IServiceScopeFactory scopeFactory, IConfiguration config, InaraApiUserSettingsStore inaraApiUserStore, DiplomaticPipelineService diplomaticPipeline, InaraSystemFactionService inaraSystemFaction, ILogger<GuildController> log)
     {
         _service = service;
         _dashboard = dashboard;
@@ -42,6 +43,7 @@ public class GuildController : ControllerBase
         _config = config;
         _inaraApiUserStore = inaraApiUserStore;
         _diplomaticPipeline = diplomaticPipeline;
+        _inaraSystemFaction = inaraSystemFaction;
         _log = log;
     }
 
@@ -416,6 +418,19 @@ public class GuildController : ControllerBase
     {
         var id = ResolveGuildId(guildId);
         var result = await _diplomaticPipeline.GetPipelineAsync(id, ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// GET /api/guild/faction-info?systemName=XXX — infos faction dominante du système via scraping Inara.
+    /// Chaîne : page système → lien faction → page faction → page escadron (si présent).
+    /// </summary>
+    [HttpGet("faction-info")]
+    public async Task<IActionResult> GetFactionInfo([FromQuery] string? systemName, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(systemName))
+            return BadRequest(new { error = "systemName requis" });
+        var result = await _inaraSystemFaction.GetFactionInfoAsync(systemName.Trim(), ct);
         return Ok(result);
     }
 
