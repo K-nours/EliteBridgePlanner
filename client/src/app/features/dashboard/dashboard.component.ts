@@ -21,7 +21,7 @@ import { SyncHelpModalService } from '../../core/services/sync-help-modal.servic
 import { FrontierJournalApiService } from '../../core/services/frontier-journal-api.service';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
-import type { SystemsFilterValue } from '../../core/models/guild-systems.model';
+import type { SystemsFilterValue, GuildSystemBgsDto } from '../../core/models/guild-systems.model';
 import type {
   FrontierJournalUnifiedSyncStatusDto,
   FrontierJournalParseStatusDto,
@@ -29,6 +29,7 @@ import type {
 } from '../../core/services/frontier-journal-api.service';
 import { hasConflictState } from '../../core/utils/guild-systems.util';
 import { isInaraWithoutNewsCategory } from '../../core/utils/inara-data-derivation.util';
+import { inaraAgeDays } from '../../core/utils/inara-freshness.util';
 import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constants';
 
 @Component({
@@ -306,7 +307,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
         </section>
         <aside class="col col-right">
           @if (showCmdrConnected() && dashboard()?.frontierProfile; as fp) {
-          <div class="box box-frontier-cmdr eb-scrollbar--faction">
+          <div class="box box-frontier-cmdr">
             <div class="frontier-cmdr-layout">
             <div class="frontier-cmdr-main">
             <div class="frontier-cmdr-header">
@@ -492,7 +493,6 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             <div class="cmdrs-empty">Chargement...</div>
           }
           </div>
-            <div class="box box-reunion"><h3>Prochaine réunion galactique</h3></div>
         </aside>
         <div class="bottom-row">
           <div class="box box-pipeline-diplomatique">
@@ -506,7 +506,47 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
               <app-chantier-logistics-panel />
             </div>
           </div>
-          <div class="box box-missions"><h3>Missions en cours</h3></div>
+          <div class="box box-missions">
+            <h3>Opération Réveil</h3>
+            @if (reveilSystems().length > 0) {
+              <ol class="reveil-list">
+                @for (item of reveilSystems(); track item.id) {
+                  <li class="reveil-item"
+                    [class.reveil-item--copied]="copiedReveilSystemId() === item.id"
+                    (click)="openReveilSystemInara(item.inaraUrl, item.name)">
+                    <span class="reveil-row-left">
+                      <span class="reveil-name">{{ item.name }}</span>
+                      <span class="reveil-actions">
+                        <button type="button"
+                          class="reveil-btn-copy"
+                          [title]="copiedReveilSystemId() === item.id ? 'Copié' : 'Copier'"
+                          (click)="copyReveilSystemName($event, item.name, item.id)">
+                          @if (copiedReveilSystemId() === item.id) {
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <polyline points="20 6 9 17 4 12"/>
+                            </svg>
+                          } @else {
+                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                            </svg>
+                          }
+                        </button>
+                      </span>
+                    </span>
+                    <span class="reveil-age"
+                      [class.reveil-age--unknown]="item.ageDays === null"
+                      [class.reveil-age--stale30]="item.ageDays !== null && item.ageDays >= 30"
+                      [class.reveil-age--stale15]="item.ageDays !== null && item.ageDays >= 15 && item.ageDays < 30"
+                      [class.reveil-age--stale]="item.ageDays !== null && item.ageDays >= 6 && item.ageDays < 15"
+                    >{{ item.ageDays === null ? '?' : item.ageDays + ' j' }}</span>
+                  </li>
+                }
+              </ol>
+            } @else {
+              <p class="reveil-empty">Tous les systèmes sont à jour.</p>
+            }
+          </div>
         </div>
       </main>
       <app-settings-modal #settingsModal />
@@ -913,9 +953,6 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       flex: 17 1 0;
       overflow-y: auto;
     }
-    .col-left .box-reunion {
-      max-height: 80px;
-    }
     /* Chantiers en cours : ~15 % de la hauteur de la colonne (flex 3 vs systèmes 17) */
     /* box-pipeline-dipo est maintenant dans .bottom-row — overflow: hidden géré par .bottom-row > .box */
     .box-pipeline-dipo {
@@ -1201,9 +1238,122 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       min-height: 0;
       align-items: stretch;
     }
-    /* Missions en cours — colonne 3 = même largeur que la colonne de droite */
+    /* Opération Réveil — colonne 3 = même largeur que la colonne de droite */
     .box-missions {
       grid-column: 3;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .reveil-list {
+      list-style: none;
+      margin: 0.5rem calc(-1.25rem + 4px) 0 -8px;
+      padding-right: 12px;
+      padding-left: 0;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0, 212, 255, 0.45) rgba(0, 0, 0, 0.2);
+      &::-webkit-scrollbar { width: 6px; }
+      &::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); border-radius: 3px; }
+      &::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.3); border-radius: 3px; }
+      &::-webkit-scrollbar-thumb:hover { background: rgba(0, 212, 255, 0.5); }
+    }
+    .reveil-item {
+      position: relative;
+      z-index: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.3rem 8px;
+      min-height: 1.75rem;
+      cursor: pointer;
+      &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 6px;
+        background: transparent;
+        transition: background 0.15s;
+        z-index: 0;
+      }
+      &:hover::before { background: rgba(0, 212, 255, 0.06); }
+    }
+    .reveil-row-left {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+    .reveil-name {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.9);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: color 0.15s;
+      .reveil-item:hover & { color: #00d4ff; text-decoration: underline; }
+    }
+    .reveil-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    .reveil-btn-copy {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 3px;
+      color: #00d4ff;
+      opacity: 0;
+      pointer-events: none;
+      cursor: pointer;
+      transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+      .reveil-item:hover &,
+      .reveil-item:focus-within &,
+      .reveil-item--copied & {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .reveil-item:hover &,
+      .reveil-item:focus-within & {
+        background: rgba(0, 212, 255, 0.12);
+        border-color: rgba(0, 212, 255, 0.4);
+      }
+      &:hover { background: rgba(0, 212, 255, 0.22) !important; border-color: rgba(0, 212, 255, 0.6) !important; }
+    }
+    .reveil-age {
+      position: relative;
+      z-index: 1;
+      font-family: 'Orbitron', sans-serif;
+      font-size: 0.6rem;
+      font-weight: 600;
+      flex-shrink: 0;
+      color: rgba(255, 255, 255, 0.35);
+    }
+    .reveil-age--unknown { color: rgba(156, 163, 175, 0.7); }
+    .reveil-age--stale   { color: rgba(251, 191, 36, 0.8); }
+    .reveil-age--stale15 { color: rgba(251, 146, 60, 0.85); }
+    .reveil-age--stale30 { color: rgba(248, 113, 113, 0.9); }
+    .reveil-empty {
+      margin: 0.5rem 0 0;
+      font-family: 'Exo 2', sans-serif;
+      font-size: 0.68rem;
+      font-style: italic;
+      color: rgba(110, 231, 183, 0.6);
     }
     .bottom-row > .box,
     .bottom-row-rest > .box {
@@ -1574,6 +1724,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       display: flex;
       flex-direction: column;
       gap: 0.5rem;
+      margin-top: 16px; /* ≥ 16px garantis indépendamment de la base rem */
     }
     .btn-journal-sync {
       display: flex;
@@ -1720,6 +1871,9 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       display: flex;
       flex-direction: column;
     }
+    .col-right .box-cmdrs {
+      flex: 0 0 auto; /* spécificité 020 — écrase .col-right .box { flex: 1 1 auto } */
+    }
     .cmdrs-empty {
       font-family: 'Exo 2', sans-serif;
       font-size: 0.75rem;
@@ -1730,15 +1884,15 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .box-cmdrs .cmdrs-list {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-      /* Limité à 2 rangées exactes, hauteur fixe même si la page est incomplète */
-      grid-template-rows: repeat(2, auto);
+      /* Rangées ET hauteur conteneur tous les deux fixes : double verrou */
+      grid-template-rows: repeat(2, 88px);
       grid-auto-rows: 0;
       overflow: hidden;
       gap: 8px;
       padding-top: 0.5rem;
       min-width: 0;
-      /* 2 × (padding 16px + avatar 40px + gap 0.5rem + nom 0.9rem) + row-gap 8px */
-      min-height: calc(2 * (16px + 40px + 0.5rem + 0.9rem) + 8px);
+      flex-shrink: 0;
+      height: calc(2 * 88px + 8px + 0.5rem); /* 2 rangées + gap + padding-top */
     }
     .cmdrs-pagination {
       display: flex;
@@ -1782,9 +1936,23 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       border-color: rgba(0, 212, 255, 0.4);
       box-shadow: 0 0 8px rgba(0, 234, 255, 0.25);
     }
+    /* CMDR connecté : état sélectionné toujours visible */
+    .cmdr-item.is-current {
+      background: rgba(0, 212, 255, 0.08);
+      border-color: rgba(0, 212, 255, 0.4);
+      box-shadow: 0 0 8px rgba(0, 234, 255, 0.25);
+    }
     .cmdr-item.is-current .cmdr-avatar {
       box-shadow: 0 0 10px rgba(0, 234, 255, 0.6);
       border-color: rgba(0, 234, 255, 0.9);
+    }
+    /* Hover sur le CMDR connecté : background glasé (plus lumineux) */
+    .cmdr-item.is-current:hover {
+      background: rgba(0, 212, 255, 0.18);
+      border-color: rgba(0, 234, 255, 0.65);
+      box-shadow:
+        0 0 14px rgba(0, 234, 255, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
     }
     .cmdr-avatar {
       width: 40px;
@@ -1825,6 +1993,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       .box-cmdrs .cmdrs-list {
         grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
         gap: 6px;
+        grid-template-rows: repeat(2, 72px);
+        height: calc(2 * 72px + 6px + 0.5rem);
       }
       .cmdr-item {
         min-width: 56px;
@@ -2039,6 +2209,66 @@ export class DashboardComponent implements OnInit, OnDestroy {
     const cmdr = this.commanders()?.commanders?.find(c => c.name.trim().toLowerCase() === current);
     return cmdr?.avatarUrl ?? null;
   });
+
+  /** Opération Réveil : tous les systèmes non-seed triés par données les plus anciennes en premier (null/inconnu tout en haut). */
+  protected reveilSystems = computed((): { id: number; name: string; inaraUrl: string | null; ageDays: number | null }[] => {
+    const s = this.guildSystemsSync.systems();
+    const all: GuildSystemBgsDto[] = [
+      ...(s.origin ?? []),
+      ...(s.headquarter ?? []),
+      ...(s.surveillance ?? []),
+      ...(s.conflicts ?? []),
+      ...(s.critical ?? []),
+      ...(s.low ?? []),
+      ...(s.healthy ?? []),
+      ...(s.others ?? []),
+    ];
+    // Déduplique par nom
+    const seen = new Set<string>();
+    const unique = all.filter(sys => {
+      if (sys.isFromSeed) return false;
+      if (seen.has(sys.name)) return false;
+      seen.add(sys.name);
+      return true;
+    });
+    // Trie : null/inconnu en premier, puis plus ancien en premier
+    return unique
+      .map(sys => ({ id: sys.id, name: sys.name, inaraUrl: sys.inaraUrl ?? null, ageDays: inaraAgeDays(sys.lastUpdated) }))
+      .filter(item => item.ageDays === null || item.ageDays >= 5)
+      .sort((a, b) => {
+        if (a.ageDays === null && b.ageDays === null) return 0;
+        if (a.ageDays === null) return -1;
+        if (b.ageDays === null) return 1;
+        return b.ageDays - a.ageDays;
+      });
+  });
+
+  protected readonly copiedReveilSystemId = signal<number | null>(null);
+
+  protected async copyReveilSystemName(event: Event, name: string, id: number): Promise<void> {
+    event.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(name);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = name;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    this.copiedReveilSystemId.set(id);
+    setTimeout(() => this.copiedReveilSystemId.set(null), 1500);
+  }
+
+  protected openReveilSystemInara(inaraUrl: string | null, name: string): void {
+    const url = inaraUrl?.trim()
+      ? inaraUrl.trim()
+      : `https://inara.cz/elite/search/?search=${encodeURIComponent(name)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
 
   /** Compteurs filtres : design carré (compteur + texte), cliquables. Surveillance : vert si rien à signaler, rouge si au moins un critique. Total = systèmes uniques (surveillance/conflits n'augmentent pas le total). */
   protected mapFilterCounts = computed((): { value: SystemsFilterValue; label: string; count: number; surveillanceHasCritical?: boolean }[] => {

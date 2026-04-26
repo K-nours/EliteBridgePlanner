@@ -14,7 +14,7 @@
   @include factionScrollbar.scrollbar-faction-systems;
 }
 
-.col-right .box-frontier-cmdr.eb-scrollbar--faction {
+.col-right .box-frontier-cmdr {
   max-height: min(48vh, 560px);
   overflow-y: auto;
 }
