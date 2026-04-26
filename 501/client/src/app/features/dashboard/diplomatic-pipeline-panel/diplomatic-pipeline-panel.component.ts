@@ -20,6 +20,40 @@ interface FactionSyncState {
   error?: string;
 }
 
+interface CachedFactionInfo {
+  data: InaraFactionInfoDto;
+  cachedAt: number; // timestamp ms
+}
+
+const FACTION_CACHE_KEY = 'eb-faction-info-v1';
+const FACTION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours
+
+function loadFactionCache(): Map<string, CachedFactionInfo> {
+  try {
+    const raw = localStorage.getItem(FACTION_CACHE_KEY);
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw) as Record<string, CachedFactionInfo>;
+    const now = Date.now();
+    const valid = new Map<string, CachedFactionInfo>();
+    for (const [k, v] of Object.entries(parsed)) {
+      if (v?.cachedAt && now - v.cachedAt < FACTION_CACHE_TTL_MS) {
+        valid.set(k, v);
+      }
+    }
+    return valid;
+  } catch {
+    return new Map();
+  }
+}
+
+function saveFactionCache(cache: Map<string, CachedFactionInfo>): void {
+  try {
+    const obj: Record<string, CachedFactionInfo> = {};
+    for (const [k, v] of cache.entries()) obj[k] = v;
+    localStorage.setItem(FACTION_CACHE_KEY, JSON.stringify(obj));
+  } catch { /* quota ou incognito */ }
+}
+
 @Component({
   selector: 'app-diplomatic-pipeline-panel',
   standalone: true,
@@ -130,11 +164,19 @@ interface FactionSyncState {
                             <span class="fi-value">{{ info.squadronMembersCount }}</span>
                           }
                         </div>
-                        @if (info.factionInaraUrl) {
-                          <a [href]="info.factionInaraUrl" target="_blank" rel="noopener noreferrer" class="fi-inara-link">
-                            Voir sur Inara ↗
-                          </a>
-                        }
+                        <div class="fi-footer">
+                          @if (info.factionInaraUrl) {
+                            <a [href]="info.factionInaraUrl" target="_blank" rel="noopener noreferrer" class="fi-inara-link">
+                              Voir sur Inara ↗
+                            </a>
+                          }
+                          <button
+                            type="button"
+                            class="btn-inara-sync btn-inara-sync--refresh"
+                            (click)="syncFactionInfo(group.factionName, group.systems[0]?.systemName); $event.stopPropagation()"
+                            title="Mettre à jour depuis Inara"
+                          >↺</button>
+                        </div>
                       </div>
                     }
                   }
@@ -246,10 +288,18 @@ interface FactionSyncState {
       flex-direction: column;
       margin-top: 1rem;
       margin-left: -8px;
+      margin-right: calc(-1.25rem + 4px);
+      padding-right: 12px;
       overflow-y: auto;
       overflow-x: hidden;
       flex: 1;
       min-height: 0;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0, 212, 255, 0.45) rgba(0, 0, 0, 0.2);
+      &::-webkit-scrollbar { width: 6px; }
+      &::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); border-radius: 3px; }
+      &::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, 0.3); border-radius: 3px; }
+      &::-webkit-scrollbar-thumb:hover { background: rgba(0, 212, 255, 0.5); }
     }
 
     /* === Même design que guild-systems-panel === */
@@ -432,9 +482,15 @@ interface FactionSyncState {
       text-decoration: underline;
     }
 
+    .fi-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.25rem;
+    }
+
     .fi-inara-link {
       display: inline-block;
-      margin-top: 0.25rem;
       font-family: 'Orbitron', sans-serif;
       font-size: 0.55rem;
       color: rgba(255, 140, 0, 0.6);
@@ -443,6 +499,16 @@ interface FactionSyncState {
     }
     .fi-inara-link:hover {
       color: #ff8c00;
+    }
+
+    .btn-inara-sync--refresh {
+      padding: 0.05rem 0.3rem;
+      font-size: 0.7rem;
+      opacity: 0.5;
+      transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+    }
+    .btn-inara-sync--refresh:hover {
+      opacity: 1;
     }
 
     /* Lignes systèmes */
@@ -514,6 +580,8 @@ export class DiplomaticPipelinePanelComponent implements OnInit, OnDestroy {
   private readonly guildSystemsSync = inject(GuildSystemsSyncService);
   private readonly destroyRef = inject(DestroyRef);
 
+  private readonly factionCache = loadFactionCache();
+
   private readonly messageHandler = (event: MessageEvent): void => {
     if (!event.origin.includes('inara.cz')) return;
     const { type, factionName, data, error } = event.data ?? {};
@@ -525,6 +593,9 @@ export class DiplomaticPipelinePanelComponent implements OnInit, OnDestroy {
         m.set(factionName, { status: 'error', error: data.error });
       } else {
         m.set(factionName, { status: 'loaded', data });
+        // Persiste dans le cache localStorage
+        this.factionCache.set(factionName, { data, cachedAt: Date.now() });
+        saveFactionCache(this.factionCache);
       }
       this.factionSyncStates.set(m);
     } else if (type === 'inara-faction-info-error') {
@@ -586,14 +657,26 @@ export class DiplomaticPipelinePanelComponent implements OnInit, OnDestroy {
   load(): void {
     if (this.state() === 'loading') return;
     this.state.set('loading');
-    // Reset des états sync quand on recharge le pipeline
-    this.factionSyncStates.set(new Map());
     this.api.getDiplomaticPipeline().subscribe({
       next: (dto: DiplomaticPipelineDto) => {
         this.entries.set(dto.entries ?? []);
         this.edsmAvailable.set(dto.edsmAvailable);
         this.errorMessage.set(null);
         this.state.set('loaded');
+        // Restaure les données cachées pour les factions présentes dans le pipeline
+        const m = new Map(this.factionSyncStates());
+        let changed = false;
+        for (const entry of dto.entries ?? []) {
+          const faction = entry.dominantFaction ?? '—';
+          if (!m.has(faction) || m.get(faction)!.status === 'idle') {
+            const cached = this.factionCache.get(faction);
+            if (cached) {
+              m.set(faction, { status: 'loaded', data: cached.data });
+              changed = true;
+            }
+          }
+        }
+        if (changed) this.factionSyncStates.set(m);
       },
       error: (err: unknown) => {
         const msg = (err as { error?: { error?: string; message?: string }; message?: string })?.error?.error

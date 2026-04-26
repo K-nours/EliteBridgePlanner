@@ -495,8 +495,10 @@ public class DeclaredChantiersService
                 if (string.IsNullOrWhiteSpace(row.MarketId) && mId != null)
                     row.MarketId = mId;
 
-                // Completion : basé sur les données CAPI (source de vérité pour la fin du chantier).
-                if (IsConstructionFullyDelivered(capiDtos))
+                // Completion : basé sur les données mergées (anti-régression comprise) pour éviter
+                // qu'un cache CAPI périmé (remaining=0 côté CAPI mais Provided conservé en base) ne
+                // désactive prématurément le chantier.
+                if (IsConstructionFullyDelivered(mergedDtos))
                 {
                     row.Active = false;
                     deactivated++;
@@ -515,25 +517,46 @@ public class DeclaredChantiersService
             return (rows.Count, deactivated);
         }
 
-        // CAPI : requiredConstructionResources présent mais commodities vides → chantier terminé (hors dock).
+        // CAPI : requiredConstructionResources présent mais commodities vides.
+        // Cela se produit typiquement quand le joueur n'est pas docké au site de construction :
+        // CAPI renvoie le bloc vide. On ne désactive le chantier que si les ressources stockées
+        // en base sont déjà toutes à remaining=0 (chantier réellement terminé).
         if (market.RequiredConstructionBlockPresent)
         {
+            var deactivated = 0;
             foreach (var row in rows)
             {
+                var (storedResources, _) = DeserializeResources(row.ConstructionResourcesJson);
+                var hasRemainingStored = storedResources.Any(r => r.Remaining > 0);
+
+                if (hasRemainingStored)
+                {
+                    // Données CAPI vides mais en base il reste des ressources à livrer →
+                    // probablement hors dock, on ignore cette mise à jour (protection anti-stale).
+                    _log.LogInformation(
+                        "[DeclaredChantiers] ApplyMarket empty CAPI commodities ignored (stored resources still pending) rows={Rows} marketId={Mid}",
+                        rows.Count,
+                        mId ?? "(null)");
+                    continue;
+                }
+
+                // Aucune ressource restante en base → chantier terminé.
                 row.ConstructionResourcesJson = SerializeResources(Array.Empty<DeclaredChantierResourceDto>(), 0);
                 row.UpdatedAtUtc = now;
                 if (string.IsNullOrWhiteSpace(row.MarketId) && mId != null)
                     row.MarketId = mId;
                 row.Active = false;
+                deactivated++;
             }
 
             await _db.SaveChangesAsync(ct);
             _log.LogInformation(
-                "[DeclaredChantiers] ApplyMarket empty construction commodities — terminé rows={Rows} marketId={Mid}",
+                "[DeclaredChantiers] ApplyMarket empty construction commodities — terminé rows={Rows} deactivated={Off} marketId={Mid}",
                 rows.Count,
+                deactivated,
                 mId ?? "(null)");
 
-            return (rows.Count, rows.Count);
+            return (rows.Count, deactivated);
         }
 
         return (0, 0);
