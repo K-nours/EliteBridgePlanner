@@ -6,7 +6,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import type { GuildSystemsResponseDto } from '../models/guild-systems.model';
-import type { DiplomaticPipelineDto } from '../models/diplomatic-pipeline.model';
+import type { DiplomaticPipelineDto, InaraFactionInfoDto } from '../models/diplomatic-pipeline.model';
 
 /** Base API. Sur localhost:4200, appel direct au backend car le proxy peut échouer. */
 function getApiBase(): string {
@@ -89,5 +89,16 @@ export class GuildSystemsApiService {
   /** Systèmes critiques enrichis avec la faction contrôlante EDSM. */
   getDiplomaticPipeline(): Observable<DiplomaticPipelineDto> {
     return this.http.get<DiplomaticPipelineDto>(`${this.base}/guild/systems/diplomatic-pipeline`);
+  }
+
+  /**
+   * Infos faction dominante d'un système (scraping Inara : page système → faction → escadron).
+   * Peut échouer si Inara bloque les requêtes serveur (anti-bot).
+   */
+  getFactionInfo(systemName: string): Observable<InaraFactionInfoDto> {
+    return this.http.get<InaraFactionInfoDto>(
+      `${this.base}/guild/faction-info`,
+      { params: { systemName } }
+    );
   }
 }

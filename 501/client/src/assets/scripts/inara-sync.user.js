@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Inara Sync — Guild Dashboard
 // @namespace    https://github.com/elitebridgeplanner
-// @version      2.19.0
+// @version      2.20.0
 // @description  Script unique : bridge sur dashboard, extraction systèmes (faction), extraction CMDRs (squadron)
 // @author       EliteBridgePlanner
 // @match        https://inara.cz/elite/*
@@ -24,6 +24,7 @@
   const isFactionPresence = isInara && path.includes('minorfaction-presence');
   const isSquadronRoster = isInara && path.includes('squadron-roster');
   const isCmdrProfile = isInara && path.includes('/elite/cmdr/');
+  const isStarSystem = isInara && path.includes('/elite/starsystem');
 
   const BACKEND_URL = 'https://localhost:7294';
   /** Timeout HTTP Tampermonkey (annulation + erreur utilisateur). */
@@ -199,6 +200,12 @@
   const autoImport = urlParams.get('autoImport') === '1';
   const syncAvatars = urlParams.get('syncAvatars') === '1';
   const openerOrigin = urlParams.get('openerOrigin') || '';
+
+  /** Paramètres hash pour la sync infos faction (survivent aux redirects Inara). */
+  const hashParams = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+  const isFactionInfoSync = hashParams.get('fis') === '1';
+  const syncFactionName = hashParams.get('fn') || '';
+  const hashOpenerOrigin = hashParams.get('oo') || openerOrigin;
 
   function notifyOpenerStarted(source) {
     if (openerOrigin && window.opener) {
@@ -1377,6 +1384,190 @@
       document.addEventListener('DOMContentLoaded', doAvatarSetup);
     } else {
       doAvatarSetup();
+    }
+    return;
+  }
+
+  // ——— Contexte STARSYSTEM : sync infos faction dominante (via hash params) ———
+  if (isStarSystem && isFactionInfoSync && syncFactionName && hashOpenerOrigin) {
+    /**
+     * Attend que la page soit chargée, trouve le lien "Faction au pouvoir",
+     * enchaîne GM_xmlhttpRequest vers page faction + page escadron,
+     * puis postMessage le résultat au dashboard.
+     */
+    const FACTION_INFO_LABELS_CONTROLLING = ['faction au pouvoir', 'controlling faction', 'faction contrôlante'];
+    const FACTION_INFO_LABELS_ALLEGIANCE  = ['allégeance', 'allegiance'];
+    const FACTION_INFO_LABELS_GOVERNMENT  = ['gouvernement', 'government'];
+    const FACTION_INFO_LABELS_ORIGIN      = ['origine', 'origin'];
+    const FACTION_INFO_LABELS_PLAYER      = ['faction de joueur', 'player faction'];
+    const FACTION_INFO_LABELS_SQUADRON    = ['escadron', 'squadron'];
+    const FACTION_INFO_LABELS_LANGUAGE    = ['langue', 'language'];
+    const FACTION_INFO_LABELS_TIMEZONE    = ['fuseau horaire', 'timezone', 'time zone'];
+    const FACTION_INFO_LABELS_MEMBERS     = ['membres', 'members', 'pilotes', 'pilots'];
+
+    function gmGet(url) {
+      return new Promise((resolve, reject) => {
+        GM_xmlhttpRequest({
+          method: 'GET',
+          url,
+          timeout: 20000,
+          onload: (res) => {
+            if (res.status >= 200 && res.status < 300 && res.responseText && res.responseText.length > 300) {
+              resolve(res.responseText);
+            } else {
+              reject(new Error('HTTP ' + res.status + ' — ' + url));
+            }
+          },
+          onerror:   () => reject(new Error('Erreur réseau — ' + url)),
+          ontimeout: () => reject(new Error('Timeout — ' + url)),
+          onabort:   () => reject(new Error('Requête annulée — ' + url)),
+        });
+      });
+    }
+
+    function parseItempairs(doc) {
+      const map = {};
+      const containers = doc.querySelectorAll('.itempaircontainer');
+      for (const c of containers) {
+        const label = (c.querySelector('.itempairlabel')?.textContent?.trim() || '').toLowerCase();
+        const valueEl = c.querySelector('.itempairvalue');
+        if (label && valueEl) map[label] = valueEl;
+      }
+      return map;
+    }
+
+    function postResult(data) {
+      try {
+        window.opener.postMessage({ type: 'inara-faction-info', factionName: syncFactionName, data }, hashOpenerOrigin);
+      } catch (e) {
+        logTmError('[FactionInfoSync] postMessage result failed', e?.message);
+      }
+    }
+
+    function postError(error) {
+      try {
+        window.opener.postMessage({ type: 'inara-faction-info-error', factionName: syncFactionName, error }, hashOpenerOrigin);
+      } catch (e) {
+        logTmError('[FactionInfoSync] postMessage error failed', e?.message);
+      }
+    }
+
+    const doFactionInfoSync = async () => {
+      logTm('[FactionInfoSync] Démarrage pour faction:', syncFactionName);
+      try {
+        // ── Étape 1 : chercher "Faction au pouvoir" dans la page système actuelle ──
+        const containers = document.querySelectorAll('.itempaircontainer');
+        let factionHref = null;
+        let factionDisplayName = syncFactionName;
+
+        for (const container of containers) {
+          const labelText = (container.querySelector('.itempairlabel')?.textContent?.trim() || '').toLowerCase();
+          if (!FACTION_INFO_LABELS_CONTROLLING.includes(labelText)) continue;
+
+          const link = container.querySelector('.itempairvalue a[href*="/minorfaction/"]');
+          if (link) {
+            factionHref = link.getAttribute('href') || '';
+            factionDisplayName = link.textContent?.trim() || syncFactionName;
+            break;
+          }
+        }
+
+        if (!factionHref) {
+          postError('Faction au pouvoir introuvable sur la page Inara (système inconnu ou DOM modifié).');
+          window.close();
+          return;
+        }
+
+        const factionAbsUrl = factionHref.startsWith('http') ? factionHref : 'https://inara.cz' + factionHref;
+        logTm('[FactionInfoSync] Page faction:', factionAbsUrl);
+
+        // ── Étape 2 : page faction ──
+        const factionHtml = await gmGet(factionAbsUrl);
+        const factionDoc = new DOMParser().parseFromString(factionHtml, 'text/html');
+        const pairs = parseItempairs(factionDoc);
+
+        const result = {
+          factionName: factionDisplayName,
+          factionInaraUrl: factionAbsUrl,
+          allegiance: null,
+          government: null,
+          origin: null,
+          isPlayerFaction: null,
+          squadronName: null,
+          squadronInaraUrl: null,
+          squadronLanguage: null,
+          squadronTimezone: null,
+          squadronMembersCount: null,
+          error: null,
+        };
+
+        for (const [label, valueEl] of Object.entries(pairs)) {
+          const value = valueEl.textContent?.trim() || '';
+          if (FACTION_INFO_LABELS_ALLEGIANCE.includes(label)) {
+            result.allegiance = value;
+          } else if (FACTION_INFO_LABELS_GOVERNMENT.includes(label)) {
+            result.government = value;
+          } else if (FACTION_INFO_LABELS_ORIGIN.includes(label)) {
+            const originLink = valueEl.querySelector('a');
+            result.origin = originLink ? (originLink.textContent?.trim() || value) : value;
+          } else if (FACTION_INFO_LABELS_PLAYER.includes(label)) {
+            result.isPlayerFaction = value.toLowerCase() === 'oui' || value.toLowerCase() === 'yes';
+          } else if (FACTION_INFO_LABELS_SQUADRON.includes(label)) {
+            const sqLink = valueEl.querySelector('a[href]');
+            if (sqLink) {
+              result.squadronName = sqLink.textContent?.trim() || '';
+              const sqHref = sqLink.getAttribute('href') || '';
+              result.squadronInaraUrl = sqHref.startsWith('http') ? sqHref : 'https://inara.cz' + sqHref;
+            }
+          }
+        }
+
+        // ── Étape 3 : page escadron (optionnelle) ──
+        if (result.squadronInaraUrl) {
+          logTm('[FactionInfoSync] Page escadron:', result.squadronInaraUrl);
+          try {
+            const sqHtml = await gmGet(result.squadronInaraUrl);
+            const sqDoc = new DOMParser().parseFromString(sqHtml, 'text/html');
+            const sqPairs = parseItempairs(sqDoc);
+
+            for (const [label, valueEl] of Object.entries(sqPairs)) {
+              const value = valueEl.textContent?.trim() || '';
+              if (FACTION_INFO_LABELS_LANGUAGE.includes(label)) {
+                result.squadronLanguage = value;
+              } else if (FACTION_INFO_LABELS_TIMEZONE.some(l => label.includes(l))) {
+                result.squadronTimezone = value;
+              } else if (FACTION_INFO_LABELS_MEMBERS.some(l => label.includes(l))) {
+                const digits = value.replace(/\D/g, '');
+                if (digits) result.squadronMembersCount = parseInt(digits, 10) || null;
+              }
+            }
+
+            // Fallback : compte les lignes du roster
+            if (!result.squadronMembersCount) {
+              const rosterRows = sqDoc.querySelectorAll('table.roster tr:not(.header)');
+              if (rosterRows.length > 0) result.squadronMembersCount = rosterRows.length;
+            }
+          } catch (sqErr) {
+            logTm('[FactionInfoSync] Escadron non récupéré (non bloquant):', sqErr?.message);
+          }
+        }
+
+        logTm('[FactionInfoSync] Résultat final:', result);
+        postResult(result);
+      } catch (err) {
+        const msg = err?.message || String(err) || 'Erreur inattendue';
+        logTmError('[FactionInfoSync]', msg);
+        postError(msg);
+      } finally {
+        setTimeout(() => { try { window.close(); } catch (_) {} }, 300);
+      }
+    };
+
+    // Attendre que le DOM de la page système soit prêt
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => setTimeout(doFactionInfoSync, 1500));
+    } else {
+      setTimeout(doFactionInfoSync, 1500);
     }
     return;
   }

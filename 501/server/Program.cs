@@ -25,6 +25,7 @@ builder.Services.AddHttpClient<EliteBgsApiService>();
 builder.Services.AddHttpClient<EdsmApiService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<InaraFactionService>();
+builder.Services.AddScoped<InaraSystemFactionService>();
 builder.Services.AddScoped<InaraClient>();
 builder.Services.AddDataProtection();
 builder.Services.AddScoped<FrontierAuthService>();
