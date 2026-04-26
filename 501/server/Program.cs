@@ -36,6 +36,7 @@ builder.Services.AddSingleton<CurrentGuildService>();
 builder.Services.AddScoped<DeclaredChantiersService>();
 builder.Services.AddScoped<FrontierLogisticsInventoryService>();
 builder.Services.AddScoped<GuildSystemsService>();
+builder.Services.AddScoped<DiplomaticPipelineService>();
 builder.Services.AddScoped<BgsSyncService>();
 builder.Services.AddScoped<EliteBgsDiagnosticService>();
 builder.Services.AddScoped<DashboardService>();

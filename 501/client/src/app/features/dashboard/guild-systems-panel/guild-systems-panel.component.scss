@@ -596,6 +596,12 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: color 0.15s;
+
+  .system-row:hover & {
+    color: #00d4ff;
+    text-decoration: underline;
+  }
 }
 
 .btn-copy {

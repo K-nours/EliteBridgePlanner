@@ -46,6 +46,7 @@ public class FrontierLogisticsInventoryService
             try
             {
                 using var doc = JsonDocument.Parse(shipBody);
+                dto.ShipCargoDebugHint = BuildCargoDebugHint(doc.RootElement);
                 MergeCargoArraysFromRoot(doc.RootElement, dto.ShipCargoByName, _log);
                 _log.LogInformation("[LogisticsInventory] ship cargo keys={Count} items=[{Keys}]",
                     dto.ShipCargoByName.Count,
@@ -265,15 +266,31 @@ public class FrontierLogisticsInventoryService
         }
     }
 
+    /// <summary>
+    /// CAPI renvoie les noms de commodités sous la forme <c>$Robotics_Name;</c> dans le champ <c>name</c>.
+    /// Cette méthode extrait le nom canonique : <c>$Robotics_Name;</c> → <c>Robotics</c>.
+    /// Retourne null si le format ne correspond pas.
+    /// </summary>
+    private static string? ParseCapiInternalName(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return null;
+        var t = s.Trim();
+        // Format : $CommodityName_Name;  (insensible à la casse pour le suffixe)
+        if (t.StartsWith('$') && t.EndsWith("_name;", StringComparison.OrdinalIgnoreCase) && t.Length > 7)
+            return t[1..^6]; // retire '$' en tête et '_Name;' en queue
+        return null;
+    }
+
     private static string? ExtractCommodityName(JsonElement item)
     {
         foreach (var nk in new[] { "name", "Name", "locName", "LocName", "localizedName", "LocalizedName", "title", "Title" })
         {
-            if (item.TryGetProperty(nk, out var n) && n.ValueKind == JsonValueKind.String)
-            {
-                var s = n.GetString();
-                if (!string.IsNullOrWhiteSpace(s)) return s;
-            }
+            if (!item.TryGetProperty(nk, out var n) || n.ValueKind != JsonValueKind.String) continue;
+            var s = n.GetString();
+            if (string.IsNullOrWhiteSpace(s)) continue;
+            // Priorité : si c'est un nom CAPI interne ($Robotics_Name;), extraire le nom propre.
+            // Sinon retourner la valeur brute (nom localisé ou clé directe).
+            return ParseCapiInternalName(s) ?? s;
         }
 
         // "commodity" peut être une string directe (ex. "liquidoxygen") ou un objet
@@ -282,17 +299,15 @@ public class FrontierLogisticsInventoryService
             if (comm.ValueKind == JsonValueKind.String)
             {
                 var s = comm.GetString();
-                if (!string.IsNullOrWhiteSpace(s)) return s;
+                if (!string.IsNullOrWhiteSpace(s)) return ParseCapiInternalName(s) ?? s;
             }
             else if (comm.ValueKind == JsonValueKind.Object)
             {
                 foreach (var nk in new[] { "name", "Name", "locName", "LocName", "localizedName", "LocalizedName" })
                 {
-                    if (comm.TryGetProperty(nk, out var n) && n.ValueKind == JsonValueKind.String)
-                    {
-                        var s = n.GetString();
-                        if (!string.IsNullOrWhiteSpace(s)) return s;
-                    }
+                    if (!comm.TryGetProperty(nk, out var n) || n.ValueKind != JsonValueKind.String) continue;
+                    var s = n.GetString();
+                    if (!string.IsNullOrWhiteSpace(s)) return ParseCapiInternalName(s) ?? s;
                 }
             }
         }
@@ -310,5 +325,65 @@ public class FrontierLogisticsInventoryService
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// [DEBUG temporaire] Cherche le premier bloc "cargo" dans le JSON /profile
+    /// et retourne une description compacte de sa structure.
+    /// </summary>
+    private static string BuildCargoDebugHint(JsonElement root)
+    {
+        return FindCargoHint(root, depth: 0, path: "root") ?? "cargo: introuvable dans le JSON";
+    }
+
+    private static string? FindCargoHint(JsonElement el, int depth, string path)
+    {
+        if (depth > 8) return null;
+        if (el.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var p in el.EnumerateObject())
+            {
+                var childPath = $"{path}.{p.Name}";
+                if (p.Name.Equals("cargo", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (p.Value.ValueKind == JsonValueKind.Object)
+                    {
+                        var subKeys = p.Value.EnumerateObject()
+                            .Select(inner =>
+                            {
+                                if (inner.Value.ValueKind == JsonValueKind.Array)
+                                    return $"{inner.Name}(array[{inner.Value.GetArrayLength()}])";
+                                if (inner.Value.ValueKind == JsonValueKind.Object)
+                                {
+                                    var keys = inner.Value.EnumerateObject().Take(3).Select(k => k.Name);
+                                    return $"{inner.Name}(obj[{string.Join(",", keys)}])";
+                                }
+                                var raw = inner.Value.GetRawText();
+                                return $"{inner.Name}={raw[..Math.Min(40, raw.Length)]}";
+                            });
+                        return $"path={childPath} kind=Object subKeys=[{string.Join(" | ", subKeys)}]";
+                    }
+                    if (p.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        var first = p.Value.EnumerateArray().Take(1).Select(x => x.GetRawText()[..Math.Min(120, x.GetRawText().Length)]).FirstOrDefault() ?? "(vide)";
+                        return $"path={childPath} kind=Array len={p.Value.GetArrayLength()} first={first}";
+                    }
+                    return $"path={childPath} kind={p.Value.ValueKind} raw={p.Value.GetRawText()[..Math.Min(80, p.Value.GetRawText().Length)]}";
+                }
+                var found = FindCargoHint(p.Value, depth + 1, childPath);
+                if (found != null) return found;
+            }
+        }
+        else if (el.ValueKind == JsonValueKind.Array)
+        {
+            var i = 0;
+            foreach (var item in el.EnumerateArray())
+            {
+                var found = FindCargoHint(item, depth + 1, $"{path}[{i++}]");
+                if (found != null) return found;
+                if (i > 2) break;
+            }
+        }
+        return null;
     }
 }

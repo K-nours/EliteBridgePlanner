@@ -14,4 +14,6 @@ export interface ChantierLogisticsInventoryDto {
   retryAfterSeconds?: number | null;
   /** Pas d’appel FC car /profile déjà en 429 */
   fleetCarrierSkippedDueToProfileRateLimit?: boolean;
+  /** [DEBUG temporaire] Structure cargo trouvée dans /profile — à retirer après diagnostic */
+  shipCargoDebugHint?: string | null;
 }

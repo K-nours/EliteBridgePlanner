@@ -32,4 +32,7 @@ public sealed class FrontierLogisticsInventoryDto
 
     /// <summary>FC non interrogé car /profile était déjà en 429 (évite un 2e hit CAPI).</summary>
     public bool FleetCarrierSkippedDueToProfileRateLimit { get; set; }
+
+    /// <summary>[DEBUG temporaire] Résumé de la structure cargo trouvée dans /profile — à retirer après diagnostic.</summary>
+    public string? ShipCargoDebugHint { get; set; }
 }
