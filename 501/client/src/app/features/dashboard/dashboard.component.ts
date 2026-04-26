@@ -493,6 +493,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             <div class="cmdrs-empty">Chargement...</div>
           }
           </div>
+          <div class="box box-reunion"><h3>Prochaine réunion galactique</h3></div>
         </aside>
         <div class="bottom-row">
           <div class="box box-pipeline-diplomatique">
@@ -934,6 +935,10 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .col-right .box-frontier-cmdr {
       flex: 0 0 auto;
+      min-height: 0;
+    }
+    .col-right .box-reunion {
+      flex: 1 1 0;
       min-height: 0;
     }
     /* Panneau systèmes : ~85 % de la hauteur de la colonne (flex 17 vs chantiers 3) */
