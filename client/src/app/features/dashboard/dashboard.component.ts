@@ -8,6 +8,7 @@ import { GuildSystemsPanelComponent } from './guild-systems-panel/guild-systems-
 import { GuildSystemsMapComponent } from './guild-systems-map/guild-systems-map.component';
 import { ChantiersDebugPanelComponent } from './chantiers-debug-panel/chantiers-debug-panel.component';
 import { ChantierLogisticsPanelComponent } from './chantier-logistics-panel/chantier-logistics-panel.component';
+import { DiplomaticPipelinePanelComponent } from './diplomatic-pipeline-panel/diplomatic-pipeline-panel.component';
 import { DashboardApiService } from '../../core/services/dashboard-api.service';
 import { CommandersApiService } from '../../core/services/commanders-api.service';
 import { SyncLogService } from '../../core/services/sync-log.service';
@@ -33,7 +34,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [TruncateTooltipDirective, SettingsModalComponent, SyncHelpModalComponent, GuildSystemsPanelComponent, GuildSystemsMapComponent, ChantiersDebugPanelComponent, ChantierLogisticsPanelComponent],
+  imports: [TruncateTooltipDirective, SettingsModalComponent, SyncHelpModalComponent, GuildSystemsPanelComponent, GuildSystemsMapComponent, ChantiersDebugPanelComponent, ChantierLogisticsPanelComponent, DiplomaticPipelinePanelComponent],
   template: `
     <div class="page">
       <div class="page-bg">
@@ -494,17 +495,18 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             <div class="box box-reunion"><h3>Prochaine réunion galactique</h3></div>
         </aside>
         <div class="bottom-row">
-          <div class="box box-pipeline-dipo" [class.box-pipeline-dipo--compact]="systemsPanelAllExpanded()">
-            <app-chantiers-debug-panel />
-          </div>
-          <div class="box box-chantier-logistics">
-            <app-chantier-logistics-panel />
-          </div>
           <div class="box box-pipeline-diplomatique">
-            <h3>Pipeline diplomatique</h3>
+            <app-diplomatic-pipeline-panel />
           </div>
-          <div class="box"><h3>Guerre Thargoid</h3></div>
-          <div class="box"><h3>Missions en cours</h3></div>
+          <div class="bottom-row-rest">
+            <div class="box box-pipeline-dipo" [class.box-pipeline-dipo--compact]="systemsPanelAllExpanded()">
+              <app-chantiers-debug-panel />
+            </div>
+            <div class="box box-chantier-logistics">
+              <app-chantier-logistics-panel />
+            </div>
+          </div>
+          <div class="box box-missions"><h3>Missions en cours</h3></div>
         </div>
       </main>
       <app-settings-modal #settingsModal />
@@ -857,6 +859,13 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       .bottom-row {
         grid-template-columns: 1fr;
       }
+      .bottom-row-rest {
+        grid-column: 1;
+        grid-template-columns: 1fr;
+      }
+      .box-missions {
+        grid-column: 1;
+      }
     }
     .col {
       display: flex;
@@ -957,6 +966,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       flex: 0 1 16.666%;
       max-height: 16.666%;
       min-height: 0;
+      overflow: hidden;
     }
     .box-sync-status--collapsed {
       flex: 0 0 auto;
@@ -1109,12 +1119,13 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .sync-logs-container {
       flex: 1;
+      min-width: 0;
       margin: 0;
       font-family: 'Exo 2', sans-serif;
       font-size: 0.65rem;
       color: rgba(255, 255, 255, 0.8);
+      overflow-x: hidden;
       overflow-y: auto;
-      min-height: 80px;
       padding: 0.5rem;
       background: rgba(0, 0, 0, 0.3);
       border: 1px solid rgba(0, 212, 255, 0.14);
@@ -1152,7 +1163,10 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       margin: 0;
       font-family: monospace;
       white-space: pre-wrap;
-      word-break: break-all;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      width: 100%;
+      min-width: 0;
       display: flex;
       flex-direction: column;
       gap: 0.1rem;
@@ -1164,24 +1178,35 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       color: #ff6b6b;
       font-weight: 500;
     }
-    /* Ligne du bas : 5 boîtes à même hauteur, pleine largeur du grid.
-     * Hérite --layout-gap du .main-grid parent — espacement toujours identique. */
+    /* Ligne du bas — subgrid : hérite exactement les 3 colonnes du .main-grid.
+     * Box 1 (pipeline diplo) = colonne 1 → même largeur que Systèmes Faction.
+     * bottom-row-rest (colonnes 2-3) → 4 boxes égales. */
     .bottom-row {
       grid-column: 1 / -1;
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: var(--layout-gap, 1rem);
+      grid-template-columns: subgrid; /* hérite minmax(160px,1fr) minmax(0,2fr) minmax(160px,1fr) */
       min-height: 0;
       max-height: 33vh;
       align-items: stretch;
     }
-    /* Quand toutes les sections de Systèmes Faction sont repliées :
-     * - grid-template-rows passe à "auto 1fr" → bottom-row reçoit tout l'espace restant
-     * - max-height retiré pour ne pas contraindre le 1fr */
     .main-grid--bottom-expanded .bottom-row {
       max-height: 33vh;
     }
-    .bottom-row > .box {
+    /* Wrapper des 2 boxes du centre — span colonne 2 uniquement */
+    .bottom-row-rest {
+      grid-column: 2 / 3;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--layout-gap, 1rem);
+      min-height: 0;
+      align-items: stretch;
+    }
+    /* Missions en cours — colonne 3 = même largeur que la colonne de droite */
+    .box-missions {
+      grid-column: 3;
+    }
+    .bottom-row > .box,
+    .bottom-row-rest > .box {
       min-height: 0;
       max-height: 100%;
       overflow: hidden;
@@ -1198,6 +1223,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .box-pipeline-diplomatique {
       display: flex;
       flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
     }
     .map-section {
       position: relative;

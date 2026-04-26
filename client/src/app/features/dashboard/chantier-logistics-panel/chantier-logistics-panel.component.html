@@ -141,7 +141,7 @@
                     [class.chantier-logistics-res-tr--warn]="inventoryRowHasStockInfo() && row.status === 'warn'"
                     [class.chantier-logistics-res-tr--zero]="inventoryRowHasStockInfo() && row.status === 'zero'"
                   >
-                    <th scope="row" class="chantier-logistics-res-td chantier-logistics-res-td--name">{{ row.name }}</th>
+                    <th scope="row" class="chantier-logistics-res-td chantier-logistics-res-td--name" [title]="row.name">{{ row.displayName }}</th>
                     <td class="chantier-logistics-res-td chantier-logistics-res-td--need">{{ row.need }}</td>
                     <td class="chantier-logistics-res-td chantier-logistics-res-td--gap" aria-hidden="true"></td>
                     <td class="chantier-logistics-res-td chantier-logistics-res-td--ship">

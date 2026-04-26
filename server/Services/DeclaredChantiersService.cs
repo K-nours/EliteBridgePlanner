@@ -462,20 +462,41 @@ public class DeclaredChantiersService
 
         if (market.ConstructionResourcesCount > 0)
         {
-            var dtos = market.ConstructionResources
+            var capiDtos = market.ConstructionResources
                 .Select(x => new DeclaredChantierResourceDto(x.Name, x.Required, x.Provided, x.Remaining))
                 .ToList();
-            var json = SerializeResources(dtos, market.ConstructionResourcesCount);
 
             var deactivated = 0;
             foreach (var row in rows)
             {
+                // Protection anti-régression cache CAPI : si la CAPI renvoie moins de progrès que ce qu'on a
+                // en base (ex. cache périmé après livraisons récentes), on conserve la valeur stockée.
+                // On prend le Required CAPI (source de vérité pour les besoins), mais jamais un Provided inférieur.
+                var (storedResources, _) = DeserializeResources(row.ConstructionResourcesJson);
+                var storedByName = storedResources.ToDictionary(r => r.Name, r => r, StringComparer.OrdinalIgnoreCase);
+
+                var mergedDtos = capiDtos.Select(capi =>
+                {
+                    if (storedByName.TryGetValue(capi.Name, out var existing) && existing.Provided > capi.Provided)
+                    {
+                        _log.LogInformation(
+                            "[DeclaredChantiers] ApplyMarket no-regress resource={Name} storedProvided={Stored} capiProvided={Capi} — stored kept",
+                            capi.Name, existing.Provided, capi.Provided);
+                        var mergedProvided = existing.Provided;
+                        var mergedRemaining = Math.Max(0, capi.Required - mergedProvided);
+                        return new DeclaredChantierResourceDto(capi.Name, capi.Required, mergedProvided, mergedRemaining);
+                    }
+                    return capi;
+                }).ToList();
+
+                var json = SerializeResources(mergedDtos, market.ConstructionResourcesCount);
                 row.ConstructionResourcesJson = json;
                 row.UpdatedAtUtc = now;
                 if (string.IsNullOrWhiteSpace(row.MarketId) && mId != null)
                     row.MarketId = mId;
 
-                if (IsConstructionFullyDelivered(dtos))
+                // Completion : basé sur les données CAPI (source de vérité pour la fin du chantier).
+                if (IsConstructionFullyDelivered(capiDtos))
                 {
                     row.Active = false;
                     deactivated++;
@@ -487,7 +508,7 @@ public class DeclaredChantiersService
             _log.LogInformation(
                 "[DeclaredChantiers] ApplyMarket rows={Rows} resources={Res} deactivated={Off} marketId={Mid}",
                 rows.Count,
-                dtos.Count,
+                capiDtos.Count,
                 deactivated,
                 mId ?? "(null)");
 

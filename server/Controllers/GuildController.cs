@@ -23,9 +23,10 @@ public class GuildController : ControllerBase
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _config;
     private readonly InaraApiUserSettingsStore _inaraApiUserStore;
+    private readonly DiplomaticPipelineService _diplomaticPipeline;
     private readonly ILogger<GuildController> _log;
 
-    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader, SystemsImportProgressStore importProgressStore, IServiceScopeFactory scopeFactory, IConfiguration config, InaraApiUserSettingsStore inaraApiUserStore, ILogger<GuildController> log)
+    public GuildController(GuildSystemsService service, DashboardService dashboard, BgsSyncService bgsSync, EliteBgsDiagnosticService eliteBgsDiagnostic, InaraFactionService inaraFaction, CurrentGuildService currentGuild, GuildDashboardDbContext db, GuildSystemsImportService importService, GuildSystemsSeedLoader seedLoader, SystemsImportProgressStore importProgressStore, IServiceScopeFactory scopeFactory, IConfiguration config, InaraApiUserSettingsStore inaraApiUserStore, DiplomaticPipelineService diplomaticPipeline, ILogger<GuildController> log)
     {
         _service = service;
         _dashboard = dashboard;
@@ -40,6 +41,7 @@ public class GuildController : ControllerBase
         _scopeFactory = scopeFactory;
         _config = config;
         _inaraApiUserStore = inaraApiUserStore;
+        _diplomaticPipeline = diplomaticPipeline;
         _log = log;
     }
 
@@ -406,6 +408,15 @@ public class GuildController : ControllerBase
         if (!u.AbsolutePath.Contains("squadron-roster", StringComparison.OrdinalIgnoreCase))
             return (false, "URL doit être la page liste pilotes (squadron-roster)");
         return (true, null);
+    }
+
+    /// <summary>GET /api/guild/systems/diplomatic-pipeline — systèmes critiques enrichis avec la faction contrôlante EDSM.</summary>
+    [HttpGet("systems/diplomatic-pipeline")]
+    public async Task<IActionResult> GetDiplomaticPipeline([FromQuery] int? guildId, CancellationToken ct = default)
+    {
+        var id = ResolveGuildId(guildId);
+        var result = await _diplomaticPipeline.GetPipelineAsync(id, ct);
+        return Ok(result);
     }
 
     private int ResolveGuildId(int? guildId) => guildId is > 0 ? guildId.Value : _currentGuild.CurrentGuildId;

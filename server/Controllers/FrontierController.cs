@@ -799,7 +799,12 @@ public class FrontierController : ControllerBase
         }
 
         if (profileStatus != 200 || string.IsNullOrEmpty(profileBody))
-            return (null, null, BadRequest(new { message = $"Profil Frontier indisponible (HTTP {profileStatus})." }));
+        {
+            // 422 = l'utilisateur n'est pas en jeu / pas docké (pas un problème de token).
+            // On retourne un code spécifique pour que le client puisse ignorer ce cycle sans afficher "Erreur".
+            var code422 = profileStatus == 422 ? "CAPI_NOT_DOCKED" : (object?)null;
+            return (null, null, BadRequest(new { message = $"Profil Frontier indisponible (HTTP {profileStatus}).", code = code422 }));
+        }
 
         var (fields, err) = _userService.TryParseCapiProfileFields(profileBody);
         if (fields == null || !string.IsNullOrEmpty(err))

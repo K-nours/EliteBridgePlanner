@@ -29,7 +29,10 @@ import { FrontierAuthService } from '../../../core/services/frontier-auth.servic
 import { SyncLogService } from '../../../core/services/sync-log.service';
 import { mapDeclaredListItemApiToSite } from '../../../core/utils/declared-chantiers-site-map';
 import type { DeclaredChantierListItemApi } from '../../../core/models/declared-chantiers-api.model';
-import { CHANTIER_REFRESH_ERROR_MARKET_NO_CAPI_BLOCK } from '../../../core/constants/chantier-declared-errors';
+import {
+  CHANTIER_REFRESH_ERROR_CAPI_NOT_DOCKED,
+  CHANTIER_REFRESH_ERROR_MARKET_NO_CAPI_BLOCK,
+} from '../../../core/constants/chantier-declared-errors';
 import { ChantierMarketRefreshCooldownService } from '../../../core/services/chantier-market-refresh-cooldown.service';
 import { FrontierCapiRateLimitService } from '../../../core/services/frontier-capi-rate-limit.service';
 import {
@@ -453,6 +456,7 @@ export class ChantierLogisticsPanelComponent {
       }),
       // Gestion d'erreur pipeline chantier AVANT le switchMap inventaire :
       // — 429 chantier → EMPTY (pas d'appel CAPI inventaire non plus)
+      // — CAPI_NOT_DOCKED (422 upstream) → EMPTY, cycle ignoré sans erreur (user hors jeu / non docké)
       // — autre erreur → marquer échec + continuer vers l'inventaire (indépendant du chantier)
       catchError((err: unknown) => {
         if (err instanceof HttpErrorResponse && err.status === 429) {
@@ -461,6 +465,17 @@ export class ChantierLogisticsPanelComponent {
           this.ui.touchRealSyncRateLimitNoFailure();
           console.debug(`[RealSync] cycle end (rate limit chantier, pas d'échec Real sync) chantierId=${chantierId}`);
           return EMPTY;
+        }
+        // CAPI /profile 422 = utilisateur hors jeu ou non docké — pas une vraie erreur, cycle ignoré
+        if (err instanceof HttpErrorResponse && err.status === 400) {
+          const body = err.error as { code?: string } | undefined;
+          if (body?.code === CHANTIER_REFRESH_ERROR_CAPI_NOT_DOCKED) {
+            const ctx = this.chantierCtx(chantierId, stationLabel);
+            this.syncLog.addLog(`[Chantiers] ${ctx} · Real sync — Frontier hors jeu ou non docké, cycle ignoré`);
+            this.ui.touchRealSyncRateLimitNoFailure();
+            console.debug(`[RealSync] cycle end (CAPI non docké, pas d'échec Real sync) chantierId=${chantierId}`);
+            return EMPTY;
+          }
         }
         const reason =
           err instanceof HttpErrorResponse
@@ -597,6 +612,9 @@ export class ChantierLogisticsPanelComponent {
     this.syncLog.addLog(
       `[Inventaire${rl}] (${source}) soute=${shipCount} clé(s)${shipErr} · FC=${fcCount} clé(s)${fcErr}`,
     );
+    if (inv.shipCargoDebugHint) {
+      this.syncLog.addLog(`[Inventaire][DEBUG soute] ${inv.shipCargoDebugHint}`);
+    }
   }
 
   private applyRealSyncHttpError(err: unknown, chantierId: number, stationLabel: string): void {
