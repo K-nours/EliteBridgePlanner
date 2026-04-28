@@ -18,6 +18,16 @@ public class FrontierLogisticsInventoryService
         _log = log;
     }
 
+    /// <summary>
+    /// Retourne le JSON brut de /fleetcarrier pour debug (noms + quantités avant normalisation).
+    /// </summary>
+    public async Task<string?> FetchRawFleetCarrierAsync(string accessToken, CancellationToken ct = default)
+    {
+        var (status, body, _) = await _auth.FetchCapiRawWithRetryAsync(accessToken, "/fleetcarrier", TimeSpan.FromSeconds(60), ct);
+        _log.LogInformation("[LogisticsInventory][DEBUG] /fleetcarrier raw status={Status} len={Len}", status, body?.Length ?? 0);
+        return status == 200 ? body : $"{{\"error\":\"HTTP {status}\"}}";
+    }
+
     public async Task<FrontierLogisticsInventoryDto> FetchInventoryAsync(string accessToken, CancellationToken ct = default)
     {
         var dto = new FrontierLogisticsInventoryDto();
@@ -108,7 +118,9 @@ public class FrontierLogisticsInventoryService
     }
 
     /// <summary>
-    /// Aligné sur la logique client (chantier-logistics.vm) : FR/EN et casse unique pour lookup inventaire.
+    /// Normalise un nom de commodité CAPI (EN/FR/interne PascalCase) vers la clé canonique partagée avec le client.
+    /// Les clés canoniques correspondent aux clés de COMMODITY_LABELS dans chantier-logistics.vm.ts.
+    /// Couvre : noms internes CAPI ($Steel_Name; → "Steel"), noms localisés EN et FR.
     /// </summary>
     private static string NormalizeCommodityKey(string name)
     {
@@ -117,40 +129,261 @@ public class FrontierLogisticsInventoryService
         var lower = s.ToLowerInvariant();
         return lower switch
         {
-            "acier" or "steel" => "steel",
+            // ── Métaux ────────────────────────────────────────────────────────
+            "steel" or "acier" => "steel",
             "aluminium" or "aluminum" => "aluminium",
-            "cuivre" or "copper" => "copper",
-            "titane" or "titanium" => "titanium",
-            "plomb" or "lead" => "lead",
+            "silver" or "argent" => "silver",
+            "beryllium" or "béryllium" or "beryllium" => "beryllium",
+            "bismuth" => "bismuth",
+            "cobalt" => "cobalt",
+            "copper" or "cuivre" => "copper",
+            "gallium" => "gallium",
+            "hafnium178" or "hafnium 178" => "hafnium178",
+            "indium" => "indium",
+            "lanthanum" or "lanthane" => "lanthanum",
+            "lithium" => "lithium",
+            "gold" or "or" => "gold",
+            "osmium" => "osmium",
+            "palladium" => "palladium",
+            "platinum" or "platine" => "platinum",
+            "praseodymium" or "praséodyme" or "praseodyme" => "praseodymium",
+            "samarium" => "samarium",
+            "tantalum" or "tantale" => "tantalum",
+            "thallium" => "thallium",
+            "thorium" => "thorium",
+            "titanium" or "titane" => "titanium",
+            "uranium" => "uranium",
+            "lead" or "plomb" => "lead",
             "zinc" => "zinc",
             "nickel" => "nickel",
-            "cobalt" => "cobalt",
-            "soufre" or "sulphur" or "sulfur" => "sulphur",
-            "phosphore" or "phosphorus" => "phosphorus",
-            "bore" or "boron" => "boron",
-            "tellure" or "tellurium" => "tellurium",
-            "chrome" or "chromium" => "chromium",
-            "antimoine" or "antimony" => "antimony",
-            "étain" or "etain" or "tin" => "tin",
-            "manganèse" or "manganese" => "manganese",
-            "molybdène" or "molybdene" or "molybdenum" => "molybdenum",
-            "rhénium" or "rhenium" => "rhenium",
-            "wolfram" or "tungstène" or "tungsten" => "tungsten",
-            "yttrium" => "yttrium",
-            "technétium" or "technetium" => "technetium",
-            "ruthénium" or "ruthenium" => "ruthenium",
-            "polonium" => "polonium",
+            "molybdenum" or "molybdène" or "molybdene" => "molybdenum",
+            "rhenium" or "rhénium" or "rhenium" => "rhenium",
+            "boron" or "bore" => "boron",
+            "sulphur" or "sulfur" or "soufre" => "sulphur",
+            "phosphorus" or "phosphore" => "phosphorus",
+            "manganese" or "manganèse" or "manganese" => "manganese",
+            "tin" or "étain" or "etain" => "tin",
+            "tungsten" or "tungstène" or "wolfram" => "tungsten",
+            "tellurium" or "tellure" => "tellurium",
             "vanadium" => "vanadium",
+            "chromium" or "chrome" => "chromium",
+            "polonium" => "polonium",
+            "ruthenium" or "ruthénium" or "ruthenium" => "ruthenium",
+            "technetium" or "technétium" or "technetium" => "technetium",
+            "yttrium" => "yttrium",
+            "antimony" or "antimoine" => "antimony",
+
+            // ── Minéraux ──────────────────────────────────────────────────────
+            "alexandrite" => "alexandrite",
+            "bauxite" => "bauxite",
+            "benitoite" or "bénitoïte" or "benitoite" => "benitoite",
+            "bertrandite" => "bertrandite",
+            "bromellite" => "bromellite",
+            "siliconcarbidefibres" or "silicon carbide fibres" or "carbure de silicium" => "siliconcarbidefibres",
+            "coltan" => "coltan",
+            "methanolmonohydratecrystals" or "methanol monohydrate crystals"
+                or "cristaux de méthanol monohydraté" or "cristaux de methanol monohydrate" => "methanolmonohydratecrystals",
+            "cryolite" => "cryolite",
+            "lowtemperaturediamond" or "low temperature diamonds" or "low temperature diamond"
+                or "diamants basse température" or "diamants basse temperature" => "lowtemperaturediamond",
+            "gallite" => "gallite",
+            "goslarite" => "goslarite",
+            "grandidierite" or "grandidiérite" or "grandidierite" => "grandidierite",
+            "hematite" or "hématite" or "hematite" => "hematite",
+            "methanehydrate" or "methane hydrate" or "hydrate de méthane" or "hydrate de methane" => "methanehydrate",
+            "lithiumhydroxide" or "lithium hydroxide" or "hydroxyde de lithium" => "lithiumhydroxide",
+            "indite" => "indite",
+            "jadeite" or "jadéite" or "jadeite" => "jadeite",
+            "lepidolite" or "lépidolite" or "lepidolite" => "lepidolite",
+            "monazite" => "monazite",
+            "musgravite" => "musgravite",
+            "voidopal" or "void opal" or "opale du vide" => "voidopal",
+            "painite" => "painite",
+            "pyrophyllite" => "pyrophyllite",
+            "rhodplumsite" => "rhodplumsite",
+            "rutile" => "rutile",
+            "serendibite" => "serendibite",
+            "taaffeite" or "taafféite" or "taaffeite" => "taaffeite",
+            "uraninite" => "uraninite",
+
+            // ── Matériaux industriels ─────────────────────────────────────────
+            "ceramiccomposites" or "ceramic composites"
+                or "composites céramiques" or "composites ceramiques"
+                or "composés en céramique" or "composes en ceramique"
+                or "composés céramiques" or "composes ceramiques" => "ceramiccomposites",
+            "polymers" or "polymères" or "polymeres" or "polymère(s)" or "polymere(s)" => "polymers",
+            "semiconductors" or "semi-conducteurs" or "semiconducteurs" or "semi-conducteur(s)" => "semiconductors",
+            "superconductors" or "supraconducteurs" or "supraconducteur(s)" => "superconductors",
             "cmmcomposite" or "cmm composite" or "composite mmc" => "cmmcomposite",
-            "liquidoxygen" or "liquid oxygen" or "oxygène liquide" or "oxygene liquide" => "liquidoxygen",
-            "ceramiccomposites" or "ceramic composites" or "composites céramiques" or "composites ceramiques" => "ceramiccomposites",
-            "polymers" or "polymères" or "polymeres" => "polymers",
-            "semiconductors" or "semi-conducteurs" or "semiconducteurs" => "semiconductors",
-            "superconductors" or "supraconducteurs" => "superconductors",
-            "buildingfabricators" or "building fabricators" or "fabricants de bâtiments" or "fabricants de batiments" => "buildingfabricators",
             "insulatingmembrane" or "insulating membrane" or "membrane isolante" => "insulatingmembrane",
-            "reactivearmour" or "reactive armour" or "reactive armor" or "armure réactive" or "armure reactive" => "reactivearmour",
-            "landenviromentalsystems" or "land enrichment systems" or "systèmes d'enrichissement" => "landenviromentalsystems",
+            "neofabricinsulation" or "neofabric insulation"
+                or "isolant en néotextile" or "isolant en neotextile" => "neofabricinsulation",
+            "metaalloys" or "meta-alloys" or "méta-alliages" or "meta-alliages" => "metaalloys",
+            "coolinghoses" or "cooling hoses" or "tuyaux de refroidissement" => "coolinghoses",
+            "reactivearmour" or "reactive armour" or "reactive armor"
+                or "armure réactive" or "armure reactive" => "reactivearmour",
+            "reactivearmouring" or "reactive armouring"
+                or "protection réactive" or "protection reactive" => "reactivearmouring",
+
+            // ── Machines ──────────────────────────────────────────────────────
+            "autofabricators" or "auto-fabricators" or "auto fabricators" or "auto-bâtisseurs" or "auto-batisseurs" => "autofabricators",
+            "buildingfabricators" or "building fabricators"
+                or "fabricants de bâtiments" or "fabricants de batiments" => "buildingfabricators",
+            "magneticemittercoil" or "magnetic emitter coil"
+                or "bobine d'émission magnétique" or "bobine d emission magnetique" => "magneticemittercoil",
+            "emergencypowercells" or "emergency power cells"
+                or "cellules d'énergie de secours" or "cellules d energie de secours" => "emergencypowercells",
+            "exhaustmanifold" or "exhaust manifold"
+                or "collecteur d'échappement" or "collecteur d echappement" => "exhaustmanifold",
+            "shieldemitters" or "shield emitters" or "composants de protecteurs" => "shieldemitters",
+            "energygridassembly" or "energy grid assembly"
+                or "conduits de transfert d'énergie" or "conduits de transfert d energie" => "energygridassembly",
+            "powerconverter" or "power converter"
+                or "convertisseur d'énergie" or "convertisseur d energie" => "powerconverter",
+            "iondistributor" or "ion distributor"
+                or "distributeurs d'ions" or "distributeurs d ions" => "iondistributor",
+            "radiationbaffle" or "radiation baffle" or "écran antiradiation" or "ecran antiradiation" => "radiationbaffle",
+            "marinesupplies" or "marine supplies" or "équipement aquamarin" or "equipement aquamarin" => "marinesupplies",
+            "geologicalequipment" or "geological equipment"
+                or "équipement géologique" or "equipement geologique" => "geologicalequipment",
+            "mineralextractors" or "mineral extractors" or "extracteurs de minerai" => "mineralextractors",
+            "powergenerators" or "power generators" or "générateurs" or "generateurs" => "powergenerators",
+            "microbialfurnaces" or "microbial furnaces" or "hauts fourneaux microbiens" => "microbialfurnaces",
+            "thermalcoolingunits" or "thermal cooling units"
+                or "interconnexion dissipateur therm." or "interconnexion dissipateur thermique" => "thermalcoolingunits",
+            "cropharvesters" or "crop harvesters" or "moissonneuses" => "cropharvesters",
+            "articulationmotors" or "articulation motors"
+                or "moteurs à articulation" or "moteurs a articulation" => "articulationmotors",
+            "reinforcedmountingplate" or "reinforced mounting plate"
+                or "plaque de montage renforcée" or "plaque de montage renforcee" => "reinforcedmountingplate",
+            "atmosphericprocessors" or "atmospheric processors"
+                or "processeurs atmosphériques" or "processeurs atmospheriques" => "atmosphericprocessors",
+            "hndshockmount" or "hn shock mount" or "protection antichocs hp" => "hndshockmount",
+            "powergridassembly" or "power grid assembly"
+                or "système de réseau d'alimentation" or "systeme de reseau d alimentation" => "powergridassembly",
+            "modularterminals" or "modular terminals" or "terminaux modulaires" => "modularterminals",
+            "coolingunits" or "cooling units" or "unités de refroidissement" or "unites de refroidissement" => "coolingunits",
+            "waterpurifiers" or "water purifiers"
+                or "purificateurs d'eau" or "purificateurs d eau" => "waterpurifiers",
+            "liquidoxygen" or "liquid oxygen" or "oxygène liquide" or "oxygene liquide" => "liquidoxygen",
+            "surfacestabilisers" or "surface stabilisers" or "stabilisateurs de surface" => "surfacestabilisers",
+            "structuralregulators" or "structural regulators"
+                or "régulateurs structurels" or "regulateurs structurels" => "structuralregulators",
+            "mutomimager" or "muon tomography imager"
+                or "dispositif d'imagerie muonique" or "dispositif d imagerie muonique" => "mutomimager",
+            "computercomponents" or "computer components"
+                or "composants d'ordinateur" or "composants d ordinateur" => "computercomponents",
+            "landenrichmentsystems" or "land enrichment systems" or "landenviromentalsystems"
+                or "systèmes d'enrichissement" or "systemes d enrichissement"
+                or "sys. enrichissement sols" => "landenrichmentsystems",
+            "animalmonitor" or "animal monitor" or "animalnmonitor"
+                or "sys. surveillance animale" or "système de surveillance animale" => "animalmonitor",
+            "telemetrysuite" or "telemetry suite"
+                or "système de télémétrie" or "systeme de telemetrie" => "telemetrysuite",
+            "aquaponicssystems" or "aquaponics systems"
+                or "systèmes aquaponiques" or "systemes aquaponiques" => "aquaponicssystems",
+            "bioreducinglichen" or "bio-reducing lichen"
+                or "lichen bioréducteur" or "lichen bioreducteur" => "bioreducinglichen",
+            "microcontrollers" or "microcontrôleurs" or "microcontroleurs" => "microcontrollers",
+            "nanodestructors" or "nanodestructeurs" => "nanodestructors",
+            "robotics" or "robots" => "robotics",
+            "resonatingseparators" or "resonating separators"
+                or "séparateurs à résonance" or "separateurs a resonance" => "resonatingseparators",
+            "complexcatalysts" or "complex catalysts" or "catalyseurs complexes" => "complexcatalysts",
+            "diagnosticssensor" or "diagnostics sensor"
+                or "capteur diagnostic d'équipement" or "capteur diagnostic d equipement" => "diagnosticssensor",
+            "medicaldiagnosticequipment" or "medical diagnostic equipment"
+                or "équipement de diagnostic médical" or "equipement de diagnostic medical" => "medicaldiagnosticequipment",
+
+            // ── Médicaments ───────────────────────────────────────────────────
+            "agriculturalmedicines" or "agricultural medicines"
+                or "agri-médicaments" or "agri-medicaments" => "agriculturalmedicines",
+            "progenitorcells" or "progenitor cells" or "cellules souches" => "progenitorcells",
+            "basicmedicines" or "basic medicines" or "médicaments simples" or "medicaments simples" => "basicmedicines",
+            "advancedmedicines" or "advanced medicines" or "médicaments complexes" or "medicaments complexes" => "advancedmedicines",
+            "performanceenhancers" or "performance enhancers" or "produits dopants" => "performanceenhancers",
+            "combatantimutagens" or "combat antimutagens" or "stabilisateurs de combat" => "combatantimutagens",
+            "combatstabilisers" or "combat stabilisers" or "combat stabilizers" => "combatstabilisers",
+
+            // ── Nourriture ────────────────────────────────────────────────────
+            "algae" or "algues" => "algae",
+            "coffee" or "café" or "cafe" => "coffee",
+            "foodcartridges" or "food cartridges" or "cartouches alimentaires"
+                or "cartouche(s) alimentaire(s)" or "cartouche(s) alimentaires" => "foodcartridges",
+            "grain" or "céréales" or "cereales" => "grain",
+            "fruitandvegetables" or "fruit and vegetables"
+                or "fruits et légumes" or "fruits et legumes" => "fruitandvegetables",
+            "fish" or "poisson" => "fish",
+            "tea" or "thé" or "the" => "tea",
+            "meat" or "viande" => "meat",
+            "animalmeat" or "animal meat" or "viande animale" => "animalmeat",
+            "syntheticmeat" or "synthetic meat" or "viande synthétique" or "viande synthetique" => "syntheticmeat",
+
+            // ── Produits chimiques ────────────────────────────────────────────
+            "nerveagents" or "nerve agents" or "agents neurotoxiques" => "nerveagents",
+            "hydrogenfuel" or "hydrogen fuel"
+                or "carburant à base d'hydrogène" or "carburant a base d hydrogene" => "hydrogenfuel",
+            "water" or "eau" => "water",
+            "rockforthfertiliser" or "rockforth fertiliser" or "rockforth fertilizer"
+                or "engrais rockforth" => "rockforthfertiliser",
+            "explosives" or "explosifs" => "explosives",
+            "mineraloil" or "mineral oil" or "huiles minérales" or "huiles minerales" => "mineraloil",
+            "hydrogenperoxide" or "hydrogen peroxide"
+                or "peroxyde d'hydrogène" or "peroxyde d hydrogene" => "hydrogenperoxide",
+            "pesticides" => "pesticides",
+            "syntheticreagents" or "synthetic reagents"
+                or "réactifs synthétiques" or "reactifs synthetiques" => "syntheticreagents",
+            "agronomictreatment" or "agronomic treatment" or "traitement agronomique" => "agronomictreatment",
+            "tritium" => "tritium",
+
+            // ── Produits de consommation ──────────────────────────────────────
+            "consumertechnology" or "consumer technology"
+                or "électronique grand public" or "electronique grand public" => "consumertechnology",
+            "survivalequipment" or "survival equipment"
+                or "équipement de survie" or "equipement de survie" => "survivalequipment",
+            "domesticappliances" or "domestic appliances"
+                or "équipement ménager" or "equipement menager" => "domesticappliances",
+            "evacuationshelter" or "evacuation shelter"
+                or "abri d'urgence" or "abri d urgence" => "evacuationshelter",
+            "hazardousenvironmentsuits" or "hazardous environment suits" or "hazard environment suits"
+                or "combinaisons de protection" => "hazardousenvironmentsuits",
+            "hazardenvironmentsuits" => "hazardenvironmentsuits",
+            "clothing" or "vêtements" or "vetements" => "clothing",
+
+            // ── Drogues légales ───────────────────────────────────────────────
+            "beer" or "bière" or "biere" => "beer",
+            "bootlegliquor" or "bootleg liquor" or "liqueur de contrebande" => "bootlegliquor",
+            "narcotics" or "narcotiques" => "narcotics",
+            "liquor" or "spiritueux" => "liquor",
+            "tobacco" or "tabac" => "tobacco",
+            "onionheadgammastrain" or "onion head gamma strain"
+                or "variété gamma de tête d'oignon" or "variete gamma de tete d oignon" => "onionheadgammastrain",
+            "wine" or "vin" => "wine",
+
+            // ── Textiles ──────────────────────────────────────────────────────
+            "leather" or "cuir" => "leather",
+            "naturalfabrics" or "natural fabrics" or "fibres textiles naturelles" => "naturalfabrics",
+            "syntheticfabrics" or "synthetic fabrics"
+                or "tissus synthétiques" or "tissus synthetiques" => "syntheticfabrics",
+            "conductivefabrics" or "conductive fabrics" or "tissus conducteurs" => "conductivefabrics",
+            "militarygradefabrics" or "military grade fabrics" or "tissus militaires" => "militarygradefabrics",
+
+            // ── Déchets ───────────────────────────────────────────────────────
+            "biowaste" or "biodéchets" or "biodechets" => "biowaste",
+            "chemicalwaste" or "chemical waste" or "déchets chimiques" or "dechets chimiques" => "chemicalwaste",
+            "toxicwaste" or "toxic waste" or "déchets toxiques" or "dechets toxiques" => "toxicwaste",
+            "scrap" or "ferraille" => "scrap",
+
+            // ── Armes ─────────────────────────────────────────────────────────
+            "personalweapons" or "personal weapons" or "armes de poing" => "personalweapons",
+            "nonlethalweapons" or "non-lethal weapons" or "non lethal weapons" or "armes incapacitantes" => "nonlethalweapons",
+            "battleweapons" or "battle weapons" or "armes militaires" => "battleweapons",
+            "landmines" or "land mines" or "mines terrestres" => "landmines",
+
+            // ── Esclaves ──────────────────────────────────────────────────────
+            "slaves" or "esclaves" => "slaves",
+            "imperialslaves" or "imperial slaves" or "esclaves impériaux" or "esclaves imperiaux" => "imperialslaves",
+
             _ => Regex.Replace(lower, @"\s+", " ")
         };
     }
@@ -261,6 +494,10 @@ public class FrontierLogisticsInventoryService
             var qty = ExtractQuantity(item);
             if (qty <= 0)
                 qty = 1;
+
+            var normalizedKey = NormalizeCommodityKey(name);
+            log?.LogDebug("[LogisticsInventory][RAW] rawName={Raw} normalizedKey={Key} qty={Qty}",
+                name, normalizedKey, qty);
 
             AddOrMerge(dict, name, qty);
         }

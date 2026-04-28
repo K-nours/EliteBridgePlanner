@@ -89,9 +89,11 @@ export class ChantierLogisticsPanelComponent {
   private chantierRefreshVerifiedThisCycle = false;
 
   protected readonly enlargeOpen = signal(false);
+  protected readonly resteMode = signal<'chantier' | 'global'>('global');
   protected readonly refreshLoading = signal(false);
   protected readonly realSyncTickRunning = signal(false);
   protected readonly deleteLoading = signal(false);
+  protected readonly cargoSyncLoading = signal(false);
 
   /** Dernière réponse inventaire Frontier (soutes). */
   protected readonly inventoryPayload = signal<ChantierLogisticsInventoryDto | null>(null);
@@ -865,6 +867,58 @@ export class ChantierLogisticsPanelComponent {
     if (mode === 'manual') {
       this.syncLog.addLog(`[Chantiers] ${ctx} · ${message}`);
     }
+  }
+
+  protected toggleResteMode(): void {
+    this.resteMode.set(this.resteMode() === 'global' ? 'chantier' : 'global');
+  }
+
+  protected syncCargoOnly(event: Event): void {
+    event.stopPropagation();
+    if (!this.frontierAuth.isConnected() || this.cargoSyncLoading() || this.realSyncTickRunning()) return;
+    const gen = ++this.inventoryFetchGeneration;
+    this.cargoSyncLoading.set(true);
+    this.inventoryLoading.set(true);
+    this.inventoryHttpError.set(false);
+    this.inventoryCoordinator
+      .getInventory$('manual')
+      .pipe(
+        take(1),
+        mergeMap((dto) => {
+          if (dto === null) return of(null);
+          return of(mergeInventoryDtos(this.inventoryPayload(), dto));
+        }),
+        tap((merged) => {
+          if (!merged || gen !== this.inventoryFetchGeneration) return;
+          this.inventoryPayload.set(merged);
+          this.inventoryHttpError.set(false);
+          this.logInventoryDiagnosticToSync(merged, 'real-sync');
+          if (!merged.rateLimited) {
+            this.inventoryCoordinator.markSuccessfulFetch();
+            this.capiRateLimit.recordSuccess();
+          } else {
+            this.capiRateLimit.record429(merged.retryAfterSeconds ?? null);
+          }
+        }),
+        catchError((err: unknown) => {
+          if (err instanceof HttpErrorResponse && err.status === 429) {
+            this.inventoryCoordinator.recordHttp429();
+            const ra = parseRetryAfterSeconds(err);
+            this.capiRateLimit.record429(ra);
+            if (gen === this.inventoryFetchGeneration) this.inventoryHttpError.set(false);
+            return of(null);
+          }
+          if (gen === this.inventoryFetchGeneration) this.inventoryHttpError.set(true);
+          const msg = err instanceof HttpErrorResponse ? `HTTP ${err.status}` : 'erreur réseau';
+          this.syncLog.addLog(`[Cargo sync] échec — ${msg}`);
+          return of(null);
+        }),
+        finalize(() => {
+          if (gen === this.inventoryFetchGeneration) this.inventoryLoading.set(false);
+          this.cargoSyncLoading.set(false);
+        }),
+      )
+      .subscribe();
   }
 
   protected openEnlargeModal(event: Event): void {

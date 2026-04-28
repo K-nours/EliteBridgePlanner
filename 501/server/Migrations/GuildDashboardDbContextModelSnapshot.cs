@@ -154,48 +154,6 @@ namespace GuildDashboard.Server.Migrations
                     b.ToTable("DeclaredChantiers", (string)null);
                 });
 
-            modelBuilder.Entity("GuildDashboard.Server.Models.EddnRawMessage", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<DateTime?>("GatewayTimestamp")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("MessageJson")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("ReceivedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("SchemaRef")
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("SourceSoftware")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("SourceUploader")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("StationName")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("SystemName")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ReceivedAt");
-
-                    b.HasIndex("SchemaRef");
-
-                    b.ToTable("EddnRawMessages", (string)null);
-                });
-
             modelBuilder.Entity("GuildDashboard.Server.Models.FrontierOAuthSession", b =>
                 {
                     b.Property<int>("Id")

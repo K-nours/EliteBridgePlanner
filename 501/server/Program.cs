@@ -1,6 +1,5 @@
 using System.Net.Sockets;
 using GuildDashboard.Server.Data;
-using GuildDashboard.Server.Integrations.Eddn;
 using GuildDashboard.Server.Services;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -49,15 +48,11 @@ builder.Services.AddScoped<GuildSystemsImportService>();
 builder.Services.AddScoped<EdsmDeltaEnrichmentService>();
 builder.Services.AddScoped<EdsmCoordsEnrichmentService>();
 builder.Services.AddSingleton<SystemsImportProgressStore>();
-builder.Services.AddSingleton<EddnStatusService>();
 builder.Services.AddSingleton<FrontierJournalBackfillService>();
 builder.Services.AddSingleton<FrontierJournalParseService>();
 builder.Services.AddSingleton<FrontierJournalUnifiedSyncService>();
 builder.Services.AddScoped<FrontierJournalImportExportService>();
 builder.Services.AddSingleton<InaraApiUserSettingsStore>();
-builder.Services.AddScoped<EddnMessageStore>();
-builder.Services.AddHostedService<EddnListenerService>();
-builder.Services.AddHostedService<EddnPurgeService>();
 builder.Services.AddControllers()
     .AddJsonOptions(o =>
     {

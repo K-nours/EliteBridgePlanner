@@ -813,6 +813,20 @@ public class FrontierController : ControllerBase
         return (access, fields, null);
     }
 
+    /// <summary>
+    /// GET /api/integrations/frontier/debug-fc-cargo — JSON brut /fleetcarrier pour diagnostic noms + quantités CAPI.
+    /// </summary>
+    [HttpGet("debug-fc-cargo")]
+    public async Task<IActionResult> DebugFcCargo(CancellationToken ct)
+    {
+        var res = await _oauthSession.ResolveEffectiveTokenAsync(ct);
+        if (res.Token == null || string.IsNullOrEmpty(res.Token.AccessToken))
+            return Unauthorized(new { message = "Connexion Frontier requise." });
+
+        var raw = await _logisticsInventory.FetchRawFleetCarrierAsync(res.Token.AccessToken, ct);
+        return Content(raw ?? "{}", "application/json");
+    }
+
     /// <summary>GET /api/integrations/frontier/debug-url — retourne l'URL d'autorisation complète pour inspection (éviter 406).</summary>
     [HttpGet("debug-url")]
     public IActionResult DebugAuthorizationUrl()
