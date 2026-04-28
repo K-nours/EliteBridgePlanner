@@ -2,6 +2,7 @@ import { Component, inject, OnInit, computed } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { BridgeStore } from '../../core/services/bridge.store';
 import { AuthService } from '../../core/auth/auth.service';
+import { RareCommodityAlertService } from '../../core/services/rare-commodity-alert.service';
 import { ThemeSelectorComponent } from '../../shared/components/theme-selector/theme-selector.component';
 import { ProfileMenuComponent } from '../../shared/components/profile-menu/profile-menu.component';
 import { BridgeVisualizerComponent } from './bridge-visualizer/bridge-visualizer.component';
@@ -28,6 +29,7 @@ import { TranslateModule } from '@ngx-translate/core';
 export class BridgeComponent implements OnInit {
   readonly store = inject(BridgeStore);
   readonly authService = inject(AuthService);
+  readonly rareCommodityAlert = inject(RareCommodityAlertService);
   private readonly route = inject(ActivatedRoute);
 
   readonly bridgeLabel = computed(() => {
@@ -43,6 +45,9 @@ export class BridgeComponent implements OnInit {
     const bridgeIdParam = this.route.snapshot.queryParams['bridgeId'];
     const bridgeId = bridgeIdParam ? parseInt(bridgeIdParam, 10) : 1;
     this.store.loadBridge(Number.isFinite(bridgeId) ? bridgeId : 1);
+
+    // Vérification Inara rare commodities — une fois par jour
+    this.rareCommodityAlert.checkOncePerDay();
   }
 
   backToBridges(): void {

@@ -16,6 +16,35 @@
       <span class="cmdr-name">
         CMDR <strong>{{ authService.commanderName() }}</strong>
       </span>
+
+      <!-- Inara rare commodity alert -->
+      @if (rareCommodityAlert.hasAlert()) {
+        <a class="commodity-alert-btn commodity-alert-btn--warning"
+           [href]="rareCommodityAlert.alertUrl()"
+           target="_blank"
+           rel="noopener noreferrer"
+           [title]="'⚠ RARE COMMODITY > 350t\n' + rareCommodityAlert.alertTooltip()"
+           aria-label="Alerte rare commodity Inara">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16" aria-hidden="true">
+            <path d="M12 2 L22 20 H2 Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <line x1="12" y1="9" x2="12" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="12" cy="17" r="1" fill="currentColor"/>
+          </svg>
+        </a>
+      } @else if (rareCommodityAlert.loading()) {
+        <span class="commodity-alert-btn commodity-alert-btn--loading" aria-label="Vérification Inara…">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" stroke-dasharray="28 56" stroke-linecap="round"/>
+          </svg>
+        </span>
+      } @else if (rareCommodityAlert.error() === null && rareCommodityAlert.alertCommodities() !== null) {
+        <span class="commodity-alert-btn commodity-alert-btn--ok" title="Rare commodities — aucune alerte" aria-label="Rare commodities OK">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" aria-hidden="true">
+            <polyline points="4 13 9 18 20 7"/>
+          </svg>
+        </span>
+      }
+
       <app-profile-menu />
     </div>
   </header>
