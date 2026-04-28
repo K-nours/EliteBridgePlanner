@@ -19,6 +19,7 @@ import { GuildSettingsService } from '../../core/services/guild-settings.service
 import { InaraSyncBridgeService } from '../../core/services/inara-sync-bridge.service';
 import { SyncHelpModalService } from '../../core/services/sync-help-modal.service';
 import { FrontierJournalApiService } from '../../core/services/frontier-journal-api.service';
+import { RareCommodityAlertService } from '../../core/services/rare-commodity-alert.service';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
 import type { SystemsFilterValue, GuildSystemBgsDto } from '../../core/models/guild-systems.model';
@@ -313,6 +314,27 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
             <div class="frontier-cmdr-header">
               <h3 class="frontier-cmdr-title">CMDR CONNECTÉ</h3>
               <div class="frontier-cmdr-header-actions">
+                <!-- Inara rare commodity alert -->
+                @if (rareCommodityAlert.hasAlert()) {
+                  <a class="cmdr-inara-alert cmdr-inara-alert--warning"
+                     [href]="rareCommodityAlert.alertUrl()"
+                     target="_blank"
+                     rel="noopener noreferrer"
+                     [title]="'⚠ Rare commodity > 350t\n' + rareCommodityAlert.alertTooltip()"
+                     style="white-space: pre;">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">
+                      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                  </a>
+                } @else if (rareCommodityAlert.isReady()) {
+                  <span class="cmdr-inara-alert cmdr-inara-alert--ok" [title]="rareCommodityAlert.okTooltip()">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  </span>
+                }
                 <div class="cmdrs-more-dropdown">
                   @if (cmdrJournalMenuOpen()) {
                     <div class="cmdrs-menu-backdrop" (click)="cmdrJournalMenuOpen.set(false)"></div>
@@ -1831,6 +1853,41 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       opacity: 0.5;
       cursor: not-allowed;
     }
+    .cmdr-inara-alert {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      border: none;
+      background: transparent;
+      cursor: default;
+      flex-shrink: 0;
+      text-decoration: none;
+    }
+    .cmdr-inara-alert--ok {
+      color: #3effa0;
+      opacity: 0.75;
+    }
+    .cmdr-inara-alert--warning {
+      cursor: pointer;
+      color: #ffb400;
+      background: rgba(255, 180, 0, 0.12);
+      border: 1px solid rgba(255, 180, 0, 0.35);
+      animation: inara-pulse 2s ease-in-out infinite;
+    }
+    .cmdr-inara-alert--warning:hover {
+      background: rgba(255, 180, 0, 0.22);
+      color: #ffd04d;
+    }
+    .cmdr-inara-alert--warning svg {
+      filter: drop-shadow(0 0 3px rgba(255, 180, 0, 0.5));
+    }
+    @keyframes inara-pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.5; }
+    }
     .cmdrs-menu-backdrop {
       position: fixed;
       inset: 0;
@@ -2058,6 +2115,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly syncHelpModal = inject(SyncHelpModalService);
   protected readonly frontierAuth = inject(FrontierAuthService);
   private readonly frontierJournalApi = inject(FrontierJournalApiService);
+  protected readonly rareCommodityAlert = inject(RareCommodityAlertService);
   protected readonly frontierMenuOpen = signal(false);
   /** Ligne affichée dans la zone logs sync pendant une synchro journal Frontier. */
   protected readonly journalBackfillProgress = signal<string | null>(null);
@@ -2748,6 +2806,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.addLog('Prêt — utilisez les boutons sync pour importer depuis Inara');
     this.guildSettings.load();
     this.inaraBridge.check();
+    this.rareCommodityAlert.checkOncePerDay();
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') this.guildSettings.load();

@@ -86,6 +86,8 @@
                   <col class="chantier-logistics-res-col chantier-logistics-res-col--gap" />
                   <col class="chantier-logistics-res-col chantier-logistics-res-col--total" />
                 }
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--gap" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--reste" />
               </colgroup>
               <thead>
                 <tr>
@@ -131,6 +133,16 @@
                       Total
                     </th>
                   }
+                  <td class="chantier-logistics-res-th chantier-logistics-res-th--gap" aria-hidden="true"></td>
+                  <th
+                    scope="col"
+                    class="chantier-logistics-res-th chantier-logistics-res-th--num chantier-logistics-res-th--reste"
+                    [title]="resteMode() === 'global' ? 'Reste à charger (Global − stock) — clic pour basculer sur Chantier' : 'Reste à charger (Chantier − stock) — clic pour basculer sur Global'"
+                    (click)="toggleResteMode()"
+                  >
+                    Reste
+                    <span class="chantier-logistics-reste-mode-badge">{{ resteMode() === 'global' ? 'G' : 'C' }}</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -172,6 +184,19 @@
                           >{{ knownStockSum(row, trust) }}</span>
                       </td>
                     }
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--gap" aria-hidden="true"></td>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--reste">
+                      @if (!inventoryRowHasStockInfo()) {
+                        <span class="chantier-logistics-res-dash">—</span>
+                      } @else {
+                        @let resteVal = resteMode() === 'global' ? row.resteGlobal : row.resteChantier;
+                        @if (resteVal === 0) {
+                          <span class="chantier-logistics-res-num chantier-logistics-res-num--reste-ok">✓</span>
+                        } @else {
+                          <span class="chantier-logistics-res-num chantier-logistics-res-num--reste-need">{{ resteVal }}</span>
+                        }
+                      }
+                    </td>
                   </tr>
                 }
               </tbody>
@@ -242,6 +267,17 @@
           aria-hidden="true"
           >{{ realSyncPillLabel() }}</span
         >
+      </button>
+      <button
+        type="button"
+        class="chantier-logistics-cargo-sync-btn"
+        [class.chantier-logistics-cargo-sync-btn--busy]="cargoSyncLoading()"
+        [disabled]="!ui.selectedSite() || cargoSyncLoading() || realSyncTickRunning() || !frontierAuth.isConnected() || !!ui.chantierGoneMessage()"
+        aria-label="Synchroniser soute et FC depuis Frontier"
+        title="Sync cargo — met à jour soute et FC uniquement (sans refresh des besoins chantier)"
+        (click)="syncCargoOnly($event)"
+      >
+        Sync cargo
       </button>
       <button
         type="button"
@@ -366,6 +402,17 @@
                 aria-hidden="true"
                 >{{ realSyncPillLabel() }}</span
               >
+            </button>
+            <button
+              type="button"
+              class="chantier-logistics-cargo-sync-btn"
+              [class.chantier-logistics-cargo-sync-btn--busy]="cargoSyncLoading()"
+              [disabled]="!ui.selectedSite() || cargoSyncLoading() || realSyncTickRunning() || !frontierAuth.isConnected() || !!ui.chantierGoneMessage()"
+              aria-label="Synchroniser soute et FC depuis Frontier"
+              title="Sync cargo — met à jour soute et FC uniquement (sans refresh des besoins chantier)"
+              (click)="syncCargoOnly($event)"
+            >
+              Sync cargo
             </button>
           </div>
         </div>

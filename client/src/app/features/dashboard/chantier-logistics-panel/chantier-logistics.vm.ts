@@ -22,6 +22,10 @@ export interface ChantierResourceRowVm {
   shipQty: number;
   carrierQty: number;
   status: ResourceAvailabilityStatus;
+  /** Reste à prendre pour couvrir CE chantier : max(0, need - (soute + FC)). */
+  resteChantier: number;
+  /** Reste à prendre pour couvrir TOUS les chantiers : max(0, globalNeed - (soute + FC)). */
+  resteGlobal: number;
 }
 
 function normalizeCommodityKey(s: string): string {
@@ -29,18 +33,38 @@ function normalizeCommodityKey(s: string): string {
 }
 
 /**
- * Groupes de synonymes (FR/EN / orthographe) → même commodité.
- * La clé canonique est le 1er terme du groupe (normalisé).
+ * Groupes de synonymes (FR/EN / orthographe CAPI) → même commodité.
+ * La clé canonique est le 1er terme du groupe (normalisé lowercase).
+ * Doit rester synchronisé avec NormalizeCommodityKey (FrontierLogisticsInventoryService.cs).
  */
 const COMMODITY_EQUIVALENCE_GROUPS: readonly (readonly string[])[] = [
+  // ── Métaux ────────────────────────────────────────────────────────────────
   ['steel', 'acier'],
   ['aluminium', 'aluminum'],
+  ['silver', 'argent'],
+  ['beryllium', 'béryllium'],
+  ['bismuth'],
+  ['cobalt'],
   ['copper', 'cuivre'],
+  ['gallium'],
+  ['hafnium178', 'hafnium 178'],
+  ['indium'],
+  ['lanthanum', 'lanthane'],
+  ['lithium'],
+  ['gold', 'or'],
+  ['osmium'],
+  ['palladium'],
+  ['platinum', 'platine'],
+  ['praseodymium', 'praséodyme', 'praseodyme'],
+  ['samarium'],
+  ['tantalum', 'tantale'],
+  ['thallium'],
+  ['thorium'],
   ['titanium', 'titane'],
+  ['uranium'],
   ['lead', 'plomb'],
   ['zinc'],
   ['nickel'],
-  ['cobalt'],
   ['molybdenum', 'molybdène', 'molybdene'],
   ['rhenium', 'rhénium'],
   ['boron', 'bore'],
@@ -57,15 +81,209 @@ const COMMODITY_EQUIVALENCE_GROUPS: readonly (readonly string[])[] = [
   ['technetium', 'technétium'],
   ['yttrium'],
   ['antimony', 'antimoine'],
-  ['CMMComposite', 'CMM Composite', 'composite mmc', 'cmmcomposite'],
-  ['LiquidOxygen', 'Liquid Oxygen', 'oxygène liquide', 'oxygene liquide', 'liquidoxygen'],
-  ['CeramicComposites', 'Ceramic Composites', 'composites céramiques', 'composites ceramiques', 'ceramiccomposites'],
-  ['Polymers', 'polymères', 'polymeres'],
-  ['Semiconductors', 'semi-conducteurs', 'semiconducteurs'],
-  ['Superconductors', 'supraconducteurs'],
-  ['BuildingFabricators', 'Building Fabricators', 'fabricants de bâtiments', 'fabricants de batiments', 'buildingfabricators'],
-  ['InsulatingMembrane', 'Insulating Membrane', 'membrane isolante', 'insulatingmembrane'],
-  ['ReactiveArmour', 'Reactive Armour', 'Reactive Armor', 'armure réactive', 'armure reactive', 'reactivearmour'],
+
+  // ── Minéraux ──────────────────────────────────────────────────────────────
+  ['alexandrite'],
+  ['bauxite'],
+  ['benitoite', 'bénitoïte'],
+  ['bertrandite'],
+  ['bromellite'],
+  ['siliconcarbidefibres', 'silicon carbide fibres', 'carbure de silicium'],
+  ['coltan'],
+  ['methanolmonohydratecrystals', 'methanol monohydrate crystals',
+   'cristaux de méthanol monohydraté', 'cristaux de methanol monohydrate'],
+  ['cryolite'],
+  ['lowtemperaturediamond', 'low temperature diamonds', 'low temperature diamond',
+   'diamants basse température', 'diamants basse temperature'],
+  ['gallite'],
+  ['goslarite'],
+  ['grandidierite', 'grandidiérite'],
+  ['hematite', 'hématite'],
+  ['methanehydrate', 'methane hydrate', 'hydrate de méthane', 'hydrate de methane'],
+  ['lithiumhydroxide', 'lithium hydroxide', 'hydroxyde de lithium'],
+  ['indite'],
+  ['jadeite', 'jadéite'],
+  ['lepidolite', 'lépidolite'],
+  ['monazite'],
+  ['musgravite'],
+  ['voidopal', 'void opal', 'opale du vide'],
+  ['painite'],
+  ['pyrophyllite'],
+  ['rhodplumsite'],
+  ['rutile'],
+  ['serendibite'],
+  ['taaffeite', 'taafféite'],
+  ['uraninite'],
+
+  // ── Matériaux industriels ─────────────────────────────────────────────────
+  ['ceramiccomposites', 'ceramic composites', 'CeramicComposites', 'Ceramic Composites',
+   'composites céramiques', 'composites ceramiques',
+   'composés en céramique', 'composes en ceramique', 'composés céramiques'],
+  ['polymers', 'Polymers', 'polymères', 'polymeres', 'polymère(s)', 'polymere(s)'],
+  ['semiconductors', 'Semiconductors', 'semi-conducteurs', 'semiconducteurs', 'semi-conducteur(s)'],
+  ['superconductors', 'Superconductors', 'supraconducteurs', 'supraconducteur(s)'],
+  ['cmmcomposite', 'CMMComposite', 'cmm composite', 'CMM Composite', 'composite mmc'],
+  ['insulatingmembrane', 'InsulatingMembrane', 'Insulating Membrane', 'membrane isolante'],
+  ['neofabricinsulation', 'Neofabric Insulation', 'isolant en néotextile', 'isolant en neotextile'],
+  ['metaalloys', 'Meta-Alloys', 'méta-alliages', 'meta-alliages'],
+  ['coolinghoses', 'Cooling Hoses', 'tuyaux de refroidissement'],
+  ['reactivearmour', 'ReactiveArmour', 'Reactive Armour', 'Reactive Armor', 'armure réactive', 'armure reactive'],
+  ['reactivearmouring', 'Reactive Armouring', 'protection réactive', 'protection reactive'],
+
+  // ── Machines ──────────────────────────────────────────────────────────────
+  ['autofabricators', 'Auto-Fabricators', 'auto-bâtisseurs', 'auto-batisseurs'],
+  ['buildingfabricators', 'BuildingFabricators', 'Building Fabricators',
+   'fabricants de bâtiments', 'fabricants de batiments'],
+  ['magneticemittercoil', 'Magnetic Emitter Coil',
+   "bobine d'émission magnétique", 'bobine d emission magnetique'],
+  ['emergencypowercells', 'Emergency Power Cells',
+   "cellules d'énergie de secours", 'cellules d energie de secours'],
+  ['exhaustmanifold', 'Exhaust Manifold',
+   "collecteur d'échappement", 'collecteur d echappement'],
+  ['shieldemitters', 'Shield Emitters', 'composants de protecteurs'],
+  ['energygridassembly', 'Energy Grid Assembly',
+   "conduits de transfert d'énergie", 'conduits de transfert d energie'],
+  ['powerconverter', 'Power Converter',
+   "convertisseur d'énergie", 'convertisseur d energie'],
+  ['iondistributor', 'Ion Distributor',
+   "distributeurs d'ions", 'distributeurs d ions'],
+  ['radiationbaffle', 'Radiation Baffle', 'écran antiradiation', 'ecran antiradiation'],
+  ['marinesupplies', 'Marine Supplies', 'équipement aquamarin', 'equipement aquamarin'],
+  ['geologicalequipment', 'Geological Equipment',
+   'équipement géologique', 'equipement geologique'],
+  ['mineralextractors', 'Mineral Extractors', 'extracteurs de minerai'],
+  ['powergenerators', 'PowerGenerators', 'Power Generators', 'générateurs', 'generateurs'],
+  ['microbialfurnaces', 'Microbial Furnaces', 'hauts fourneaux microbiens'],
+  ['thermalcoolingunits', 'Thermal Cooling Units',
+   'interconnexion dissipateur therm.', 'interconnexion dissipateur thermique'],
+  ['cropharvesters', 'Crop Harvesters', 'moissonneuses'],
+  ['articulationmotors', 'Articulation Motors',
+   'moteurs à articulation', 'moteurs a articulation'],
+  ['reinforcedmountingplate', 'Reinforced Mounting Plate',
+   'plaque de montage renforcée', 'plaque de montage renforcee'],
+  ['atmosphericprocessors', 'Atmospheric Processors',
+   'processeurs atmosphériques', 'processeurs atmospheriques'],
+  ['hndshockmount', 'HN Shock Mount', 'protection antichocs hp'],
+  ['powergridassembly', 'Power Grid Assembly',
+   "système de réseau d'alimentation", 'systeme de reseau d alimentation'],
+  ['modularterminals', 'Modular Terminals', 'terminaux modulaires'],
+  ['coolingunits', 'Cooling Units', 'unités de refroidissement', 'unites de refroidissement'],
+  ['waterpurifiers', 'WaterPurifiers', 'Water Purifiers',
+   "purificateurs d'eau", 'purificateurs d eau'],
+  ['liquidoxygen', 'LiquidOxygen', 'Liquid Oxygen', 'oxygène liquide', 'oxygene liquide'],
+  ['surfacestabilisers', 'Surface Stabilisers', 'stabilisateurs de surface'],
+  ['structuralregulators', 'Structural Regulators',
+   'régulateurs structurels', 'regulateurs structurels'],
+  ['mutomimager', 'Muon Tomography Imager',
+   "dispositif d'imagerie muonique", 'dispositif d imagerie muonique'],
+  ['computercomponents', 'ComputerComponents', 'Computer Components',
+   "composants d'ordinateur", 'composants d ordinateur'],
+  ['landenrichmentsystems', 'Land Enrichment Systems', 'landenviromentalsystems',
+   "systèmes d'enrichissement", 'systemes d enrichissement', 'sys. enrichissement sols'],
+  ['animalmonitor', 'Animal Monitor', 'animalnmonitor',
+   'sys. surveillance animale', 'système de surveillance animale'],
+  ['telemetrysuite', 'Telemetry Suite', 'système de télémétrie', 'systeme de telemetrie'],
+  ['aquaponicssystems', 'Aquaponics Systems',
+   'systèmes aquaponiques', 'systemes aquaponiques'],
+  ['bioreducinglichen', 'Bio-Reducing Lichen',
+   'lichen bioréducteur', 'lichen bioreducteur'],
+  ['microcontrollers', 'microcontrôleurs', 'microcontroleurs'],
+  ['nanodestructors', 'nanodestructeurs'],
+  ['robotics', 'robots'],
+  ['resonatingseparators', 'Resonating Separators',
+   'séparateurs à résonance', 'separateurs a resonance'],
+  ['complexcatalysts', 'Complex Catalysts', 'catalyseurs complexes'],
+  ['diagnosticssensor', 'Diagnostics Sensor',
+   "capteur diagnostic d'équipement", 'capteur diagnostic d equipement'],
+  ['medicaldiagnosticequipment', 'Medical Diagnostic Equipment',
+   'équipement de diagnostic médical', 'equipement de diagnostic medical'],
+
+  // ── Médicaments ───────────────────────────────────────────────────────────
+  ['agriculturalmedicines', 'Agricultural Medicines',
+   'agri-médicaments', 'agri-medicaments'],
+  ['progenitorcells', 'Progenitor Cells', 'cellules souches'],
+  ['basicmedicines', 'Basic Medicines', 'médicaments simples', 'medicaments simples'],
+  ['advancedmedicines', 'Advanced Medicines', 'médicaments complexes', 'medicaments complexes'],
+  ['performanceenhancers', 'Performance Enhancers', 'produits dopants'],
+  ['combatantimutagens', 'Combat Antimutagens', 'stabilisateurs de combat'],
+  ['combatstabilisers', 'Combat Stabilisers', 'Combat Stabilizers'],
+
+  // ── Nourriture ────────────────────────────────────────────────────────────
+  ['algae', 'algues'],
+  ['coffee', 'café', 'cafe'],
+  ['foodcartridges', 'FoodCartridges', 'Food Cartridges', 'cartouches alimentaires',
+   'cartouche(s) alimentaire(s)', 'cartouche(s) alimentaires'],
+  ['grain', 'céréales', 'cereales'],
+  ['fruitandvegetables', 'FruitAndVegetables', 'Fruit and Vegetables',
+   'fruits et légumes', 'fruits et legumes'],
+  ['fish', 'poisson'],
+  ['tea', 'thé', 'the'],
+  ['meat', 'viande'],
+  ['animalmeat', 'Animal Meat', 'viande animale'],
+  ['syntheticmeat', 'Synthetic Meat', 'viande synthétique', 'viande synthetique'],
+
+  // ── Produits chimiques ────────────────────────────────────────────────────
+  ['nerveagents', 'Nerve Agents', 'agents neurotoxiques'],
+  ['hydrogenfuel', 'Hydrogen Fuel',
+   "carburant à base d'hydrogène", 'carburant a base d hydrogene'],
+  ['water', 'eau'],
+  ['rockforthfertiliser', 'Rockforth Fertiliser', 'Rockforth Fertilizer', 'engrais rockforth'],
+  ['explosives', 'explosifs'],
+  ['mineraloil', 'Mineral Oil', 'huiles minérales', 'huiles minerales'],
+  ['hydrogenperoxide', 'Hydrogen Peroxide',
+   "peroxyde d'hydrogène", 'peroxyde d hydrogene'],
+  ['pesticides'],
+  ['syntheticreagents', 'Synthetic Reagents',
+   'réactifs synthétiques', 'reactifs synthetiques'],
+  ['agronomictreatment', 'Agronomic Treatment', 'traitement agronomique'],
+  ['tritium'],
+
+  // ── Produits de consommation ──────────────────────────────────────────────
+  ['consumertechnology', 'Consumer Technology',
+   'électronique grand public', 'electronique grand public'],
+  ['survivalequipment', 'Survival Equipment',
+   'équipement de survie', 'equipement de survie'],
+  ['domesticappliances', 'Domestic Appliances',
+   'équipement ménager', 'equipement menager'],
+  ['evacuationshelter', 'Evacuation Shelter',
+   "abri d'urgence", 'abri d urgence'],
+  ['hazardousenvironmentsuits', 'Hazardous Environment Suits',
+   'Hazard Environment Suits', 'combinaisons de protection'],
+  ['clothing', 'vêtements', 'vetements'],
+
+  // ── Drogues légales ───────────────────────────────────────────────────────
+  ['beer', 'bière', 'biere'],
+  ['bootlegliquor', 'Bootleg Liquor', 'liqueur de contrebande'],
+  ['narcotics', 'narcotiques'],
+  ['liquor', 'spiritueux'],
+  ['tobacco', 'tabac'],
+  ['onionheadgammastrain', 'Onion Head Gamma Strain',
+   "variété gamma de tête d'oignon", 'variete gamma de tete d oignon'],
+  ['wine', 'vin'],
+
+  // ── Textiles ──────────────────────────────────────────────────────────────
+  ['leather', 'cuir'],
+  ['naturalfabrics', 'Natural Fabrics', 'fibres textiles naturelles'],
+  ['syntheticfabrics', 'Synthetic Fabrics',
+   'tissus synthétiques', 'tissus synthetiques'],
+  ['conductivefabrics', 'Conductive Fabrics', 'tissus conducteurs'],
+  ['militarygradefabrics', 'Military Grade Fabrics', 'tissus militaires'],
+
+  // ── Déchets ───────────────────────────────────────────────────────────────
+  ['biowaste', 'biodéchets', 'biodechets'],
+  ['chemicalwaste', 'Chemical Waste', 'déchets chimiques', 'dechets chimiques'],
+  ['toxicwaste', 'Toxic Waste', 'déchets toxiques', 'dechets toxiques'],
+  ['scrap', 'ferraille'],
+
+  // ── Armes ─────────────────────────────────────────────────────────────────
+  ['personalweapons', 'Personal Weapons', 'armes de poing'],
+  ['nonlethalweapons', 'Non-Lethal Weapons', 'Non Lethal Weapons', 'armes incapacitantes'],
+  ['battleweapons', 'Battle Weapons', 'armes militaires'],
+  ['landmines', 'Land Mines', 'mines terrestres'],
+
+  // ── Esclaves ──────────────────────────────────────────────────────────────
+  ['slaves', 'esclaves'],
+  ['imperialslaves', 'Imperial Slaves', 'esclaves impériaux', 'esclaves imperiaux'],
 ];
 
 function buildCanonicalLookup(): Map<string, string> {
@@ -500,13 +718,16 @@ function computeStatus(
   shipQty: number,
   carrierQty: number,
   trust: InventoryTrust,
+  globalNeed: number,
 ): ResourceAvailabilityStatus {
   let sum = 0;
   if (trust.shipKnown) sum += shipQty;
   if (trust.carrierKnown) sum += carrierQty;
   if (!trust.shipKnown && !trust.carrierKnown) return 'zero';
   if (sum === 0) return 'zero';
-  if (sum >= need) return 'ok';
+  // Vert seulement si le stock couvre TOUS les chantiers (globalNeed).
+  // Orange si ça couvre ce chantier mais pas le global.
+  if (sum >= Math.max(need, globalNeed)) return 'ok';
   return 'warn';
 }
 
@@ -527,8 +748,11 @@ export function buildChantierResourceRows(
     if (r.remaining <= 0) continue;
     const shipQty = lookupCargoQty(shipCargoByName, r.name);
     const carrierQty = lookupCargoQty(carrierCargoByName, r.name);
-    const status = computeStatus(r.remaining, shipQty, carrierQty, trust);
     const globalNeed = globalNeedForCommodity(globalNeedByCommodity, r.name);
+    const status = computeStatus(r.remaining, shipQty, carrierQty, trust, globalNeed);
+    const knownSum = (trust.shipKnown ? shipQty : 0) + (trust.carrierKnown ? carrierQty : 0);
+    const resteChantier = Math.max(0, r.remaining - knownSum);
+    const resteGlobal = Math.max(0, globalNeed - knownSum);
     rows.push({
       name: r.name,
       displayName: getResourceDisplayLabel(r.name, 'fr'),
@@ -537,6 +761,8 @@ export function buildChantierResourceRows(
       shipQty,
       carrierQty,
       status,
+      resteChantier,
+      resteGlobal,
     });
   }
   rows.sort((a, b) => b.need - a.need);
