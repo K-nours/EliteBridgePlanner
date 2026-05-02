@@ -39,16 +39,6 @@ public class SystemsController : ControllerBase
         return result is null ? NotFound() : Ok(result);
     }
 
-    /// <summary>Déplace un système à une nouvelle position dans le pont</summary>
-    [HttpPatch("{id:int}/reorder")]
-    [ProducesResponseType<StarSystemDto>(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Move(int id, [FromBody] MoveSystemRequest request)
-    {
-        var result = await _bridgeService.MoveSystemAsync(id, request.InsertAtIndex);
-        return result is null ? NotFound() : Ok(result);
-    }
-
     /// <summary>Supprime un système et compacte automatiquement les positions</summary>
     [HttpDelete("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

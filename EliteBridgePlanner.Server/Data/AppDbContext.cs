@@ -11,6 +11,7 @@ public class AppDbContext : IdentityDbContext<AppUser>
 
     public DbSet<Bridge> Bridges => Set<Bridge>();
     public DbSet<StarSystem> StarSystems => Set<StarSystem>();
+    public DbSet<BridgeStarSystem> BridgeStarSystems => Set<BridgeStarSystem>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -35,31 +36,51 @@ public class AppDbContext : IdentityDbContext<AppUser>
             e.HasKey(s => s.Id);
             e.Property(s => s.Name).IsRequired().HasMaxLength(200);
 
-            // Stocker les enums en string pour lisibilité DB
-            e.Property(s => s.Type)
-             .HasConversion<string>()
-             .HasMaxLength(20);
-
-            e.Property(s => s.Status)
-             .HasConversion<string>()
-             .HasMaxLength(20);
-
-            // Relation chaînée Previous
-            e.HasOne(s => s.PreviousSystem)
-             .WithMany()
-             .HasForeignKey(s => s.PreviousSystemId)
-             .OnDelete(DeleteBehavior.NoAction)
-             .IsRequired(false);
-
-            e.HasOne(s => s.Bridge)
-             .WithMany(b => b.Systems)
-             .HasForeignKey(s => s.BridgeId)
-             .OnDelete(DeleteBehavior.Cascade);
+            // Créer un index unique sur le nom pour la recherche rapide
+            e.HasIndex(s => s.Name).IsUnique();
 
             e.HasOne(s => s.Architect)
              .WithMany(u => u.ArchitectedSystems)
              .HasForeignKey(s => s.ArchitectId)
              .OnDelete(DeleteBehavior.SetNull);
+            e.Property(bs => bs.Status)
+             .HasConversion<string>()
+             .HasMaxLength(20);
+        });
+
+        // ── BridgeStarSystem (Jonction) ────────────────────────────────────
+        builder.Entity<BridgeStarSystem>(e =>
+        {
+            e.HasKey(bs => bs.Id);
+
+            // Clé composite unique : un système ne peut être dans un pont qu'une seule fois
+            e.HasAlternateKey(bs => new { bs.BridgeId, bs.StarSystemId });
+
+            // Relation vers Bridge
+            e.HasOne(bs => bs.Bridge)
+             .WithMany(b => b.Systems)
+             .HasForeignKey(bs => bs.BridgeId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            // Relation vers StarSystem
+            e.HasOne(bs => bs.StarSystem)
+             .WithMany(s => s.BridgeAssociations)
+             .HasForeignKey(bs => bs.StarSystemId)
+             .OnDelete(DeleteBehavior.Cascade);
+
+            // Chaînage intra-pont
+            e.HasOne(bs => bs.PreviousSystem)
+             .WithMany()
+             .HasForeignKey(bs => bs.PreviousSystemId)
+             .OnDelete(DeleteBehavior.NoAction)
+             .IsRequired(false);
+
+            // Enums en string
+            e.Property(bs => bs.Type)
+             .HasConversion<string>()
+             .HasMaxLength(20);
+
+
         });
     }
 }

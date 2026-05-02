@@ -15,5 +15,5 @@ public interface IBridgeService
     Task<StarSystemDto> AddSystemAsync(CreateSystemRequest request);
     Task<StarSystemDto?> UpdateSystemAsync(int id, UpdateSystemRequest request);
     Task<bool> DeleteSystemAsync(int id);
-    Task<StarSystemDto?> MoveSystemAsync(int id, int insertAfterId);
+    Task<StarSystemDto?> MoveSystemAsync(int bridgeId, int starSystemId, int insertAtIndex);
 }

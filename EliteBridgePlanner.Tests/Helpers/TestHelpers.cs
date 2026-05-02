@@ -41,15 +41,28 @@ public static class TestData
         Systems = []
     };
 
-    public static StarSystem CreateSystem(int id, int bridgeId, int? previousSystemId = null,
+    public static StarSystem CreateStarSystem(int id, string name = null, float x = 0, float y = 0, float z = 0) => new()
+    {
+        Id = id,
+        Name = name ?? $"Système {id}",
+        X = x,
+        Y = y,
+        Z = z
+    };
+
+    public static BridgeStarSystem CreateBridgeStarSystem(
+        int id, 
+        int bridgeId, 
+        int starSystemId,
+        int? previousSystemId = null,
         SystemType type = SystemType.TABLIER,
         ColonizationStatus status = ColonizationStatus.PLANIFIE) => new()
-        {
-            Id = id,
-            Name = $"Système {id}",
-            PreviousSystemId = previousSystemId,
-            Type = type,
-            Status = status,
-            BridgeId = bridgeId
-        };
+    {
+        Id = id,
+        BridgeId = bridgeId,
+        StarSystemId = starSystemId,
+        PreviousSystemId = previousSystemId,
+        Type = type        
+    };
 }
+

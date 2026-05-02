@@ -4,44 +4,29 @@ public class StarSystem
 {
     public int Id { get; set; }
 
-    /// <summary>Nom du système stellaire dans Elite Dangerous</summary>
+    /// <summary>Nom du système stellaire dans Elite Dangerous — UNIQUE et utilisé comme clé de recherche</summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>Rôle dans le pont</summary>
-    public SystemType Type { get; set; }
+    /// <summary>Architecte qui gère ce système</summary>
+    public string? ArchitectId { get; set; }
+    public AppUser? Architect { get; set; }
 
-    /// <summary>État de colonisation</summary>
+    /// <summary>État de colonisation du système dans ce pont spécifique</summary>
     public ColonizationStatus Status { get; set; } = ColonizationStatus.PLANIFIE;
+
+    /// <summary>Coordonnées pour affichage sur le frontend — héritées de Spansh ou EDSM</summary>
+    public float X { get; set; }
+    public float Y { get; set; }
+    public float Z { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-    // FK Architecte — null = Inconnu
-    public string? ArchitectId { get; set; }
-    public AppUser? Architect { get; set; }
-
-    // FK Pont parent    
-    public  List<Bridge> Bridge { get; set; } = null!;
-
-    // Liste chaînée
-    public int? PreviousSystemId { get; set; }
-    public StarSystem? PreviousSystem { get; set; }
-
-    // Calculé dynamiquement — jamais stocké
-    public bool IsStart => PreviousSystemId is null;    
-    // Coordonnées pour affichage sur le frontend - herité de spansh ou EDSM - mis a jour lors de la création de système ou lors d'un refresh forcé
-    public float x { get; set; }
-    public float y { get; set; }
-    public float z { get; set; }
+    // Navigation — Relations vers les ponts via la jonction
+    public ICollection<BridgeStarSystem> BridgeAssociations { get; set; } = [];
 }
 
-public enum SystemType
-{
-    DEBUT   = 0,
-    PILE    = 1,
-    TABLIER = 2,
-    FIN     = 3
-}
+
 
 public enum ColonizationStatus
 {

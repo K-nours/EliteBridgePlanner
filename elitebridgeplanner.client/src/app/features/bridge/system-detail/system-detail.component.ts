@@ -55,12 +55,13 @@ export class SystemDetailComponent {
     if (!sys) return;
     const val = this.form.getRawValue();
     this.store.updateSystem({
-      id: sys.id,
+      bridgeId: sys.bridgeId,
       request: {
         name:        val.name ?? undefined,
         type:        val.type ?? undefined,
         status:      val.status ?? undefined,
-        architectId: val.architectId ?? ''
+        architectId: val.architectId ?? '',
+        starsystemId: sys.id
       }
     });
   }

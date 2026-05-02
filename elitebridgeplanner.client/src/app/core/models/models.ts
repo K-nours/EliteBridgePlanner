@@ -44,10 +44,13 @@ export interface UpdateSystemRequest {
   type?: SystemType;
   status?: ColonizationStatus;
   architectId?: string;
+  starsystemId: number;
 }
 
-export interface MoveSystemRequest {
+export interface MoveSystemRequest {  
+  starSystemId: number,
   insertAtIndex: number;
+
 }
 
 // Auth

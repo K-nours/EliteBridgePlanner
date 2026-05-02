@@ -136,9 +136,9 @@ export const BridgeStore = signalStore(
     },
 
     // ── Mettre à jour un système ───────────────────────────────────────────
-    updateSystem: rxMethod<{ id: number; request: UpdateSystemRequest }>(
+    updateSystem: rxMethod<{ bridgeId: number; request: UpdateSystemRequest }>(
       pipe(
-        switchMap(({ id, request }) => api.updateSystem(id, request).pipe(
+        switchMap(({ bridgeId, request }) => api.updateSystem(bridgeId, request).pipe(
           tap((updated: StarSystemDto) => {
             const bridge = store.activeBridge();
             if (!bridge) return;
@@ -157,11 +157,11 @@ export const BridgeStore = signalStore(
     ),
 
     // ── Réordonner un système ──────────────────────────────────────────────
-    reorderSystem: rxMethod<{ id: number;   insertAtIndex: number }>(
+    reorderSystem: rxMethod<{ bridgeId: number; starSystemId: number;   insertAtIndex: number }>(
       pipe(
-        switchMap(({ id, insertAtIndex }) => api.reorderSystem(id,  { insertAtIndex } ).pipe(
+        switchMap(({ bridgeId, starSystemId, insertAtIndex }) => api.reorderSystem(bridgeId, { starSystemId, insertAtIndex } ).pipe(
           tap(() => {
-            const bridgeId = store.activeBridge()?.id;
+            
             if (bridgeId) {
               api.getBridgeById(bridgeId).subscribe(
                 (activeBridge: BridgeDto) => patchState(store, { activeBridge })

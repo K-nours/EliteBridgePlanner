@@ -7,133 +7,130 @@ using NUnit.Framework;
 
 namespace EliteBridgePlanner.Tests.Controllers;
 
-/// <summary>
-/// Tests unitaires de SystemsController.
-/// Tous les chemins (200, 201, 404) sont couverts.
-/// </summary>
 [TestFixture]
 public class SystemsControllerTests
 {
     private Mock<IBridgeService> _mockService = null!;
     private SystemsController _controller = null!;
 
-    private static StarSystemDto SampleDto(int id = 1) => new(
-        id, "Sol", "DEBUT", "PLANIFIE", 1,null, null, null, 1, DateTime.UtcNow);
-
     [SetUp]
     public void SetUp()
     {
         _mockService = new Mock<IBridgeService>();
-        _controller  = new SystemsController(_mockService.Object);
+        _controller = new SystemsController(_mockService.Object);
     }
 
-    // ── Create ────────────────────────────────────────────────────────────
+    // ── Helper ────────────────────────────────────────────────────────────
+
+    private static StarSystemDto SampleDto(int id = 1) => new(
+        Id: id,
+        Name: "Sol",
+        Type: "DEBUT",
+        Status: "PLANIFIE",
+        Order: 1,
+        PreviousSystemId: null,
+        ArchitectId: null,
+        ArchitectName: null,
+        BridgeId: 1,
+        X: 0,
+        Y: 0,
+        Z: 0,
+        UpdatedAt: DateTime.UtcNow
+    );
+
+    // ── Create ─────────────────────────────────────────────────────────────
 
     [Test]
-    public async Task Create_ValidRequest_Returns201WithDto()
+    public async Task Create_CallsServiceAndReturnsCreatedAtAction()
     {
         // Arrange
-        var request = new CreateSystemRequest("Sol", "DEBUT", "PLANIFIE", 0, null, 1);
-        _mockService.Setup(s => s.AddSystemAsync(request)).ReturnsAsync(SampleDto());
+        var request = new CreateSystemRequest("Sol", "DEBUT", "PLANIFIE", 1, null, 1, 0, 0, 0);
+        var expectedDto = SampleDto();
+        _mockService
+            .Setup(s => s.AddSystemAsync(request))
+            .ReturnsAsync(expectedDto);
 
         // Act
         var result = await _controller.Create(request);
 
         // Assert
-        var created = result as CreatedAtActionResult;
-        Assert.That(created?.StatusCode, Is.EqualTo(201));
-        Assert.That((created!.Value as StarSystemDto)!.Name, Is.EqualTo("Sol"));
+        Assert.That(result, Is.TypeOf<CreatedAtActionResult>());
+        var createdResult = result as CreatedAtActionResult;
+        Assert.That(createdResult?.Value, Is.EqualTo(expectedDto));
+        _mockService.Verify(s => s.AddSystemAsync(request), Times.Once);
     }
 
-    // ── Update ────────────────────────────────────────────────────────────
+    // ── Update ─────────────────────────────────────────────────────────────
 
     [Test]
-    public async Task Update_WhenFound_Returns200()
+    public async Task Update_WithValidId_ReturnOk()
     {
         // Arrange
-        var request = new UpdateSystemRequest("Sol Updated", null, "FINI", null);
-        var updated = SampleDto() with { Name = "Sol Updated", Status = "FINI" };
-        _mockService.Setup(s => s.UpdateSystemAsync(1, request)).ReturnsAsync(updated);
+        var request = new UpdateSystemRequest(1,"Sol Updated", null, "FINI", null, null, null, null);
+        var expectedDto = SampleDto();
+        _mockService
+            .Setup(s => s.UpdateSystemAsync(1, request))
+            .ReturnsAsync(expectedDto);
 
         // Act
         var result = await _controller.Update(1, request);
 
         // Assert
-        var ok = result as OkObjectResult;
-        Assert.That(ok?.StatusCode, Is.EqualTo(200));
+        Assert.That(result, Is.TypeOf<OkObjectResult>());
+        var okResult = result as OkObjectResult;
+        Assert.That(okResult?.Value, Is.EqualTo(expectedDto));
+        _mockService.Verify(s => s.UpdateSystemAsync(1, request), Times.Once);
     }
 
     [Test]
-    public async Task Update_WhenNotFound_Returns404()
+    public async Task Update_WhenNotExists_ReturnsNotFound()
     {
         // Arrange
-        _mockService.Setup(s => s.UpdateSystemAsync(99, It.IsAny<UpdateSystemRequest>()))
-                    .ReturnsAsync((StarSystemDto?)null);
+        var request = new UpdateSystemRequest(null, null, null, null, null, null, null,null);
+        _mockService
+            .Setup(s => s.UpdateSystemAsync(99, request))
+            .ReturnsAsync((StarSystemDto?)null);
 
         // Act
-        var result = await _controller.Update(99, new UpdateSystemRequest(null, null, null, null));
+        var result = await _controller.Update(99, request);
 
         // Assert
-        Assert.That(result, Is.InstanceOf<NotFoundResult>());
+        Assert.That(result, Is.TypeOf<NotFoundResult>());
     }
-
-    // ── Reorder ───────────────────────────────────────────────────────────
-
-    //[Test]
-    //public async Task Reorder_WhenFound_Returns200()
-    //{
-    //    // Arrange
-    //    var reordered = SampleDto() with { Order = 3 };
-    //    _mockService.Setup(s => s.ReorderSystemAsync(1, 3)).ReturnsAsync(reordered);
-
-    //    // Act
-    //    var result = await _controller.Reorder(1, new ReorderSystemRequest(3));
-
-    //    // Assert
-    //    var ok = result as OkObjectResult;
-    //    Assert.That(ok?.StatusCode, Is.EqualTo(200));
-    //    Assert.That((ok!.Value as StarSystemDto)!.Order, Is.EqualTo(3));
-    //}
-
-    //[Test]
-    //public async Task Reorder_WhenNotFound_Returns404()
-    //{
-    //    // Arrange
-    //    _mockService.Setup(s => s.ReorderSystemAsync(99, It.IsAny<int>()))
-    //                .ReturnsAsync((StarSystemDto?)null);
-
-    //    // Act
-    //    var result = await _controller.Reorder(99, new ReorderSystemRequest(1));
-
-    //    // Assert
-    //    Assert.That(result, Is.InstanceOf<NotFoundResult>());
-    //}
 
     // ── Delete ────────────────────────────────────────────────────────────
 
     [Test]
-    public async Task Delete_WhenFound_Returns204()
+    public async Task Delete_WithValidId_ReturnsNoContent()
     {
         // Arrange
-        _mockService.Setup(s => s.DeleteSystemAsync(1)).ReturnsAsync(true);
+        _mockService
+            .Setup(s => s.DeleteSystemAsync(1))
+            .ReturnsAsync(true);
 
         // Act
         var result = await _controller.Delete(1);
 
         // Assert
-        Assert.That(result, Is.InstanceOf<NoContentResult>());
+        Assert.That(result, Is.TypeOf<NoContentResult>());
+        _mockService.Verify(s => s.DeleteSystemAsync(1), Times.Once);
     }
 
     [Test]
-    public async Task Delete_WhenNotFound_Returns404()
+    public async Task Delete_WhenNotExists_ReturnsNotFound()
     {
         // Arrange
-        _mockService.Setup(s => s.DeleteSystemAsync(99)).ReturnsAsync(false);
+        _mockService
+            .Setup(s => s.DeleteSystemAsync(999))
+            .ReturnsAsync(false);
 
         // Act
-        var result = await _controller.Delete(99);
+        var result = await _controller.Delete(999);
 
         // Assert
-        Assert.That(result, Is.InstanceOf<NotFoundResult>());
+        Assert.That(result, Is.TypeOf<NotFoundResult>());
     }
+
+    
 }
+

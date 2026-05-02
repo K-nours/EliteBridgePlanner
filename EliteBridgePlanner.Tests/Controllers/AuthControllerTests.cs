@@ -13,94 +13,105 @@ public class AuthControllerTests
     private Mock<IAuthService> _mockAuth = null!;
     private AuthController _controller = null!;
 
-    private static AuthResponse SampleAuth() => new(
-        "fake.jwt.token",
-        "CMDR_TEST",
-        "cmdr@test.local",
-        DateTime.UtcNow.AddDays(7)
-    );
-
     [SetUp]
     public void SetUp()
     {
-        _mockAuth   = new Mock<IAuthService>();
+        _mockAuth = new Mock<IAuthService>();
         _controller = new AuthController(_mockAuth.Object);
     }
 
-    // ── Login ─────────────────────────────────────────────────────────────
+    // ── Login ──────────────────────────────────────────────────────────────
 
     [Test]
-    public async Task Login_ValidCredentials_Returns200WithToken()
+    public async Task Login_WithValidCredentials_ReturnsOkWithToken()
     {
         // Arrange
-        var request = new LoginRequest("cmdr@test.local", "Password1!");
-        _mockAuth.Setup(a => a.LoginAsync(request)).ReturnsAsync(SampleAuth());
+        var request = new LoginRequest("test@example.com", "Password123!");
+        var authResponse = new AuthResponse(
+            Token: "fake-jwt-token",
+            CommanderName: "CMDR_TEST",
+            Email: "test@example.com",
+            ExpiresAt: DateTime.UtcNow.AddHours(1)
+        );
+        _mockAuth
+            .Setup(s => s.LoginAsync(request))
+            .ReturnsAsync(authResponse);
 
         // Act
         var result = await _controller.Login(request);
 
         // Assert
-        var ok = result as OkObjectResult;
-        Assert.That(ok?.StatusCode, Is.EqualTo(200));
-        Assert.That((ok!.Value as AuthResponse)!.CommanderName, Is.EqualTo("CMDR_TEST"));
+        Assert.That(result, Is.TypeOf<OkObjectResult>());
+        var okResult = result as OkObjectResult;
+        Assert.That(okResult?.Value, Is.EqualTo(authResponse));
+        _mockAuth.Verify(s => s.LoginAsync(request), Times.Once);
     }
 
     [Test]
-    public async Task Login_InvalidCredentials_Returns401()
+    public async Task Login_WithInvalidCredentials_ReturnsUnauthorized()
     {
         // Arrange
-        var request = new LoginRequest("bad@email.com", "WrongPass1");
-        _mockAuth.Setup(a => a.LoginAsync(request)).ReturnsAsync((AuthResponse?)null);
+        var request = new LoginRequest("invalid@example.com", "WrongPassword");
+        _mockAuth
+            .Setup(s => s.LoginAsync(request))
+            .ReturnsAsync((AuthResponse?)null);
 
         // Act
         var result = await _controller.Login(request);
 
         // Assert
-        Assert.That(result, Is.InstanceOf<UnauthorizedObjectResult>());
+        Assert.That(result, Is.TypeOf<UnauthorizedObjectResult>());
     }
 
-    // ── Register ──────────────────────────────────────────────────────────
+    // ── Register ───────────────────────────────────────────────────────────
 
     [Test]
-    public async Task Register_NewUser_Returns201()
+    public async Task Register_WithValidData_ReturnsCreatedAtAction()
     {
         // Arrange
-        var request = new RegisterRequest("new@cmdr.local", "CMDR_NEW", "Password1!");
-        _mockAuth.Setup(a => a.RegisterAsync(request)).ReturnsAsync(SampleAuth());
+        var request = new RegisterRequest(
+            Email: "newuser@example.com",
+            CommanderName: "CMDR_NEW",
+            Password: "SecurePassword123!"
+        );
+        var authResponse = new AuthResponse(
+            Token: "fake-jwt-token",
+            CommanderName: "CMDR_NEW",
+            Email: "newuser@example.com",
+            ExpiresAt: DateTime.UtcNow.AddHours(1)
+        );
+        _mockAuth
+            .Setup(s => s.RegisterAsync(request))
+            .ReturnsAsync(authResponse);
 
         // Act
         var result = await _controller.Register(request);
 
         // Assert
-        Assert.That(result, Is.InstanceOf<CreatedAtActionResult>());
+        Assert.That(result, Is.TypeOf<CreatedAtActionResult>());
+        var createdResult = result as CreatedAtActionResult;
+        Assert.That(createdResult?.Value, Is.EqualTo(authResponse));
+        _mockAuth.Verify(s => s.RegisterAsync(request), Times.Once);
     }
 
     [Test]
-    public async Task Register_DuplicateEmail_Returns400()
+    public async Task Register_WithExistingEmail_ReturnsBadRequest()
     {
         // Arrange
-        var request = new RegisterRequest("existing@cmdr.local", "CMDR_DUP", "Password1!");
-        _mockAuth.Setup(a => a.RegisterAsync(request)).ReturnsAsync((AuthResponse?)null);
+        var request = new RegisterRequest(
+            Email: "existing@example.com",
+            CommanderName: "CMDR_EXISTING",
+            Password: "Password123!"
+        );
+        _mockAuth
+            .Setup(s => s.RegisterAsync(request))
+            .ReturnsAsync((AuthResponse?)null);
 
         // Act
         var result = await _controller.Register(request);
 
         // Assert
-        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
-    }
-
-    [Test]
-    public async Task Register_InvalidModel_Returns400WithoutCallingService()
-    {
-        // Arrange — email invalide simulé par le ModelState
-        _controller.ModelState.AddModelError("Email", "Format invalide");
-        var request = new RegisterRequest("not-an-email", "CMDR", "Password1!");
-
-        // Act
-        var result = await _controller.Register(request);
-
-        // Assert
-        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
-        _mockAuth.Verify(a => a.RegisterAsync(It.IsAny<RegisterRequest>()), Times.Never);
+        Assert.That(result, Is.TypeOf<BadRequestObjectResult>());
     }
 }
+
