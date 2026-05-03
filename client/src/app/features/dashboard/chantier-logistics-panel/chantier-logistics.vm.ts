@@ -8,7 +8,6 @@ export type ResourceAvailabilityStatus = 'ok' | 'warn' | 'zero';
 
 /** Indique si les quantités côté CAPI sont exploitables (sinon afficher « — »). */
 export interface InventoryTrust {
-  shipKnown: boolean;
   carrierKnown: boolean;
 }
 
@@ -19,12 +18,11 @@ export interface ChantierResourceRowVm {
   need: number;
   /** Somme des besoins restants pour cette marchandise, tous chantiers actifs « mine » du commandant (clé unique chantier). */
   globalNeed: number;
-  shipQty: number;
   carrierQty: number;
   status: ResourceAvailabilityStatus;
-  /** Reste à prendre pour couvrir CE chantier : max(0, need - (soute + FC)). */
+  /** Reste à prendre pour couvrir CE chantier : max(0, need - FC). */
   resteChantier: number;
-  /** Reste à prendre pour couvrir TOUS les chantiers : max(0, globalNeed - (soute + FC)). */
+  /** Reste à prendre pour couvrir TOUS les chantiers : max(0, globalNeed - FC). */
   resteGlobal: number;
 }
 
@@ -570,26 +568,21 @@ export function dedupeChantierSitesById(sites: readonly ActiveChantierSite[]): A
  * Un chantier = une entrée par `chantierId` (pas de fusion ni doublon).
  */
 /**
- * Fusionne une réponse inventaire avec le cache : ne remplace pas soute / FC si une erreur CAPI partielle
- * indique que l’agrégat n’est pas fiable pour cette partie.
+ * Fusionne une réponse inventaire avec le cache : ne remplace pas le FC si une erreur CAPI partielle
+ * indique que l’agrégat n’est pas fiable.
  */
 export function mergeInventoryDtos(
   previous: ChantierLogisticsInventoryDto | null,
   incoming: ChantierLogisticsInventoryDto,
 ): ChantierLogisticsInventoryDto {
-  const shipOk = !incoming.shipCargoError;
   const fcOk = !incoming.carrierCargoError;
   return {
-    shipCargoByName: shipOk ? { ...incoming.shipCargoByName } : { ...(previous?.shipCargoByName ?? {}) },
     carrierCargoByName: fcOk ? { ...incoming.carrierCargoByName } : { ...(previous?.carrierCargoByName ?? {}) },
     fetchedAtUtc: incoming.fetchedAtUtc,
-    shipCargoError: incoming.shipCargoError,
     carrierCargoError: incoming.carrierCargoError,
-    shipRateLimited: incoming.shipRateLimited,
     carrierRateLimited: incoming.carrierRateLimited,
     rateLimited: incoming.rateLimited,
     retryAfterSeconds: incoming.retryAfterSeconds ?? null,
-    fleetCarrierSkippedDueToProfileRateLimit: incoming.fleetCarrierSkippedDueToProfileRateLimit,
   };
 }
 
@@ -602,36 +595,15 @@ export function computeInventoryTrust(
   inv: ChantierLogisticsInventoryDto | null,
 ): InventoryTrust {
   if (!connected || inventoryHttpError || !inv) {
-    return { shipKnown: false, carrierKnown: false };
+    return { carrierKnown: false };
   }
-  const shipErr = inv.shipCargoError;
   const fcErr = inv.carrierCargoError;
-  const hasShip = Object.keys(inv.shipCargoByName ?? {}).length > 0;
   const hasFc = Object.keys(inv.carrierCargoByName ?? {}).length > 0;
-  const shipRl =
-    inv.shipRateLimited === true || (shipErr?.includes('429') === true || shipErr?.includes('rate limit') === true);
   const fcRl =
     inv.carrierRateLimited === true ||
     (fcErr?.includes('429') === true || fcErr?.includes('rate limit') === true);
-  const shipKnown = !shipErr || (shipRl && hasShip);
   const carrierKnown = !fcErr || (fcRl && hasFc);
-  return { shipKnown, carrierKnown };
-}
-
-/** Log temporaire : payload soute brut vs affichage (test après déplacement cargaison). */
-export function logShipCargoPayloadDiagnostic(inv: ChantierLogisticsInventoryDto | null): void {
-  if (!inv) {
-    console.debug('[Logistics][ShipDebug] inventaire null — pas de payload soute');
-    return;
-  }
-  const raw = inv.shipCargoByName ?? {};
-  console.debug('[Logistics][ShipDebug] soute — payload brut (API fusionnée client)', {
-    fetchedAtUtc: inv.fetchedAtUtc,
-    shipCargoError: inv.shipCargoError,
-    shipRateLimited: inv.shipRateLimited,
-    rawKeyCount: Object.keys(raw).length,
-    shipCargoByName: raw,
-  });
+  return { carrierKnown };
 }
 
 /** Debug : une ligne par ressource avec noms bruts / clé / quantités affichées. */
@@ -645,12 +617,7 @@ export function logInventoryMappingDebug(
   for (const r of constructionResources) {
     if (r.remaining <= 0) continue;
     const key = canonicalCommodityKey(r.name);
-    const shipQty = lookupCargoQty(inv?.shipCargoByName, r.name);
     const fcQty = lookupCargoQty(inv?.carrierCargoByName, r.name);
-    const shipKeys =
-      inv?.shipCargoByName != null
-        ? Object.keys(inv.shipCargoByName).filter((k) => canonicalCommodityKey(k) === key)
-        : [];
     const fcKeys =
       inv?.carrierCargoByName != null
         ? Object.keys(inv.carrierCargoByName).filter((k) => canonicalCommodityKey(k) === key)
@@ -659,11 +626,8 @@ export function logInventoryMappingDebug(
       siteName,
       commodityChantier: r.name,
       canonicalKey: key,
-      commodityRawShipKeys: shipKeys,
       commodityRawFcKeys: fcKeys,
-      qtyShipFound: shipQty,
       qtyFcFound: fcQty,
-      qtyShipDisplayed: trust.shipKnown ? shipQty : '—',
       qtyFcDisplayed: trust.carrierKnown ? fcQty : '—',
     });
   }
@@ -715,15 +679,12 @@ export function lookupCargoQty(map: Record<string, number> | undefined, commodit
 
 function computeStatus(
   need: number,
-  shipQty: number,
   carrierQty: number,
   trust: InventoryTrust,
   globalNeed: number,
 ): ResourceAvailabilityStatus {
-  let sum = 0;
-  if (trust.shipKnown) sum += shipQty;
-  if (trust.carrierKnown) sum += carrierQty;
-  if (!trust.shipKnown && !trust.carrierKnown) return 'zero';
+  if (!trust.carrierKnown) return 'zero';
+  const sum = carrierQty;
   if (sum === 0) return 'zero';
   // Vert seulement si le stock couvre TOUS les chantiers (globalNeed).
   // Orange si ça couvre ce chantier mais pas le global.
@@ -732,12 +693,11 @@ function computeStatus(
 }
 
 /**
- * Lignes ressources : besoin chantier vs soute vaisseau / FC (stocks séparés).
+ * Lignes ressources : besoin chantier vs FC (soute vaisseau non disponible via CAPI).
  * `constructionResources` doit être exclusivement ceux du chantier courant (pas de fusion).
  */
 export function buildChantierResourceRows(
   constructionResources: ConstructionResourceSnapshot[] | undefined,
-  shipCargoByName: Record<string, number>,
   carrierCargoByName: Record<string, number>,
   trust: InventoryTrust,
   globalNeedByCommodity: Map<string, number>,
@@ -746,11 +706,10 @@ export function buildChantierResourceRows(
   const rows: ChantierResourceRowVm[] = [];
   for (const r of constructionResources) {
     if (r.remaining <= 0) continue;
-    const shipQty = lookupCargoQty(shipCargoByName, r.name);
     const carrierQty = lookupCargoQty(carrierCargoByName, r.name);
     const globalNeed = globalNeedForCommodity(globalNeedByCommodity, r.name);
-    const status = computeStatus(r.remaining, shipQty, carrierQty, trust, globalNeed);
-    const knownSum = (trust.shipKnown ? shipQty : 0) + (trust.carrierKnown ? carrierQty : 0);
+    const status = computeStatus(r.remaining, carrierQty, trust, globalNeed);
+    const knownSum = trust.carrierKnown ? carrierQty : 0;
     const resteChantier = Math.max(0, r.remaining - knownSum);
     const resteGlobal = Math.max(0, globalNeed - knownSum);
     rows.push({
@@ -758,7 +717,6 @@ export function buildChantierResourceRows(
       displayName: getResourceDisplayLabel(r.name, 'fr'),
       need: r.remaining,
       globalNeed,
-      shipQty,
       carrierQty,
       status,
       resteChantier,
@@ -769,17 +727,14 @@ export function buildChantierResourceRows(
   return rows;
 }
 
-/** Somme affichable pour la colonne Total (uniquement les stocks connus). */
+/** Somme affichable pour la colonne Total (FC uniquement). */
 export function knownStockSum(row: ChantierResourceRowVm, trust: InventoryTrust): number {
-  let s = 0;
-  if (trust.shipKnown) s += row.shipQty;
-  if (trust.carrierKnown) s += row.carrierQty;
-  return s;
+  return trust.carrierKnown ? row.carrierQty : 0;
 }
 
-/** Afficher une colonne Total secondaire (au moins un stock connu). */
+/** Afficher une colonne Total secondaire (FC connu). */
 export function showTotalColumn(trust: InventoryTrust): boolean {
-  return trust.shipKnown || trust.carrierKnown;
+  return trust.carrierKnown;
 }
 
 export interface StationDisplayParts {

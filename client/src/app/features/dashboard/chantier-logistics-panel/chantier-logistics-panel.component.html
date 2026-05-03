@@ -77,8 +77,6 @@
                 <col class="chantier-logistics-res-col chantier-logistics-res-col--name" />
                 <col class="chantier-logistics-res-col chantier-logistics-res-col--need" />
                 <col class="chantier-logistics-res-col chantier-logistics-res-col--gap" />
-                <col class="chantier-logistics-res-col chantier-logistics-res-col--ship" />
-                <col class="chantier-logistics-res-col chantier-logistics-res-col--gap" />
                 <col class="chantier-logistics-res-col chantier-logistics-res-col--fc" />
                 <col class="chantier-logistics-res-col chantier-logistics-res-col--gap" />
                 <col class="chantier-logistics-res-col chantier-logistics-res-col--global" />
@@ -98,14 +96,6 @@
                     title="Besoin restant sur ce chantier"
                   >
                     Besoin
-                  </th>
-                  <td class="chantier-logistics-res-th chantier-logistics-res-th--gap" aria-hidden="true"></td>
-                  <th
-                    scope="col"
-                    class="chantier-logistics-res-th chantier-logistics-res-th--num"
-                    title="Cargaison vaisseau (Frontier)"
-                  >
-                    Soute
                   </th>
                   <td class="chantier-logistics-res-th chantier-logistics-res-th--gap" aria-hidden="true"></td>
                   <th
@@ -155,14 +145,6 @@
                   >
                     <th scope="row" class="chantier-logistics-res-td chantier-logistics-res-td--name" [title]="row.name">{{ row.displayName }}</th>
                     <td class="chantier-logistics-res-td chantier-logistics-res-td--need">{{ row.need }}</td>
-                    <td class="chantier-logistics-res-td chantier-logistics-res-td--gap" aria-hidden="true"></td>
-                    <td class="chantier-logistics-res-td chantier-logistics-res-td--ship">
-                      @if (!trust.shipKnown) {
-                        <span class="chantier-logistics-res-dash">—</span>
-                      } @else {
-                        <span class="chantier-logistics-res-num chantier-logistics-res-num--ship">{{ row.shipQty }}</span>
-                      }
-                    </td>
                     <td class="chantier-logistics-res-td chantier-logistics-res-td--gap" aria-hidden="true"></td>
                     <td class="chantier-logistics-res-td chantier-logistics-res-td--fc">
                       @if (!trust.carrierKnown) {
@@ -273,8 +255,8 @@
         class="chantier-logistics-cargo-sync-btn"
         [class.chantier-logistics-cargo-sync-btn--busy]="cargoSyncLoading()"
         [disabled]="!ui.selectedSite() || cargoSyncLoading() || realSyncTickRunning() || !frontierAuth.isConnected() || !!ui.chantierGoneMessage()"
-        aria-label="Synchroniser soute et FC depuis Frontier"
-        title="Sync cargo — met à jour soute et FC uniquement (sans refresh des besoins chantier)"
+        aria-label="Synchroniser le FC depuis Frontier"
+        title="Sync cargo — met à jour le FC uniquement (sans refresh des besoins chantier)"
         (click)="syncCargoOnly($event)"
       >
         Sync cargo
@@ -408,8 +390,8 @@
               class="chantier-logistics-cargo-sync-btn"
               [class.chantier-logistics-cargo-sync-btn--busy]="cargoSyncLoading()"
               [disabled]="!ui.selectedSite() || cargoSyncLoading() || realSyncTickRunning() || !frontierAuth.isConnected() || !!ui.chantierGoneMessage()"
-              aria-label="Synchroniser soute et FC depuis Frontier"
-              title="Sync cargo — met à jour soute et FC uniquement (sans refresh des besoins chantier)"
+              aria-label="Synchroniser le FC depuis Frontier"
+              title="Sync cargo — met à jour le FC uniquement (sans refresh des besoins chantier)"
               (click)="syncCargoOnly($event)"
             >
               Sync cargo

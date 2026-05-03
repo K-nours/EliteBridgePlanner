@@ -155,16 +155,15 @@ export class ChantierLogisticsPanelComponent {
     const globalNeedByCommodity = buildGlobalNeedByCommodityMap(mineActive);
     return buildChantierResourceRows(
       needs,
-      inv?.shipCargoByName ?? {},
       inv?.carrierCargoByName ?? {},
       this.inventoryTrust(),
       globalNeedByCommodity,
     );
   });
 
-  /** Colorer les lignes seulement quand au moins un stock est connu. */
+  /** Colorer les lignes seulement quand le FC est connu. */
   protected readonly inventoryRowHasStockInfo = computed(
-    () => this.inventoryTrust().shipKnown || this.inventoryTrust().carrierKnown,
+    () => this.inventoryTrust().carrierKnown,
   );
 
   protected readonly knownStockSum = knownStockSum;
@@ -199,7 +198,6 @@ export class ChantierLogisticsPanelComponent {
       console.debug('[Logistics] global requirements aggregate:', Object.fromEntries(globalMap.entries()));
       logInventoryMappingDebug(site.stationName ?? '—', site.constructionResources, inv, trust);
       console.debug('[Logistics] stocks (merged payload):', {
-        shipStockMapped: inv?.shipCargoByName ?? {},
         fcStockMapped: inv?.carrierCargoByName ?? {},
       });
     });
@@ -368,7 +366,6 @@ export class ChantierLogisticsPanelComponent {
       if (this.ui.chantierMarketIdCapiIssue() != null) return 'chantierwarn';
       if (
         this.ui.realSyncInventoryHttpError() != null ||
-        this.ui.realSyncShipCargoError() != null ||
         this.ui.realSyncCarrierCargoError() != null
       ) {
         return 'partial';
@@ -414,7 +411,6 @@ export class ChantierLogisticsPanelComponent {
     const ch = this.ui.realSyncChantierError();
     const marketIssue = this.ui.chantierMarketIdCapiIssue();
     const invHttp = this.ui.realSyncInventoryHttpError();
-    const ship = this.ui.realSyncShipCargoError();
     const fc = this.ui.realSyncCarrierCargoError();
     if (auth) parts.push(`Auth Frontier : ${auth}`);
     if (ch) parts.push(`Chantier : ${ch}`);
@@ -424,7 +420,6 @@ export class ChantierLogisticsPanelComponent {
       );
     }
     if (invHttp) parts.push(`Inventaire HTTP : ${invHttp}`);
-    if (ship) parts.push(`Soute CAPI : ${ship}`);
     if (fc) parts.push(`FC CAPI : ${fc}`);
     const sec = this.capiRateLimit.secondsUntilAllowed();
     if (sec > 0) {
@@ -507,18 +502,13 @@ export class ChantierLogisticsPanelComponent {
         return this.fetchPlayerInventoryForRealSync$().pipe(
           tap((dto) => {
             if (dto) {
-              const shipOk = !dto.shipCargoError;
               const fcOk = !dto.carrierCargoError;
-              console.debug(
-                `[RealSync] ship cargo ${shipOk ? 'success' : 'fail'} chantierId=${chantierId}`,
-                dto.shipCargoError ?? '',
-              );
               console.debug(
                 `[RealSync] FC cargo ${fcOk ? 'success' : 'fail'} chantierId=${chantierId}`,
                 dto.carrierCargoError ?? '',
               );
             } else {
-              console.debug(`[RealSync] inventory HTTP fail chantierId=${chantierId} (cache soute/FC conservé)`);
+              console.debug(`[RealSync] inventory HTTP fail chantierId=${chantierId} (cache FC conservé)`);
             }
             if (chantierPipelineFailed) {
               // Chantier en échec mais inventaire accessible : mettre à jour soute/FC sans effacer ERREUR
@@ -604,19 +594,14 @@ export class ChantierLogisticsPanelComponent {
     console.debug(`[RealSync] ${message}`);
   }
 
-  /** Diagnostic inventaire dans le panneau Sync — soute + FC payload résumé. */
+  /** Diagnostic inventaire dans le panneau Sync — FC payload résumé. */
   private logInventoryDiagnosticToSync(inv: ChantierLogisticsInventoryDto, source: 'real-sync' | 'effect'): void {
-    const shipCount = Object.keys(inv.shipCargoByName ?? {}).length;
     const fcCount = Object.keys(inv.carrierCargoByName ?? {}).length;
-    const shipErr = inv.shipCargoError ? ` ⚠ ${inv.shipCargoError}` : '';
     const fcErr = inv.carrierCargoError ? ` ⚠ ${inv.carrierCargoError}` : '';
     const rl = inv.rateLimited ? ' [429]' : '';
     this.syncLog.addLog(
-      `[Inventaire${rl}] (${source}) soute=${shipCount} clé(s)${shipErr} · FC=${fcCount} clé(s)${fcErr}`,
+      `[Inventaire${rl}] (${source}) FC=${fcCount} clé(s)${fcErr}`,
     );
-    if (inv.shipCargoDebugHint) {
-      this.syncLog.addLog(`[Inventaire][DEBUG soute] ${inv.shipCargoDebugHint}`);
-    }
   }
 
   private applyRealSyncHttpError(err: unknown, chantierId: number, stationLabel: string): void {

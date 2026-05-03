@@ -102,9 +102,6 @@ export class ChantierLogisticsUiService {
   /** 401 Frontier sur le refresh chantier. */
   readonly realSyncAuthError = signal<string | null>(null);
 
-  /** Dernier message CAPI pour la soute vaisseau (succès partiel du cycle). */
-  readonly realSyncShipCargoError = signal<string | null>(null);
-
   /** Dernier message CAPI pour le FC (succès partiel du cycle). */
   readonly realSyncCarrierCargoError = signal<string | null>(null);
 
@@ -198,24 +195,17 @@ export class ChantierLogisticsUiService {
     }
     if (opts?.inventoryHttpFailed) {
       this.realSyncInventoryHttpError.set('Inventaire Frontier indisponible (réseau ou serveur)');
-      this.realSyncShipCargoError.set(null);
       this.realSyncCarrierCargoError.set(null);
     } else if (opts?.inventory) {
       this.realSyncInventoryHttpError.set(null);
       const inv = opts.inventory;
-      const ship429 =
-        inv.shipRateLimited === true ||
-        inv.shipCargoError?.includes('429') === true ||
-        inv.shipCargoError?.includes('rate limit') === true;
       const fc429 =
         inv.carrierRateLimited === true ||
         inv.carrierCargoError?.includes('429') === true ||
         inv.carrierCargoError?.includes('rate limit') === true;
-      this.realSyncShipCargoError.set(ship429 ? null : inv.shipCargoError);
       this.realSyncCarrierCargoError.set(fc429 ? null : inv.carrierCargoError);
     } else {
       this.realSyncInventoryHttpError.set(null);
-      this.realSyncShipCargoError.set(null);
       this.realSyncCarrierCargoError.set(null);
     }
     this.persistCurrentChantierIfAny();
@@ -237,7 +227,6 @@ export class ChantierLogisticsUiService {
     const t = new Date().toISOString();
     this.lastRealSyncAttemptAt.set(t);
     this.lastRealSyncAttemptOutcome.set('failure');
-    this.realSyncShipCargoError.set(null);
     this.realSyncCarrierCargoError.set(null);
     this.realSyncInventoryHttpError.set(null);
     this.persistCurrentChantierIfAny();
@@ -250,15 +239,10 @@ export class ChantierLogisticsUiService {
    */
   touchRealSyncInventoryOnChantierError(inventory: ChantierLogisticsInventoryDto): void {
     this.lastRealSyncSuccessAt.set(new Date().toISOString());
-    const ship429 =
-      inventory.shipRateLimited === true ||
-      inventory.shipCargoError?.includes('429') === true ||
-      inventory.shipCargoError?.includes('rate limit') === true;
     const fc429 =
       inventory.carrierRateLimited === true ||
       inventory.carrierCargoError?.includes('429') === true ||
       inventory.carrierCargoError?.includes('rate limit') === true;
-    this.realSyncShipCargoError.set(ship429 ? null : (inventory.shipCargoError ?? null));
     this.realSyncCarrierCargoError.set(fc429 ? null : (inventory.carrierCargoError ?? null));
     this.realSyncInventoryHttpError.set(null);
     this.persistCurrentChantierIfAny();
@@ -292,7 +276,6 @@ export class ChantierLogisticsUiService {
   private clearRealSyncErrorSignals(): void {
     this.realSyncChantierError.set(null);
     this.realSyncAuthError.set(null);
-    this.realSyncShipCargoError.set(null);
     this.realSyncCarrierCargoError.set(null);
     this.realSyncInventoryHttpError.set(null);
   }

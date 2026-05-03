@@ -32,15 +32,8 @@ public class FrontierLogisticsInventoryService
     {
         var dto = new FrontierLogisticsInventoryDto();
 
-        // /profile désactivé temporairement — la CAPI ne retourne que le total (entier) pour ship.cargo,
-        // pas le détail des items. On passe directement par /journal.
-        // var (shipStatus, shipBody, shipRetryAfter) =
-        //     await _auth.FetchCapiRawWithRetryAsync(accessToken, "/profile", TimeSpan.FromSeconds(15), ct);
-        // ... (parsing /profile commenté)
-
-        await TryFetchShipCargoFromJournalAsync(accessToken, dto, ct);
-
-        // /fleetcarrier : toujours appelé, même si /profile était en 429.
+        // Note : la soute vaisseau n'est pas disponible via CAPI (ni /profile ni /journal ne retournent le détail).
+        // Seul le FC est récupéré.
         var (fcStatus, fcBody, fcRetryAfter) =
             await _auth.FetchCapiRawWithRetryAsync(accessToken, "/fleetcarrier", TimeSpan.FromSeconds(60), ct);
         if (fcStatus == 404 || fcStatus == 204)
@@ -79,113 +72,6 @@ public class FrontierLogisticsInventoryService
         }
 
         return dto;
-    }
-
-    /// <summary>
-    /// Appelle /journal CAPI (journal du jour, JSONL), trouve le dernier event Cargo du vaisseau
-    /// et peuple dto.ShipCargoByName si des items sont trouvés.
-    /// </summary>
-    private async Task TryFetchShipCargoFromJournalAsync(string accessToken, FrontierLogisticsInventoryDto dto, CancellationToken ct)
-    {
-        var (journalStatus, journalBody, _) =
-            await _auth.FetchCapiRawWithRetryAsync(accessToken, "/journal", TimeSpan.FromSeconds(30), ct);
-
-        _log.LogInformation("[LogisticsInventory] /journal HTTP {Status} len={Len}", journalStatus, journalBody?.Length ?? 0);
-
-        if (journalStatus == 204)
-        {
-            // Pas de session aujourd'hui
-            _log.LogInformation("[LogisticsInventory] /journal 204 — pas de session aujourd'hui");
-            return;
-        }
-        if (journalStatus == 429)
-        {
-            dto.JournalCargoError = "Journal (rate limit)";
-            _log.LogWarning("[LogisticsInventory] /journal HTTP 429");
-            return;
-        }
-        if (journalStatus != 200 && journalStatus != 206 || string.IsNullOrEmpty(journalBody))
-        {
-            dto.JournalCargoError = journalStatus == 0 ? "Journal indisponible (réseau)" : $"Journal HTTP {journalStatus}";
-            _log.LogWarning("[LogisticsInventory] /journal HTTP {Status}", journalStatus);
-            return;
-        }
-
-        if (journalStatus == 206)
-            _log.LogInformation("[LogisticsInventory] /journal 206 Partial — données partielles, on tente quand même");
-
-        try
-        {
-            // Le journal est du JSONL : une entrée JSON par ligne
-            JsonElement? lastCargoEvent = null;
-            var lines = journalBody.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-            foreach (var line in lines)
-            {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                try
-                {
-                    using var lineDoc = JsonDocument.Parse(line);
-                    var root = lineDoc.RootElement;
-                    if (root.ValueKind != JsonValueKind.Object) continue;
-                    if (!root.TryGetProperty("event", out var evtProp) || evtProp.GetString() != "Cargo") continue;
-                    // Uniquement le vaisseau (pas SRV)
-                    if (root.TryGetProperty("Vessel", out var vesselProp))
-                    {
-                        var vessel = vesselProp.GetString();
-                        if (!string.IsNullOrEmpty(vessel) && !vessel.Equals("Ship", StringComparison.OrdinalIgnoreCase)) continue;
-                    }
-                    lastCargoEvent = root.Clone();
-                }
-                catch { /* ligne malformée, on ignore */ }
-            }
-
-            if (lastCargoEvent == null)
-            {
-                _log.LogInformation("[LogisticsInventory] /journal — aucun event Cargo vaisseau trouvé ({LineCount} lignes)", lines.Length);
-                return;
-            }
-
-            _log.LogInformation("[LogisticsInventory] /journal — event Cargo trouvé");
-
-            if (!lastCargoEvent.Value.TryGetProperty("Inventory", out var inventory) || inventory.ValueKind != JsonValueKind.Array)
-            {
-                _log.LogInformation("[LogisticsInventory] /journal — event Cargo sans Inventory (soute vide ?)");
-                dto.ShipCargoSource = "journal";
-                return;
-            }
-
-            foreach (var item in inventory.EnumerateArray())
-            {
-                if (item.ValueKind != JsonValueKind.Object) continue;
-                // Nom : champ "Name" (interne ex "steel") ou "Name_Localised"
-                string? name = null;
-                if (item.TryGetProperty("Name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String)
-                    name = nameProp.GetString();
-                if (string.IsNullOrWhiteSpace(name) && item.TryGetProperty("Name_Localised", out var locProp) && locProp.ValueKind == JsonValueKind.String)
-                    name = locProp.GetString();
-                if (string.IsNullOrWhiteSpace(name)) continue;
-
-                var qty = 0;
-                if (item.TryGetProperty("Count", out var countProp) && countProp.ValueKind == JsonValueKind.Number)
-                    countProp.TryGetInt32(out qty);
-                if (qty <= 0) continue;
-
-                AddOrMerge(dto.ShipCargoByName, name, qty);
-            }
-
-            _log.LogInformation("[LogisticsInventory] /journal cargo keys={Count} items=[{Keys}]",
-                dto.ShipCargoByName.Count,
-                string.Join(", ", dto.ShipCargoByName.Keys));
-
-            if (dto.ShipCargoByName.Count > 0)
-                dto.ShipCargoSource = "journal";
-        }
-        catch (Exception ex)
-        {
-            dto.JournalCargoError = "Journal illisible";
-            _log.LogWarning(ex, "[LogisticsInventory] parse /journal");
-        }
     }
 
     /// <summary>
@@ -643,63 +529,4 @@ public class FrontierLogisticsInventoryService
         return 0;
     }
 
-    /// <summary>
-    /// [DEBUG temporaire] Cherche le premier bloc "cargo" dans le JSON /profile
-    /// et retourne une description compacte de sa structure.
-    /// </summary>
-    private static string BuildCargoDebugHint(JsonElement root)
-    {
-        return FindCargoHint(root, depth: 0, path: "root") ?? "cargo: introuvable dans le JSON";
-    }
-
-    private static string? FindCargoHint(JsonElement el, int depth, string path)
-    {
-        if (depth > 8) return null;
-        if (el.ValueKind == JsonValueKind.Object)
-        {
-            foreach (var p in el.EnumerateObject())
-            {
-                var childPath = $"{path}.{p.Name}";
-                if (p.Name.Equals("cargo", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (p.Value.ValueKind == JsonValueKind.Object)
-                    {
-                        var subKeys = p.Value.EnumerateObject()
-                            .Select(inner =>
-                            {
-                                if (inner.Value.ValueKind == JsonValueKind.Array)
-                                    return $"{inner.Name}(array[{inner.Value.GetArrayLength()}])";
-                                if (inner.Value.ValueKind == JsonValueKind.Object)
-                                {
-                                    var keys = inner.Value.EnumerateObject().Take(3).Select(k => k.Name);
-                                    return $"{inner.Name}(obj[{string.Join(",", keys)}])";
-                                }
-                                var raw = inner.Value.GetRawText();
-                                return $"{inner.Name}={raw[..Math.Min(40, raw.Length)]}";
-                            });
-                        return $"path={childPath} kind=Object subKeys=[{string.Join(" | ", subKeys)}]";
-                    }
-                    if (p.Value.ValueKind == JsonValueKind.Array)
-                    {
-                        var first = p.Value.EnumerateArray().Take(1).Select(x => x.GetRawText()[..Math.Min(120, x.GetRawText().Length)]).FirstOrDefault() ?? "(vide)";
-                        return $"path={childPath} kind=Array len={p.Value.GetArrayLength()} first={first}";
-                    }
-                    return $"path={childPath} kind={p.Value.ValueKind} raw={p.Value.GetRawText()[..Math.Min(80, p.Value.GetRawText().Length)]}";
-                }
-                var found = FindCargoHint(p.Value, depth + 1, childPath);
-                if (found != null) return found;
-            }
-        }
-        else if (el.ValueKind == JsonValueKind.Array)
-        {
-            var i = 0;
-            foreach (var item in el.EnumerateArray())
-            {
-                var found = FindCargoHint(item, depth + 1, $"{path}[{i++}]");
-                if (found != null) return found;
-                if (i > 2) break;
-            }
-        }
-        return null;
-    }
 }
