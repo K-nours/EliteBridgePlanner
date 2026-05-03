@@ -41,9 +41,9 @@ public class FrontierLogisticsInventoryService
             dto.RateLimited = true;
             dto.RetryAfterSeconds = shipRetryAfter ?? 60;
             dto.ShipCargoError = "Profil Frontier (rate limit)";
-            dto.FleetCarrierSkippedDueToProfileRateLimit = true;
-            _log.LogWarning("[LogisticsInventory] /profile HTTP 429 — skip /fleetcarrier, RetryAfter={Ra}s", dto.RetryAfterSeconds);
-            return dto;
+            dto.FleetCarrierSkippedDueToProfileRateLimit = false;
+            _log.LogWarning("[LogisticsInventory] /profile HTTP 429 — tentative /fleetcarrier quand même, RetryAfter={Ra}s", dto.RetryAfterSeconds);
+            // On continue vers /fleetcarrier même en 429 sur /profile
         }
 
         if (shipStatus != 200 || string.IsNullOrEmpty(shipBody))
@@ -56,7 +56,12 @@ public class FrontierLogisticsInventoryService
             try
             {
                 using var doc = JsonDocument.Parse(shipBody);
+                var rootKeys = doc.RootElement.ValueKind == JsonValueKind.Object
+                    ? string.Join(", ", doc.RootElement.EnumerateObject().Select(p => p.Name))
+                    : "(non-objet)";
+                _log.LogInformation("[LogisticsInventory] /profile root keys=[{RootKeys}]", rootKeys);
                 dto.ShipCargoDebugHint = BuildCargoDebugHint(doc.RootElement);
+                _log.LogInformation("[LogisticsInventory] /profile cargo hint: {Hint}", dto.ShipCargoDebugHint);
                 MergeCargoArraysFromRoot(doc.RootElement, dto.ShipCargoByName, _log);
                 _log.LogInformation("[LogisticsInventory] ship cargo keys={Count} items=[{Keys}]",
                     dto.ShipCargoByName.Count,
@@ -69,7 +74,7 @@ public class FrontierLogisticsInventoryService
             }
         }
 
-        // /fleetcarrier : seulement si /profile n’a pas été limité (évite 2 hits CAPI inutiles).
+        // /fleetcarrier : toujours appelé, même si /profile était en 429.
         var (fcStatus, fcBody, fcRetryAfter) =
             await _auth.FetchCapiRawWithRetryAsync(accessToken, "/fleetcarrier", TimeSpan.FromSeconds(60), ct);
         if (fcStatus == 404)
@@ -289,7 +294,7 @@ public class FrontierLogisticsInventoryService
             "robotics" or "robots" => "robotics",
             "resonatingseparators" or "resonating separators"
                 or "séparateurs à résonance" or "separateurs a resonance" => "resonatingseparators",
-            "complexcatalysts" or "complex catalysts" or "catalyseurs complexes" => "complexcatalysts",
+            "complexcatalysts" or "complex catalysts" or "advanced catalysers" or "catalyseurs complexes" => "complexcatalysts",
             "diagnosticssensor" or "diagnostics sensor"
                 or "capteur diagnostic d'équipement" or "capteur diagnostic d equipement" => "diagnosticssensor",
             "medicaldiagnosticequipment" or "medical diagnostic equipment"
