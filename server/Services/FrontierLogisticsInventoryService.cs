@@ -241,6 +241,9 @@ public class FrontierLogisticsInventoryService
             "landenrichmentsystems" or "land enrichment systems" or "landenviromentalsystems"
                 or "systèmes d'enrichissement" or "systemes d enrichissement"
                 or "sys. enrichissement sols" => "landenrichmentsystems",
+            "terrainenrichmentsystems" or "terrain enrichment systems"
+                or "sys. enrichissement terrain" or "systèmes d'enrichissement du terrain"
+                or "systemes d enrichissement du terrain" => "terrainenrichmentsystems",
             "animalmonitor" or "animal monitor" or "animalnmonitor"
                 or "sys. surveillance animale" or "système de surveillance animale" => "animalmonitor",
             "telemetrysuite" or "telemetry suite"
