@@ -32,52 +32,20 @@ public class FrontierLogisticsInventoryService
     {
         var dto = new FrontierLogisticsInventoryDto();
 
-        var (shipStatus, shipBody, shipRetryAfter) =
-            await _auth.FetchCapiRawWithRetryAsync(accessToken, "/profile", TimeSpan.FromSeconds(15), ct);
+        // /profile désactivé temporairement — la CAPI ne retourne que le total (entier) pour ship.cargo,
+        // pas le détail des items. On passe directement par /journal.
+        // var (shipStatus, shipBody, shipRetryAfter) =
+        //     await _auth.FetchCapiRawWithRetryAsync(accessToken, "/profile", TimeSpan.FromSeconds(15), ct);
+        // ... (parsing /profile commenté)
 
-        if (shipStatus == 429)
-        {
-            dto.ShipRateLimited = true;
-            dto.RateLimited = true;
-            dto.RetryAfterSeconds = shipRetryAfter ?? 60;
-            dto.ShipCargoError = "Profil Frontier (rate limit)";
-            dto.FleetCarrierSkippedDueToProfileRateLimit = false;
-            _log.LogWarning("[LogisticsInventory] /profile HTTP 429 — tentative /fleetcarrier quand même, RetryAfter={Ra}s", dto.RetryAfterSeconds);
-            // On continue vers /fleetcarrier même en 429 sur /profile
-        }
-        else if (shipStatus != 200 || string.IsNullOrEmpty(shipBody))
-        {
-            dto.ShipCargoError = shipStatus == 0 ? "Profil Frontier indisponible (réseau)" : $"HTTP {shipStatus}";
-            _log.LogWarning("[LogisticsInventory] /profile HTTP {Status}", shipStatus);
-        }
-        else
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(shipBody);
-                var rootKeys = doc.RootElement.ValueKind == JsonValueKind.Object
-                    ? string.Join(", ", doc.RootElement.EnumerateObject().Select(p => p.Name))
-                    : "(non-objet)";
-                _log.LogInformation("[LogisticsInventory] /profile root keys=[{RootKeys}]", rootKeys);
-                dto.ShipCargoDebugHint = BuildCargoDebugHint(doc.RootElement);
-                _log.LogInformation("[LogisticsInventory] /profile cargo hint: {Hint}", dto.ShipCargoDebugHint);
-                MergeCargoArraysFromRoot(doc.RootElement, dto.ShipCargoByName, _log);
-                _log.LogInformation("[LogisticsInventory] ship cargo keys={Count} items=[{Keys}]",
-                    dto.ShipCargoByName.Count,
-                    string.Join(", ", dto.ShipCargoByName.Keys));
-            }
-            catch (Exception ex)
-            {
-                dto.ShipCargoError = "Profil illisible";
-                _log.LogWarning(ex, "[LogisticsInventory] parse /profile");
-            }
-        }
+        await TryFetchShipCargoFromJournalAsync(accessToken, dto, ct);
 
         // /fleetcarrier : toujours appelé, même si /profile était en 429.
         var (fcStatus, fcBody, fcRetryAfter) =
             await _auth.FetchCapiRawWithRetryAsync(accessToken, "/fleetcarrier", TimeSpan.FromSeconds(60), ct);
-        if (fcStatus == 404)
+        if (fcStatus == 404 || fcStatus == 204)
         {
+            // 404 = pas de Fleet Carrier, 204 = FC sans données → pas d'erreur, juste vide
             dto.CarrierCargoError = null;
         }
         else if (fcStatus == 429)
@@ -111,6 +79,113 @@ public class FrontierLogisticsInventoryService
         }
 
         return dto;
+    }
+
+    /// <summary>
+    /// Appelle /journal CAPI (journal du jour, JSONL), trouve le dernier event Cargo du vaisseau
+    /// et peuple dto.ShipCargoByName si des items sont trouvés.
+    /// </summary>
+    private async Task TryFetchShipCargoFromJournalAsync(string accessToken, FrontierLogisticsInventoryDto dto, CancellationToken ct)
+    {
+        var (journalStatus, journalBody, _) =
+            await _auth.FetchCapiRawWithRetryAsync(accessToken, "/journal", TimeSpan.FromSeconds(30), ct);
+
+        _log.LogInformation("[LogisticsInventory] /journal HTTP {Status} len={Len}", journalStatus, journalBody?.Length ?? 0);
+
+        if (journalStatus == 204)
+        {
+            // Pas de session aujourd'hui
+            _log.LogInformation("[LogisticsInventory] /journal 204 — pas de session aujourd'hui");
+            return;
+        }
+        if (journalStatus == 429)
+        {
+            dto.JournalCargoError = "Journal (rate limit)";
+            _log.LogWarning("[LogisticsInventory] /journal HTTP 429");
+            return;
+        }
+        if (journalStatus != 200 && journalStatus != 206 || string.IsNullOrEmpty(journalBody))
+        {
+            dto.JournalCargoError = journalStatus == 0 ? "Journal indisponible (réseau)" : $"Journal HTTP {journalStatus}";
+            _log.LogWarning("[LogisticsInventory] /journal HTTP {Status}", journalStatus);
+            return;
+        }
+
+        if (journalStatus == 206)
+            _log.LogInformation("[LogisticsInventory] /journal 206 Partial — données partielles, on tente quand même");
+
+        try
+        {
+            // Le journal est du JSONL : une entrée JSON par ligne
+            JsonElement? lastCargoEvent = null;
+            var lines = journalBody.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            foreach (var line in lines)
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                try
+                {
+                    using var lineDoc = JsonDocument.Parse(line);
+                    var root = lineDoc.RootElement;
+                    if (root.ValueKind != JsonValueKind.Object) continue;
+                    if (!root.TryGetProperty("event", out var evtProp) || evtProp.GetString() != "Cargo") continue;
+                    // Uniquement le vaisseau (pas SRV)
+                    if (root.TryGetProperty("Vessel", out var vesselProp))
+                    {
+                        var vessel = vesselProp.GetString();
+                        if (!string.IsNullOrEmpty(vessel) && !vessel.Equals("Ship", StringComparison.OrdinalIgnoreCase)) continue;
+                    }
+                    lastCargoEvent = root.Clone();
+                }
+                catch { /* ligne malformée, on ignore */ }
+            }
+
+            if (lastCargoEvent == null)
+            {
+                _log.LogInformation("[LogisticsInventory] /journal — aucun event Cargo vaisseau trouvé ({LineCount} lignes)", lines.Length);
+                return;
+            }
+
+            _log.LogInformation("[LogisticsInventory] /journal — event Cargo trouvé");
+
+            if (!lastCargoEvent.Value.TryGetProperty("Inventory", out var inventory) || inventory.ValueKind != JsonValueKind.Array)
+            {
+                _log.LogInformation("[LogisticsInventory] /journal — event Cargo sans Inventory (soute vide ?)");
+                dto.ShipCargoSource = "journal";
+                return;
+            }
+
+            foreach (var item in inventory.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                // Nom : champ "Name" (interne ex "steel") ou "Name_Localised"
+                string? name = null;
+                if (item.TryGetProperty("Name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String)
+                    name = nameProp.GetString();
+                if (string.IsNullOrWhiteSpace(name) && item.TryGetProperty("Name_Localised", out var locProp) && locProp.ValueKind == JsonValueKind.String)
+                    name = locProp.GetString();
+                if (string.IsNullOrWhiteSpace(name)) continue;
+
+                var qty = 0;
+                if (item.TryGetProperty("Count", out var countProp) && countProp.ValueKind == JsonValueKind.Number)
+                    countProp.TryGetInt32(out qty);
+                if (qty <= 0) continue;
+
+                AddOrMerge(dto.ShipCargoByName, name, qty);
+            }
+
+            _log.LogInformation("[LogisticsInventory] /journal cargo keys={Count} items=[{Keys}]",
+                dto.ShipCargoByName.Count,
+                string.Join(", ", dto.ShipCargoByName.Keys));
+
+            if (dto.ShipCargoByName.Count > 0)
+                dto.ShipCargoSource = "journal";
+        }
+        catch (Exception ex)
+        {
+            dto.JournalCargoError = "Journal illisible";
+            _log.LogWarning(ex, "[LogisticsInventory] parse /journal");
+        }
     }
 
     /// <summary>

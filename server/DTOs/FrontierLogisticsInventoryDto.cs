@@ -35,4 +35,10 @@ public sealed class FrontierLogisticsInventoryDto
 
     /// <summary>[DEBUG temporaire] Résumé de la structure cargo trouvée dans /profile — à retirer après diagnostic.</summary>
     public string? ShipCargoDebugHint { get; set; }
+
+    /// <summary>Source effective des données soute vaisseau : "profile", "journal", "none".</summary>
+    public string ShipCargoSource { get; set; } = "none";
+
+    /// <summary>Erreur lors de la tentative /journal (null si non tenté ou succès).</summary>
+    public string? JournalCargoError { get; set; }
 }
