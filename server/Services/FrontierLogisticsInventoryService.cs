@@ -45,8 +45,7 @@ public class FrontierLogisticsInventoryService
             _log.LogWarning("[LogisticsInventory] /profile HTTP 429 — tentative /fleetcarrier quand même, RetryAfter={Ra}s", dto.RetryAfterSeconds);
             // On continue vers /fleetcarrier même en 429 sur /profile
         }
-
-        if (shipStatus != 200 || string.IsNullOrEmpty(shipBody))
+        else if (shipStatus != 200 || string.IsNullOrEmpty(shipBody))
         {
             dto.ShipCargoError = shipStatus == 0 ? "Profil Frontier indisponible (réseau)" : $"HTTP {shipStatus}";
             _log.LogWarning("[LogisticsInventory] /profile HTTP {Status}", shipStatus);
