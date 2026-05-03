@@ -21,7 +21,7 @@ import {
 } from 'rxjs';
 import { ChantierLogisticsUiService } from '../../../core/services/chantier-logistics-ui.service';
 import { ActiveChantiersStore } from '../../../core/state/active-chantiers.store';
-import type { ConstructionResourceSnapshot } from '../../../core/state/active-chantiers.store';
+import type { ActiveChantierSite, ConstructionResourceSnapshot } from '../../../core/state/active-chantiers.store';
 import { DeclaredChantiersApiService } from '../../../core/services/declared-chantiers-api.service';
 import { ChantierLogisticsInventoryCoordinatorService } from '../../../core/services/chantier-logistics-inventory-coordinator.service';
 import type { ChantierLogisticsInventoryDto } from '../../../core/models/chantier-logistics-inventory.model';
@@ -659,9 +659,28 @@ export class ChantierLogisticsPanelComponent {
     mine: DeclaredChantierListItemApi[];
     others: DeclaredChantierListItemApi[];
   }> {
+    const siteToApi = (s: ActiveChantierSite): DeclaredChantierListItemApi => ({
+      id: Number(s.id),
+      systemName: s.systemName,
+      stationName: s.stationName,
+      cmdrName: s.cmdrName ?? '',
+      active: s.active,
+      declaredAtUtc: s.declaredAt,
+      updatedAtUtc: s.declaredAt,
+      marketId: s.marketId ?? null,
+      constructionResources: (s.constructionResources ?? []).map((r) => ({
+        name: r.name,
+        required: r.required,
+        provided: r.provided,
+        remaining: r.remaining,
+      })),
+      constructionResourcesTotal: s.constructionResourcesTotal ?? 0,
+    });
+    const prevMine = this.chantiersStore.mine().map(siteToApi);
+    const prevOthers = this.chantiersStore.others().map(siteToApi);
     return forkJoin({
-      mine: this.declaredApi.listMine().pipe(catchError(() => of([] as DeclaredChantierListItemApi[]))),
-      others: this.declaredApi.listOthers().pipe(catchError(() => of([] as DeclaredChantierListItemApi[]))),
+      mine: this.declaredApi.listMine().pipe(catchError(() => of(prevMine))),
+      others: this.declaredApi.listOthers().pipe(catchError(() => of(prevOthers))),
     });
   }
 
