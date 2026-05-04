@@ -420,7 +420,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
           }
           <div class="box box-cmdrs">
             <div class="box-cmdrs-header">
-              <h3 class="box-cmdrs-title">CMDRs de l'escadron</h3>
+              <h3 class="box-cmdrs-title">CMDRs de l'escadron @if (commandersForList(); as data) { @if (data.commanders.length > 0) {<span class="box-cmdrs-count">({{ data.commanders.length }})</span>} }</h3>
               <div class="box-cmdrs-actions">
                 <div class="cmdrs-more-dropdown">
                   @if (cmdrsMenuOpen()) {
@@ -1020,6 +1020,15 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       text-shadow:
         0 0 4px rgba(0, 234, 255, 0.4),
         0 0 10px rgba(0, 234, 255, 0.22);
+    }
+    .box-cmdrs-count {
+      font-family: 'Exo 2', sans-serif;
+      font-size: 0.7rem;
+      font-weight: 500;
+      color: rgba(0, 234, 255, 0.6);
+      letter-spacing: 0;
+      text-transform: none;
+      margin-left: 0.3em;
     }
     .box > h3:first-child {
       margin-top: 0;
@@ -1946,15 +1955,15 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .box-cmdrs .cmdrs-list {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-      /* Rangées ET hauteur conteneur tous les deux fixes : double verrou */
       grid-template-rows: repeat(2, 88px);
       grid-auto-rows: 0;
       overflow: hidden;
       gap: 8px;
       padding-top: 0.5rem;
+      box-sizing: border-box;
       min-width: 0;
       flex-shrink: 0;
-      height: calc(2 * 88px + 8px + 0.5rem); /* 2 rangées + gap + padding-top */
+      height: calc(2 * 88px + 8px + 0.5rem);
     }
     .cmdrs-pagination {
       display: flex;
@@ -1980,11 +1989,12 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
       gap: 0.5rem;
       min-width: 72px;
       padding: 8px;
       box-sizing: border-box;
-      border: 1px solid transparent;
+      border: 1px solid rgba(0, 212, 255, 0.1);
       border-radius: 10px;
     }
     .cmdr-item--link {
@@ -2189,7 +2199,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly systemsPanelAllSectionsCollapsed = signal(true);
   protected readonly cmdrsMenuOpen = signal(false);
   protected readonly cmdrPage = signal(0);
-  protected readonly CMDRS_PER_PAGE = 10;
+  protected readonly CMDRS_PER_PAGE = 8;
   protected readonly Math = Math;
   protected readonly cmdrJournalMenuOpen = signal(false);
   /** Importer : 'replace' | merge + duplicatePolicy */
