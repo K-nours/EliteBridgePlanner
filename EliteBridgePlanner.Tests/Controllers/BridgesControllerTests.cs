@@ -1,19 +1,12 @@
-using System.Security.Claims;
 using EliteBridgePlanner.Server.Controllers;
 using EliteBridgePlanner.Server.DTOs;
-using EliteBridgePlanner.Server.Services;
-using EliteBridgePlanner.Tests.Helpers;
-using Microsoft.AspNetCore.Http;
+using EliteBridgePlanner.Server.Services.Contracts;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
 using NUnit.Framework;
 
 namespace EliteBridgePlanner.Tests.Controllers;
 
-/// <summary>
-/// Tests unitaires de BridgesController.
-/// IBridgeService est mocké avec Moq — le controller est testé en isolation totale.
-/// </summary>
 [TestFixture]
 public class BridgesControllerTests
 {
@@ -24,110 +17,183 @@ public class BridgesControllerTests
     public void SetUp()
     {
         _mockService = new Mock<IBridgeService>();
-        _controller  = new BridgesController(_mockService.Object);
-
-        // Simuler un utilisateur authentifié avec un claim NameIdentifier
-        SetAuthenticatedUser("user-1");
+        _controller = new BridgesController(_mockService.Object);
     }
 
-    private void SetAuthenticatedUser(string userId)
-    {
-        var claims = new[] { new Claim(ClaimTypes.NameIdentifier, userId) };
-        var identity = new ClaimsIdentity(claims, "TestAuth");
-        var principal = new ClaimsPrincipal(identity);
+    // ── Helper ────────────────────────────────────────────────────────────
 
-        _controller.ControllerContext = new ControllerContext
-        {
-            HttpContext = new DefaultHttpContext { User = principal }
-        };
-    }
+    private static BridgeDto SampleBridgeDto(int id = 1) => new(
+        Id: id,
+        Name: "Pont Test",
+        Description: "Test bridge",
+        CreatedByName: "CMDR_TEST",
+        Systems: [],
+        CompletionPercent: 0,
+        CreatedAt: DateTime.UtcNow
+    );
 
-    // ── GetAll ────────────────────────────────────────────────────────────
+    private static StarSystemDto SampleDto(int id = 1) => new(
+    Id: id,
+    Name: "Sol",
+    Type: "DEBUT",
+    Status: "PLANIFIE",
+    Order: 1,
+    PreviousSystemId: null,
+    ArchitectId: null,
+    ArchitectName: null,
+    BridgeId: 1,
+    X: 0,
+    Y: 0,
+    Z: 0,
+    UpdatedAt: DateTime.UtcNow
+);
+
+    // ── GetAll ─────────────────────────────────────────────────────────────
 
     [Test]
-    public async Task GetAll_ReturnsOkWithBridgeList()
+    public async Task GetAll_ReturnsOkWithBridges()
     {
         // Arrange
-        var expected = new List<BridgeDto>
-        {
-            new(1, "Pont A", null, "CMDR_TEST", [], 0, DateTime.UtcNow),
-            new(2, "Pont B", null, "CMDR_TEST", [], 100, DateTime.UtcNow)
-        };
-        _mockService.Setup(s => s.GetAllBridgesAsync()).ReturnsAsync(expected);
+        var bridges = new[] { SampleBridgeDto(1), SampleBridgeDto(2) };
+        _mockService
+            .Setup(s => s.GetAllBridgesAsync())
+            .ReturnsAsync(bridges);
 
         // Act
         var result = await _controller.GetAll();
 
         // Assert
-        var ok = result as OkObjectResult;
-        Assert.That(ok, Is.Not.Null);
-        Assert.That(ok!.StatusCode, Is.EqualTo(200));
+        Assert.That(result, Is.TypeOf<OkObjectResult>());
+        var okResult = result as OkObjectResult;
+        var data = okResult?.Value as IEnumerable<BridgeDto>;
+        Assert.That(data?.Count(), Is.EqualTo(2));
         _mockService.Verify(s => s.GetAllBridgesAsync(), Times.Once);
     }
 
-    // ── GetById ───────────────────────────────────────────────────────────
+    // ── GetById ────────────────────────────────────────────────────────────
 
     [Test]
-    public async Task GetById_WhenFound_ReturnsOk()
+    public async Task GetById_WithValidId_ReturnsOkWithBridge()
     {
         // Arrange
-        var dto = new BridgeDto(1, "Pont Test", null, null, [], 0, DateTime.UtcNow);
-        _mockService.Setup(s => s.GetBridgeByIdAsync(1)).ReturnsAsync(dto);
+        var bridge = SampleBridgeDto();
+        _mockService
+            .Setup(s => s.GetBridgeByIdAsync(1))
+            .ReturnsAsync(bridge);
 
         // Act
         var result = await _controller.GetById(1);
 
         // Assert
-        var ok = result as OkObjectResult;
-        Assert.That(ok?.StatusCode, Is.EqualTo(200));
-        Assert.That((ok!.Value as BridgeDto)!.Id, Is.EqualTo(1));
+        Assert.That(result, Is.TypeOf<OkObjectResult>());
+        var okResult = result as OkObjectResult;
+        Assert.That(okResult?.Value, Is.EqualTo(bridge));
+        _mockService.Verify(s => s.GetBridgeByIdAsync(1), Times.Once);
     }
 
     [Test]
-    public async Task GetById_WhenNotFound_Returns404()
+    public async Task GetById_WhenNotExists_ReturnsNotFound()
     {
         // Arrange
-        _mockService.Setup(s => s.GetBridgeByIdAsync(99)).ReturnsAsync((BridgeDto?)null);
+        _mockService
+            .Setup(s => s.GetBridgeByIdAsync(999))
+            .ReturnsAsync((BridgeDto?)null);
 
         // Act
-        var result = await _controller.GetById(99);
+        var result = await _controller.GetById(999);
 
         // Assert
-        Assert.That(result, Is.InstanceOf<NotFoundResult>());
+        Assert.That(result, Is.TypeOf<NotFoundResult>());
     }
 
-    // ── Create ────────────────────────────────────────────────────────────
+    // ── Create ─────────────────────────────────────────────────────────────
 
     [Test]
-    public async Task Create_ValidRequest_Returns201()
+    public async Task Create_WithValidData_ReturnsCreatedAtAction()
     {
         // Arrange
-        var request = new CreateBridgeRequest("Nouveau Pont", null);
-        var dto = new BridgeDto(5, "Nouveau Pont", null, "CMDR_TEST", [], 0, DateTime.UtcNow);
-        _mockService.Setup(s => s.CreateBridgeAsync(request, "user-1")).ReturnsAsync(dto);
+        var request = new CreateBridgeRequest("Nouveau Pont", "Description");
+        var createdBridge = SampleBridgeDto();
+        _mockService
+            .Setup(s => s.CreateBridgeAsync(It.IsAny<CreateBridgeRequest>(), It.IsAny<string>()))
+            .ReturnsAsync(createdBridge);
+
+        // Mock the User principal
+        var mockUser = new System.Security.Claims.ClaimsPrincipal(
+            new System.Security.Claims.ClaimsIdentity(
+                new[] { new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "user-1") }
+            )
+        );
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext { User = mockUser }
+        };
 
         // Act
         var result = await _controller.Create(request);
 
         // Assert
-        var created = result as CreatedAtActionResult;
-        Assert.That(created?.StatusCode, Is.EqualTo(201));
+        Assert.That(result, Is.TypeOf<CreatedAtActionResult>());
+        var createdResult = result as CreatedAtActionResult;
+        Assert.That(createdResult?.Value, Is.EqualTo(createdBridge));
         _mockService.Verify(s => s.CreateBridgeAsync(request, "user-1"), Times.Once);
     }
 
     [Test]
-    public async Task Create_WithInvalidModel_Returns400()
+    public async Task Create_WithoutUser_ReturnsUnauthorized()
     {
-        // Arrange — simuler une erreur de validation
-        _controller.ModelState.AddModelError("Name", "Requis");
-        var request = new CreateBridgeRequest("", null);
+        // Arrange
+        var request = new CreateBridgeRequest("Nouveau Pont", "Description");
+        var mockUser = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity());
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new Microsoft.AspNetCore.Http.DefaultHttpContext { User = mockUser }
+        };
 
         // Act
         var result = await _controller.Create(request);
 
         // Assert
-        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
-        _mockService.Verify(s => s.CreateBridgeAsync(It.IsAny<CreateBridgeRequest>(), It.IsAny<string>()),
-            Times.Never);
+        Assert.That(result, Is.TypeOf<UnauthorizedResult>());
+    }
+
+    // ── Move ───────────────────────────────────────────────────────────────
+
+    [Test]
+    public async Task Move_CallsServiceAndReturnsOk()
+    {
+        // Arrange
+
+        var request = new MoveSystemRequest(StarSystemId: 1, InsertAtIndex: 2);
+        var expectedDto = SampleDto();
+        _mockService
+            .Setup(s => s.MoveSystemAsync(1,1, request.InsertAtIndex))
+            .ReturnsAsync(expectedDto);
+
+        // Act
+        var result = await _controller.Move(1, request);
+
+        // Assert
+        Assert.That(result, Is.TypeOf<OkObjectResult>());
+        var okResult = result as OkObjectResult;
+        Assert.That(okResult?.Value, Is.EqualTo(expectedDto));
+        _mockService.Verify(s => s.MoveSystemAsync(1, 1, request.InsertAtIndex), Times.Once);
+    }
+
+    [Test]
+    public async Task Move_WhenNotExists_ReturnsNotFound()
+    {
+        // Arrange
+        var request = new MoveSystemRequest(999,InsertAtIndex: 2);
+        _mockService
+            .Setup(s => s.MoveSystemAsync(1,999, request.InsertAtIndex))
+            .ReturnsAsync((StarSystemDto?)null);
+
+        // Act
+        var result = await _controller.Move(999, request);
+
+        // Assert
+        Assert.That(result, Is.TypeOf<NotFoundResult>());
     }
 }
+

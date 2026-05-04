@@ -1,3 +1,4 @@
+using EliteBridgePlanner.Server.Models;
 using System.ComponentModel.DataAnnotations;
 
 namespace EliteBridgePlanner.Server.DTOs;
@@ -46,14 +47,17 @@ public record CreateBridgeRequest(
 public record StarSystemDto(
     int Id,
     string Name,
-    string Type,
-    string Status,
-    int Order, // Calculé à la volée par le service, non stocké
-    string? PreviousSystemId,    
+    string Type,        // Type dans ce pont spécifique
+    string Status,      // Status dans ce pont spécifique
+    int Order,          // Calculé à la volée, position dans le pont
+    string? PreviousSystemId,
     string? ArchitectId,
     string? ArchitectName,
     int BridgeId,
-    DateTime UpdatedAt
+    float X,
+    float Y,
+    float Z,
+    DateTime UpdatedAt    
 );
 
 public record CreateSystemRequest(
@@ -62,17 +66,25 @@ public record CreateSystemRequest(
     [Required] string Status,
     [Range(1, int.MaxValue)] int InsertAtIndex,  // 1 = en tête, 2 = après le 1er, etc.
     string? ArchitectId,
-    int BridgeId
+    int BridgeId,
+    float? X,           // Optionnel à la création
+    float? Y,
+    float? Z
 );
 
 public record UpdateSystemRequest(
+    int? starSystemId,
     [MaxLength(200)] string? Name,
     string? Type,
     string? Status,
-    string? ArchitectId           // "" = remettre à Inconnu (null)
+    string? ArchitectId,           // "" = remettre à Inconnu (null)
+    float? X,
+    float? Y,
+    float? Z
 );
 
-public record MoveSystemRequest(
+public record MoveSystemRequest(        
+    int StarSystemId,
     [Range(1, int.MaxValue)] int InsertAtIndex  // même logique que CreateSystemRequest
 );
 

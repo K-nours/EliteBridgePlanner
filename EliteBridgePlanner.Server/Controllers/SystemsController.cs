@@ -1,5 +1,5 @@
 using EliteBridgePlanner.Server.DTOs;
-using EliteBridgePlanner.Server.Services;
+using EliteBridgePlanner.Server.Services.Contracts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -36,16 +36,6 @@ public class SystemsController : ControllerBase
     public async Task<IActionResult> Update(int id, [FromBody] UpdateSystemRequest request)
     {
         var result = await _bridgeService.UpdateSystemAsync(id, request);
-        return result is null ? NotFound() : Ok(result);
-    }
-
-    /// <summary>Déplace un système à une nouvelle position dans le pont</summary>
-    [HttpPatch("{id:int}/reorder")]
-    [ProducesResponseType<StarSystemDto>(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Move(int id, [FromBody] MoveSystemRequest request)
-    {
-        var result = await _bridgeService.MoveSystemAsync(id, request.InsertAtIndex);
         return result is null ? NotFound() : Ok(result);
     }
 

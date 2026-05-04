@@ -11,5 +11,6 @@ public class Bridge
     public string? CreatedByUserId { get; set; }
     public AppUser? CreatedBy { get; set; }
 
-    public ICollection<StarSystem> Systems { get; set; } = [];
+    // Navigation — Relation vers les systèmes via la jonction
+    public ICollection<BridgeStarSystem> Systems { get; set; } = [];
 }

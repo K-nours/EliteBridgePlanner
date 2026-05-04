@@ -63,13 +63,15 @@ export class SystemListComponent {
 
   moveUp(id: number, currentOrder: number): void {
     if (currentOrder <= 1) return;
-    this.store.reorderSystem({ id, insertAtIndex: currentOrder - 1 });
+    var bridgeId = this.store.activeBridge()!.id
+    this.store.reorderSystem({ bridgeId, starSystemId: id, insertAtIndex: currentOrder - 1 });
   }
 
   moveDown(id: number, currentOrder: number): void {
     const max = this.store.orderedSystems().length;
     if (currentOrder >= max) return;
-    this.store.reorderSystem({ id, insertAtIndex: currentOrder + 1 });
+    var bridgeId = this.store.activeBridge()!.id
+    this.store.reorderSystem({ bridgeId, starSystemId: id, insertAtIndex: currentOrder + 1 });
   }
 
   typeLabel(type: string): string {

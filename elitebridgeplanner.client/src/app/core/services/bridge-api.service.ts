@@ -41,8 +41,8 @@ export class BridgeApiService {
     return this.http.patch<StarSystemDto>(`${this.baseUrl}/systems/${id}`, request);
   }
 
-  reorderSystem(id: number, request: MoveSystemRequest): Observable<StarSystemDto> {
-    return this.http.patch<StarSystemDto>(`${this.baseUrl}/systems/${id}/reorder`, request);
+  reorderSystem(bridgeId: number, request: MoveSystemRequest): Observable<StarSystemDto> {
+    return this.http.patch<StarSystemDto>(`${this.baseUrl}/bridges/${bridgeId}/reorder`, request);
   }
 
   // moveSystem(id: number, insertAfterId: number | null): Observable<StarSystemDto> {

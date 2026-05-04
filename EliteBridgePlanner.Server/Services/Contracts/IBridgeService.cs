@@ -1,6 +1,6 @@
 using EliteBridgePlanner.Server.DTOs;
 
-namespace EliteBridgePlanner.Server.Services;
+namespace EliteBridgePlanner.Server.Services.Contracts;
 
 /// <summary>
 /// Contrat du service métier Bridge + StarSystem.
@@ -15,5 +15,5 @@ public interface IBridgeService
     Task<StarSystemDto> AddSystemAsync(CreateSystemRequest request);
     Task<StarSystemDto?> UpdateSystemAsync(int id, UpdateSystemRequest request);
     Task<bool> DeleteSystemAsync(int id);
-    Task<StarSystemDto?> MoveSystemAsync(int id, int insertAfterId);
+    Task<StarSystemDto?> MoveSystemAsync(int bridgeId, int starSystemId, int insertAtIndex);
 }
