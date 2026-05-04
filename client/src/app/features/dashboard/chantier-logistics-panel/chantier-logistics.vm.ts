@@ -409,7 +409,7 @@ const COMMODITY_LABELS: Readonly<Record<string, { fr: string; en: string }>> = {
   mineralextractors:         { fr: 'Extracteurs de minerai',             en: 'Mineral Extractors' },
   powergenerators:           { fr: 'Générateurs',                        en: 'Power Generators' },
   microbialfurnaces:         { fr: 'Hauts fourneaux microbiens',         en: 'Microbial Furnaces' },
-  thermalcoolingunits:       { fr: 'Unités de refroidissement',         en: 'Thermal Cooling Units' },
+  thermalcoolingunits:       { fr: 'Interconnexion dissipateur thermique', en: 'Thermal Cooling Units' },
   cropharvesters:            { fr: 'Moissonneuses',                      en: 'Crop Harvesters' },
   articulationmotors:        { fr: 'Moteurs à articulation',             en: 'Articulation Motors' },
   reinforcedmountingplate:   { fr: 'Plaque de montage renforcée',        en: 'Reinforced Mounting Plate' },
