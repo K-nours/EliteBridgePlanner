@@ -69,6 +69,8 @@ export interface AuthResponse {
   token: string;
   commanderName: string;
   email: string;
+  preferredLanguage: string;
+  preferredTimeZone: string;
   expiresAt: string;
 }
 
@@ -77,5 +79,7 @@ export interface CurrentUser {
   token: string;
   commanderName: string;
   email: string;
+  preferredLanguage: string;
+  preferredTimeZone: string;
   expiresAt: Date;
 }

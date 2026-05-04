@@ -1,35 +1,31 @@
 <div class="sidebar-header">
-  <h2 class="sidebar-title">▸ PONT ACTIF</h2>
+  <h2 class="sidebar-title">▸ {{'BRIDGE.SYSTEM-LIST.TITLE' | translate}}</h2>
   @if (store.activeBridge()) {
   <div class="bridge-meta">
     <div class="meta-item meta-depart" tabindex="0">
-      <div class="meta-label">Départ</div>
-      <div
-        class="meta-value meta-value-truncate"
-        [truncateTooltip]="store.orderedSystems()[0]?.name ?? ''"
-        [truncateTooltipForce]="!!store.orderedSystems()[0]?.name"
-      >{{ (store.orderedSystems()[0]?.name ?? '—') | truncateMiddle:16 }}</div>
+      <div class="meta-label">{{'SYSTEM.TYPE.START' | translate}}</div>
+      <div class="meta-value meta-value-truncate" [truncateTooltip]="store.orderedSystems()[0]?.name ?? ''"
+        [truncateTooltipForce]="!!store.orderedSystems()[0]?.name">{{ (store.orderedSystems()[0]?.name ?? '—') |
+        truncateMiddle:16 }}</div>
     </div>
     <div class="meta-item meta-arrivee" tabindex="0">
-      <div class="meta-label">Arrivée</div>
-      <div
-        class="meta-value meta-value-truncate"
-        [truncateTooltip]="store.orderedSystems().at(-1)?.name ?? ''"
-        [truncateTooltipForce]="!!store.orderedSystems().at(-1)?.name"
-      >{{ (store.orderedSystems().at(-1)?.name ?? '—') | truncateMiddle:16 }}</div>
+      <div class="meta-label">{{'SYSTEM.TYPE.END' | translate}}</div>
+      <div class="meta-value meta-value-truncate" [truncateTooltip]="store.orderedSystems().at(-1)?.name ?? ''"
+        [truncateTooltipForce]="!!store.orderedSystems().at(-1)?.name">{{ (store.orderedSystems().at(-1)?.name ?? '—') |
+        truncateMiddle:16 }}</div>
     </div>
     <div class="meta-item">
-      <div class="meta-label">Systèmes</div>
+      <div class="meta-label">{{'COMMON.SYSTEMS' | translate}}</div>
       <div class="meta-value">{{ store.stats().total }}</div>
     </div>
     <div class="meta-item">
-      <div class="meta-label">Progression</div>
+      <div class="meta-label">{{'COMMON.COMPLETION' | translate}}</div>
       <div class="meta-value">{{ store.stats().completion }}%</div>
     </div>
   </div>
   }
   <button class="btn-add" (click)="toggleAddForm()">
-    {{ showAddForm() ? '✕ ANNULER' : '+ SYSTÈME' }}
+    {{ showAddForm() ? '✕ ' + ('COMMON.CANCEL' | translate) : '+ ' + ('COMMON.SYSTEM' | translate) }}
   </button>
 </div>
 
@@ -38,35 +34,30 @@
 <div class="add-form animate-fadeIn">
   <div class="form-grid">
     <div class="field-group full-width">
-      <label class="field-label">Nom du Système</label>
+      <label class="field-label">{{'BRIDGE.SYSTEM-DETAIL.SYSTEM_NAME' | translate}}</label>
       <input class="field-input" [formControl]="addForm.controls.name" placeholder="Ex: Colonia" />
     </div>
     <div class="field-group">
-      <label class="field-label" [id]="'add-type-label'">Type</label>
-      <app-custom-select
-        [options]="typeOptions"
-        [labelId]="'add-type-label'"
-        [formControl]="addForm.controls.type"
-      />
+      <label class="field-label" [id]="'add-type-label'">{{'COMMON.TYPE'| translate}}</label>
+      <app-custom-select [options]="typeOptions" [labelId]="'add-type-label'" [formControl]="addForm.controls.type" />
     </div>
     <div class="field-group">
-      <label class="field-label" [id]="'add-status-label'">Statut</label>
-      <app-custom-select
-        [options]="statusOptions"
-        [labelId]="'add-status-label'"
-        [formControl]="addForm.controls.status"
-      />
+      <label class="field-label" [id]="'add-status-label'">{{'COMMON.STATE'| translate}}</label>
+      <app-custom-select [options]="statusOptions" [labelId]="'add-status-label'"
+        [formControl]="addForm.controls.status" />
     </div>
     <div class="field-group">
-      <label class="field-label">Insérer à l'index</label>
+      <label class="field-label">{{'BRIDGE.SYSTEM-LIST.INSERT_AT_INDEX' | translate}}</label>
       <input class="field-input" type="number" [formControl]="addForm.controls.insertAtIndex" [min]="1"
         [max]="store.orderedSystems().length + 1" />
+    </div>
+    <div class="field-group full-width">
       <span class="field-hint">
-        1 = en tête · {{ store.orderedSystems().length + 1 }} = en queue
+        {{'BRIDGE.SYSTEM-LIST.INSERT_AT_INDEX_HINT' | translate :{bridgeLength: store.orderedSystems().length + 1 } }}
       </span>
     </div>
   </div>
-  <button class="btn-confirm" (click)="onAdd()" [disabled]="addForm.invalid">AJOUTER</button>
+  <button class="btn-confirm" (click)="onAdd()" [disabled]="addForm.invalid">{{'COMMON.ADD' | translate}}</button>
 </div>
 }
 
@@ -76,11 +67,11 @@
   <div class="cockpit-toggle">
     <button type="button" class="cockpit-toggle-btn" [class.active]="!hideOperational()"
       (click)="hideOperational.set(false)">
-      Tous
+      {{'COMMON.ALL' | translate}}
     </button>
     <button type="button" class="cockpit-toggle-btn" [class.active]="hideOperational()"
       (click)="hideOperational.set(true)">
-      En cours
+      {{'COMMON.IN_PROGRESS' | translate}}
     </button>
   </div>
 </div>
@@ -92,32 +83,32 @@
   <div class="system-card" [class]="'type-' + system.type" [class.selected]="store.selectedSystem()?.id === system.id"
     (click)="store.selectSystem(system)">
     <div class="card-row card-row-1">
-      <span class="badge" [class]="'badge-type-' + system.type">{{ typeLabel(system.type) }}</span>
+      <span class="badge" [class]="'badge-type-' + system.type">{{ typeLabel(system.type) | translate }}</span>
       <div class="order-controls" (click)="$event.stopPropagation()">
-        <button class="order-btn" [truncateTooltip]="'Monter'" [truncateTooltipForce]="true" (click)="moveUp(system.id, system.order)">▲</button>
-        <button class="order-btn" [truncateTooltip]="'Descendre'" [truncateTooltipForce]="true" (click)="moveDown(system.id, system.order)">▼</button>
+        <button class="order-btn" [truncateTooltip]="'COMMON.UP' | translate" [truncateTooltipForce]="true"
+          (click)="moveUp(system.id, system.order)">▲</button>
+        <button class="order-btn" [truncateTooltip]="'COMMON.DOWN' | translate" [truncateTooltipForce]="true"
+          (click)="moveDown(system.id, system.order)">▼</button>
       </div>
     </div>
     <div class="card-row card-row-2">
-      <span
-        class="card-order-name"
-        [truncateTooltip]="'#' + system.order + ' ' + system.name"
-        [truncateTooltipForce]="system.name.length > 18"
-      >#{{ system.order }} {{ system.name | truncateMiddle:18 }}</span>
+      <span class="card-order-name" [truncateTooltip]="'#' + system.order + ' ' + system.name"
+        [truncateTooltipForce]="system.name.length > 18">#{{ system.order }} {{ system.name | truncateMiddle:18
+        }}</span>
       @if (system.architectName) {
-      <span
-        class="card-architect"
-        [truncateTooltip]="'◈ ' + system.architectName"
-      >◈ {{ system.architectName }}</span>
+      <span class="card-architect" [truncateTooltip]="'◈ ' + system.architectName">◈ {{ system.architectName }}</span>
       }
     </div>
-    <div class="card-row card-row-3" [class.status-PLANIFIE]="system.status === 'PLANIFIE'" [class.status-CONSTRUCTION]="system.status === 'CONSTRUCTION'" [class.status-FINI]="system.status === 'FINI'">
+    <div class="card-row card-row-3" [class.status-PLANIFIE]="system.status === 'PLANIFIE'"
+      [class.status-CONSTRUCTION]="system.status === 'CONSTRUCTION'" [class.status-FINI]="system.status === 'FINI'">
       @if (system.status === 'CONSTRUCTION' || system.status === 'FINI') {
-        <span class="status-fictive status-fictive-left" [class]="'fictive-' + (system.status === 'FINI' ? 'CONSTRUCTION' : 'PLANIFIE')"></span>
+      <span class="status-fictive status-fictive-left"
+        [class]="'fictive-' + (system.status === 'FINI' ? 'CONSTRUCTION' : 'PLANIFIE')"></span>
       }
-      <span class="badge" [class]="'badge-status-' + system.status">{{ statusLabel(system.status) }}</span>
+      <span class="badge" [class]="'badge-status-' + system.status">{{ statusLabel(system.status) |translate}}</span>
       @if (system.status === 'PLANIFIE' || system.status === 'CONSTRUCTION') {
-        <span class="status-fictive status-fictive-right" [class]="'fictive-' + (system.status === 'PLANIFIE' ? 'CONSTRUCTION' : 'FINI')"></span>
+      <span class="status-fictive status-fictive-right"
+        [class]="'fictive-' + (system.status === 'PLANIFIE' ? 'CONSTRUCTION' : 'FINI')"></span>
       }
     </div>
   </div>
@@ -127,9 +118,9 @@
   <div class="empty-list">
     <span class="empty-icon">◈</span>
     @if (hideOperational() && store.orderedSystems().length > 0) {
-    <p>Tous les systèmes sont opérationnels<br>(masqués par le filtre)</p>
+    <p>{{'BRIDGE.SYSTEM-LIST.EMPTY_FILTER'| translate}}<br>{{'BRIDGE.SYSTEM-LIST.EMPTY_FILTER_TIP'| translate}}</p>
     } @else {
-    <p>Aucun système<br>Ajoutez-en un pour commencer</p>
+    <p>{{'BRIDGE.SYSTEM-LIST.EMPTY'| translate}}<br>{{'BRIDGE.SYSTEM-LIST.EMPTY_TIP'| translate}}</p>
     }
   </div>
   }

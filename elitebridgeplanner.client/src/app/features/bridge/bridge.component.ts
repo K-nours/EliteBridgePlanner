@@ -7,6 +7,7 @@ import { BridgeVisualizerComponent } from './bridge-visualizer/bridge-visualizer
 import { SystemListComponent } from './system-list/system-list.component';
 import { SystemDetailComponent } from './system-detail/system-detail.component';
 import { StationsPanelComponent } from './stations-panel/stations-panel.component';
+import { TranslateModule } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-bridge',
@@ -17,7 +18,8 @@ import { StationsPanelComponent } from './stations-panel/stations-panel.componen
     BridgeVisualizerComponent,
     SystemListComponent,
     SystemDetailComponent,
-    StationsPanelComponent
+    StationsPanelComponent,
+    TranslateModule
   ],
   templateUrl: './bridge.component.html',
   styleUrl: './bridge.component.scss'

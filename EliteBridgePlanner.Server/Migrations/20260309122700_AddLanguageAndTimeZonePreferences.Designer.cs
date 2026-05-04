@@ -4,6 +4,7 @@ using EliteBridgePlanner.Server.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace EliteBridgePlanner.Server.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260309122700_AddLanguageAndTimeZonePreferences")]
+    partial class AddLanguageAndTimeZonePreferences
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -135,45 +138,6 @@ namespace EliteBridgePlanner.Server.Migrations
                     b.ToTable("Bridges");
                 });
 
-            modelBuilder.Entity("EliteBridgePlanner.Server.Models.BridgeStarSystem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("BridgeId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("PreviousSystemId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("StarSystemId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("Id");
-
-                    b.HasAlternateKey("BridgeId", "StarSystemId");
-
-                    b.HasIndex("PreviousSystemId");
-
-                    b.HasIndex("StarSystemId");
-
-                    b.ToTable("BridgeStarSystems");
-                });
-
             modelBuilder.Entity("EliteBridgePlanner.Server.Models.StarSystem", b =>
                 {
                     b.Property<int>("Id")
@@ -185,6 +149,9 @@ namespace EliteBridgePlanner.Server.Migrations
                     b.Property<string>("ArchitectId")
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<int>("BridgeId")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -193,7 +160,15 @@ namespace EliteBridgePlanner.Server.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<int?>("PreviousSystemId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
@@ -201,21 +176,13 @@ namespace EliteBridgePlanner.Server.Migrations
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<float>("X")
-                        .HasColumnType("real");
-
-                    b.Property<float>("Y")
-                        .HasColumnType("real");
-
-                    b.Property<float>("Z")
-                        .HasColumnType("real");
-
                     b.HasKey("Id");
 
                     b.HasIndex("ArchitectId");
 
-                    b.HasIndex("Name")
-                        .IsUnique();
+                    b.HasIndex("BridgeId");
+
+                    b.HasIndex("PreviousSystemId");
 
                     b.ToTable("StarSystems");
                 });
@@ -363,32 +330,6 @@ namespace EliteBridgePlanner.Server.Migrations
                     b.Navigation("CreatedBy");
                 });
 
-            modelBuilder.Entity("EliteBridgePlanner.Server.Models.BridgeStarSystem", b =>
-                {
-                    b.HasOne("EliteBridgePlanner.Server.Models.Bridge", "Bridge")
-                        .WithMany("Systems")
-                        .HasForeignKey("BridgeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("EliteBridgePlanner.Server.Models.BridgeStarSystem", "PreviousSystem")
-                        .WithMany()
-                        .HasForeignKey("PreviousSystemId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
-                    b.HasOne("EliteBridgePlanner.Server.Models.StarSystem", "StarSystem")
-                        .WithMany("BridgeAssociations")
-                        .HasForeignKey("StarSystemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Bridge");
-
-                    b.Navigation("PreviousSystem");
-
-                    b.Navigation("StarSystem");
-                });
-
             modelBuilder.Entity("EliteBridgePlanner.Server.Models.StarSystem", b =>
                 {
                     b.HasOne("EliteBridgePlanner.Server.Models.AppUser", "Architect")
@@ -396,7 +337,22 @@ namespace EliteBridgePlanner.Server.Migrations
                         .HasForeignKey("ArchitectId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("EliteBridgePlanner.Server.Models.Bridge", "Bridge")
+                        .WithMany("Systems")
+                        .HasForeignKey("BridgeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("EliteBridgePlanner.Server.Models.StarSystem", "PreviousSystem")
+                        .WithMany()
+                        .HasForeignKey("PreviousSystemId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
                     b.Navigation("Architect");
+
+                    b.Navigation("Bridge");
+
+                    b.Navigation("PreviousSystem");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -460,11 +416,6 @@ namespace EliteBridgePlanner.Server.Migrations
             modelBuilder.Entity("EliteBridgePlanner.Server.Models.Bridge", b =>
                 {
                     b.Navigation("Systems");
-                });
-
-            modelBuilder.Entity("EliteBridgePlanner.Server.Models.StarSystem", b =>
-                {
-                    b.Navigation("BridgeAssociations");
                 });
 #pragma warning restore 612, 618
         }

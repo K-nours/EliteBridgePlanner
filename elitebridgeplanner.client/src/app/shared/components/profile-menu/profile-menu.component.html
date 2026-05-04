@@ -1,0 +1,32 @@
+<div class="profile-menu" #menuContainer>
+  <button type="button" class="avatar-btn" (click)="toggleMenu()" [attr.aria-expanded]="isOpen()"
+    [attr.aria-haspopup]="true" aria-label="Menu profil">
+    <img class="avatar-img" src="/images/avatar.png" alt="Avatar" />
+  </button>
+  @if (isOpen()) {
+  <div class="profile-dropdown">
+    <div class="dropdown-item lang-toggle">
+      <div class="cockpit-toggle">
+        <button type="button" 
+          class="cockpit-toggle-btn" 
+          [class.active]="languageService.language() === 'en-GB'"
+          (click)="changeLanguage('en-GB')"
+          aria-label="English">
+          EN
+        </button>
+        <button type="button" 
+          class="cockpit-toggle-btn" 
+          [class.active]="languageService.language() === 'fr-FR'"
+          (click)="changeLanguage('fr-FR')"
+          aria-label="Français">
+          FR
+        </button>
+      </div>
+    </div>
+    <div class="logout-separator"></div>
+    <button type="button" class="dropdown-item btn-critical" (click)="logout()">
+      {{ 'nav.logout' | translate }}
+    </button>
+  </div>
+  }
+</div>

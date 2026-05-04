@@ -112,6 +112,7 @@ using (var scope = app.Services.CreateScope())
 
 // ── Pipeline HTTP ─────────────────────────────────────────────────────────
 app.UseMiddleware<ExceptionMiddleware>();
+app.UseMiddleware<LocalizationMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

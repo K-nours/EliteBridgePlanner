@@ -24,7 +24,8 @@
             "polyfills": [],
             "tsConfig": "tsconfig.app.json",
             "assets": [
-              { "glob": "**/*", "input": "public" }
+              { "glob": "**/*", "input": "public" },
+              { "glob": "**/*", "input": "src/assets","output": "assets" }
             ],
             "styles": [
               "src/styles.scss"
@@ -38,7 +39,7 @@
             "production": {
               "budgets": [
                 { "type": "initial", "maximumWarning": "500kB", "maximumError": "1MB" },
-                { "type": "anyComponentStyle", "maximumWarning": "4kB", "maximumError": "8kB" }
+                { "type": "anyComponentStyle", "maximumWarning": "10kB", "maximumError": "15kB" }
               ],
               "outputHashing": "all"
             },

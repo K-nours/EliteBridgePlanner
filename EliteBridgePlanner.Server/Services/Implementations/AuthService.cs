@@ -76,6 +76,8 @@ public class AuthService : IAuthService
             new JwtSecurityTokenHandler().WriteToken(token),
             user.CommanderName,
             user.Email!,
+            user.PreferredLanguage,
+            user.PreferredTimeZone,
             expiry
         );
     }

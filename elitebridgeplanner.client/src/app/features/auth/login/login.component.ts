@@ -2,11 +2,12 @@ import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, Validators, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink,TranslateModule],
   templateUrl: './login.component.html',
   styleUrl: './login.component.scss'
 })
@@ -14,6 +15,7 @@ export class LoginComponent {
   private readonly fb = inject(FormBuilder);
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
+  private translate = inject(TranslateService);
 
   readonly isLoading = signal(false);
   readonly error = signal<string | null>(null);
@@ -34,7 +36,7 @@ export class LoginComponent {
     this.authService.login({ email: email!, password: password! }).subscribe({
       next: () => this.router.navigate(['/bridges']),
       error: () => {
-        this.error.set('Email ou mot de passe invalide');
+        this.error.set(this.translate.instant('AUTH.LOGIN.INVALID_CREDENTIALS'));
         this.isLoading.set(false);
       }
     });

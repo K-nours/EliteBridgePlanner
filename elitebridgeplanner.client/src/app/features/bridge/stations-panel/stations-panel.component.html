@@ -1,23 +1,23 @@
 <div class="stations-wrapper">
   <div class="section-header">
-    <span class="section-title">▸ STATIONS EN CONSTRUCTION</span>
+    <span class="section-title">▸ {{'BRIDGE.STATION_PANEL.TITLE' | translate }}</span>
   </div>
 
   @if (store.selectedSystem(); as sys) {
-    <div class="stations-content">
-      <p class="stations-hint">
-        Système sélectionné : <strong>{{ sys.name }}</strong>
-      </p>
-      <div class="empty-stations">
-        <span class="empty-icon">◈</span>
-        <p>Aucune station en construction répertoriée pour ce système.</p>
-        <p class="sub">Les données pourront être enrichies via EDSM ou une autre source.</p>
-      </div>
-    </div>
-  } @else {
-    <div class="empty-state">
+  <div class="stations-content">
+    <p class="stations-hint">
+      {{'BRIDGE.STATION_PANEL.SELECTED_SYSTEM' | translate}} : <strong>{{ sys.name }}</strong>
+    </p>
+    <div class="empty-stations">
       <span class="empty-icon">◈</span>
-      <p>Sélectionnez un système pour afficher les stations en construction</p>
+      <p>{{'BRIDGE.STATION_PANEL.EMPTY_STATION' | translate}}</p>
+      <p class="sub">{{'BRIDGE.STATION_PANEL.EMPTY_STATION_SUB' | translate}}</p>
     </div>
+  </div>
+  } @else {
+  <div class="empty-state">
+    <span class="empty-icon">◈</span>
+    <p>{{'BRIDGE.STATION_PANEL.EMPTY_STATE' | translate}}</p>
+  </div>
   }
 </div>
