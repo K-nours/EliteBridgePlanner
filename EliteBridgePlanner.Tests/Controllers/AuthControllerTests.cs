@@ -31,6 +31,8 @@ public class AuthControllerTests
             Token: "fake-jwt-token",
             CommanderName: "CMDR_TEST",
             Email: "test@example.com",
+            PreferredLanguage: "en",
+            PreferredTimeZone: "UTC+1",
             ExpiresAt: DateTime.UtcNow.AddHours(1)
         );
         _mockAuth
@@ -78,6 +80,8 @@ public class AuthControllerTests
             Token: "fake-jwt-token",
             CommanderName: "CMDR_NEW",
             Email: "newuser@example.com",
+            PreferredLanguage: "en",
+            PreferredTimeZone: "UTC+1",
             ExpiresAt: DateTime.UtcNow.AddHours(1)
         );
         _mockAuth
