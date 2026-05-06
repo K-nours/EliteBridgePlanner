@@ -255,7 +255,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .page:has(.bg-prev-btn:hover) .main-grid,
     .page:has(.bg-next-btn:hover) .main-grid {
-      opacity: 0.25;
+      opacity: 0.1;
       transition: opacity 0.3s ease;
     }
     .main-grid {
