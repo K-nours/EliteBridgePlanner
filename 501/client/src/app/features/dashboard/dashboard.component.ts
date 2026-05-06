@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal, computed, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, signal, computed, ViewChild } from '@angular/core';
 import { catchError, forkJoin, map, of, switchMap, take } from 'rxjs';
 
 import { TruncateTooltipDirective } from '../../shared/directives/truncate-tooltip.directive';
@@ -38,8 +38,15 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
   imports: [TruncateTooltipDirective, SettingsModalComponent, SyncHelpModalComponent, GuildSystemsPanelComponent, GuildSystemsMapComponent, MapPanelComponent, SyncStatusPanelComponent, ChantiersDebugPanelComponent, ChantierLogisticsPanelComponent, DiplomaticPipelinePanelComponent, CmdrsPanelComponent, ReunionPanelComponent, ReveilPanelComponent, FrontierCmdrPanelComponent],
   template: `
     <div class="page">
-      <div class="page-bg">
-        <img class="page-bg-img" src="https://inara.cz/data/gallery/180/180177x4304.jpg" alt="" draggable="false" />
+      <div class="page-bg" (click)="nextBgImage()">
+        <img class="page-bg-img"
+             [src]="bgImageA()"
+             [style.opacity]="bgActiveSlot() === 'a' ? 1 : 0"
+             alt="" draggable="false" />
+        <img class="page-bg-img"
+             [src]="bgImageB()"
+             [style.opacity]="bgActiveSlot() === 'b' ? 1 : 0"
+             alt="" draggable="false" />
         <div class="page-bg-overlay"></div>
       </div>
       <header class="header-zone">
@@ -205,7 +212,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       inset: 0;
       z-index: 0;
       background-color: #060a0f;
-      pointer-events: none;
+      pointer-events: auto;
+      cursor: pointer;
     }
     .page-bg-img {
       position: absolute;
@@ -216,6 +224,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       pointer-events: none;
       user-select: none;
       -webkit-user-drag: none;
+      transition: opacity 1.5s ease-in-out;
     }
     .page-bg-overlay {
       position: absolute;
@@ -682,7 +691,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
   `],
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent implements OnInit, OnDestroy {
   @ViewChild('settingsModal') settingsModal!: SettingsModalComponent;
 
   private readonly dashboardApi = inject(DashboardApiService);
@@ -709,6 +718,19 @@ export class DashboardComponent implements OnInit {
   /** Progression EDSM en direct pendant un import (ex: "EDSM : requêtes unitaires (47/173)"). */
   protected systemsImportProgress = signal<string | null>(null);
   private systemsImportPollingRef: ReturnType<typeof setInterval> | null = null;
+
+  // --- Background slideshow ---
+  private readonly BG_IMAGES = [
+    'assets/backgrounds/bg1.jpg',
+    'assets/backgrounds/bg2.jpg',
+    'assets/backgrounds/bg3.jpg',
+  ];
+  private readonly BG_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+  private bgIndex = 0;
+  protected readonly bgActiveSlot = signal<'a' | 'b'>('a');
+  protected readonly bgImageA = signal<string>(this.BG_IMAGES[0]);
+  protected readonly bgImageB = signal<string>(this.BG_IMAGES[0]);
+  private bgRotationRef: ReturnType<typeof setInterval> | null = null;
 
   protected readonly strokeCircumference = 2 * Math.PI * 34;
   protected refreshProgress = signal(0);
@@ -1069,6 +1091,7 @@ export class DashboardComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.startBgRotation();
     this.addLog('Dashboard initialisé');
     this.addLog('Prêt — utilisez les boutons sync pour importer depuis Inara');
     this.guildSettings.load();
@@ -1316,6 +1339,34 @@ export class DashboardComponent implements OnInit {
         this.addLog('Erreur rafraîchissement : ' + String(msg).slice(0, 500));
       },
     });
+  }
+
+  // --- Background slideshow ---
+  protected nextBgImage(): void {
+    if (this.BG_IMAGES.length <= 1) return;
+    this.bgIndex = (this.bgIndex + 1) % this.BG_IMAGES.length;
+    const next = this.BG_IMAGES[this.bgIndex];
+    const current = this.bgActiveSlot();
+    if (current === 'a') {
+      this.bgImageB.set(next);
+      this.bgActiveSlot.set('b');
+    } else {
+      this.bgImageA.set(next);
+      this.bgActiveSlot.set('a');
+    }
+    // Réinitialise le timer
+    this.startBgRotation();
+  }
+
+  private startBgRotation(): void {
+    if (this.bgRotationRef !== null) clearInterval(this.bgRotationRef);
+    if (this.BG_IMAGES.length <= 1) return;
+    this.bgRotationRef = setInterval(() => this.nextBgImage(), this.BG_INTERVAL_MS);
+  }
+
+  ngOnDestroy(): void {
+    if (this.bgRotationRef !== null) clearInterval(this.bgRotationRef);
+    if (this.systemsImportPollingRef !== null) clearInterval(this.systemsImportPollingRef);
   }
 
 }
