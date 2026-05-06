@@ -49,6 +49,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
              alt="" draggable="false" />
         <div class="page-bg-overlay"></div>
       </div>
+      <button class="bg-prev-btn" (click)="prevBgImage()" title="Image précédente">‹</button>
       <button class="bg-next-btn" (click)="nextBgImage()" title="Image suivante">›</button>
       <header class="header-zone">
         <h1 class="header-faction">{{ factionName() }}</h1>
@@ -215,18 +216,17 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       background-color: #060a0f;
       pointer-events: none;
     }
-    .bg-next-btn {
+    .bg-prev-btn, .bg-next-btn {
       position: fixed;
       bottom: 0;
-      right: 0;
       z-index: 200;
-      width: 2rem;
-      height: 2rem;
-      border-radius: 0;
+      width: 1rem;
+      height: 1rem;
+      border-radius: 8px 0 0 0;
       border: 1px solid rgba(0, 212, 255, 0.25);
       background: rgba(6, 20, 35, 0.55);
       color: rgba(0, 212, 255, 0.55);
-      font-size: 1.3rem;
+      font-size: 0.65rem;
       line-height: 1;
       display: flex;
       align-items: center;
@@ -241,6 +241,15 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
         border-color: rgba(0, 212, 255, 0.6);
       }
     }
+    .bg-prev-btn {
+      left: 0;
+      border-radius: 0 8px 0 0;
+    }
+    .bg-next-btn {
+      right: 0;
+      border-radius: 8px 0 0 0;
+    }
+    .page:hover .bg-prev-btn,
     .page:hover .bg-next-btn {
       opacity: 0.4;
     }
@@ -1375,6 +1384,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   // --- Background slideshow ---
+  protected prevBgImage(): void {
+    if (this.BG_IMAGES.length <= 1) return;
+    this.bgIndex = (this.bgIndex - 1 + this.BG_IMAGES.length) % this.BG_IMAGES.length;
+    const next = this.BG_IMAGES[this.bgIndex];
+    const current = this.bgActiveSlot();
+    if (current === 'a') {
+      this.bgImageB.set(next);
+      this.bgActiveSlot.set('b');
+    } else {
+      this.bgImageA.set(next);
+      this.bgActiveSlot.set('a');
+    }
+    this.startBgRotation();
+  }
+
   protected nextBgImage(): void {
     if (this.BG_IMAGES.length <= 1) return;
     this.bgIndex = (this.bgIndex + 1) % this.BG_IMAGES.length;
