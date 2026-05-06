@@ -87,14 +87,14 @@
   flex: 1 1 0;
   min-height: 0;
   border: 1px solid rgba(0, 212, 255, 0.14);
-  border-radius: 0 0 16px 16px;
+  border-radius: 0 0 8px 8px;
   overflow: hidden;
 }
 .map-filter-counters {
   position: absolute;
-  bottom: 28px;
-  left: 32px;
-  right: 32px;
+  bottom: 24px;
+  left: 24px;
+  right: 24px;
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
@@ -118,7 +118,7 @@
   gap: 0.25rem;
   background: rgba(6, 20, 35, 0.95);
   border: 1px solid rgba(0, 212, 255, 0.3);
-  border-radius: 10px;
+  border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;

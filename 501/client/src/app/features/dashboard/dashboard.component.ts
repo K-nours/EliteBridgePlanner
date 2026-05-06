@@ -638,7 +638,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .box {
       background: rgba(6, 20, 35, 0.88);
       border: 1px solid rgba(0, 212, 255, 0.14);
-      border-radius: 16px;
+      border-radius: 10px;
       box-shadow:
         0 0 5px rgba(0, 234, 255, 0.03),
         0 0 10px rgba(0, 234, 255, 0.02),
