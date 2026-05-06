@@ -257,7 +257,8 @@
 .chantier-logistics-modal-system-name {
   font-size: 12px;
   font-weight: 100;
-  color: rgba(226, 232, 240, 0.75);
+  color: rgb(226, 232, 240);
+  opacity: 0.5;
 }
 
 .chantier-logistics-modal-marketid {
@@ -506,9 +507,6 @@
 .chantier-logistics-modal-body {
   flex: 1 1 auto;
   padding: 1rem;
-  /* Pas de overflow: hidden — on laisse .chantier-logistics-modal-dialog (overflow: hidden) clipper,
-   * pour que .chantier-logistics-detail__body puisse étendre ses marges négatives
-   * jusqu'au bord du dialog et coller la scrollbar au bord droit. */
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -525,12 +523,7 @@
   .chantier-logistics-detail__body {
     overflow-y: auto;
     min-height: 0;
-    /* Même pattern que .systems-list / .chantier-logistics-panel-body :
-     * padding intérieur + marges négatives pour placer la scrollbar au bord du dialog.
-     * Le dialog (overflow: hidden) fait le clip. Padding du modal-body = 1rem. */
-    padding: 4px 6px 10px 4px;
-    margin-left: calc(-1rem + 12px);
-    margin-right: calc(-1rem + 4px);
+    padding: 0;
 
     @include factionScrollbar.scrollbar-faction-systems;
   }
