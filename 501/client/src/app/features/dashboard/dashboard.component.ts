@@ -38,7 +38,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
   imports: [TruncateTooltipDirective, SettingsModalComponent, SyncHelpModalComponent, GuildSystemsPanelComponent, GuildSystemsMapComponent, MapPanelComponent, SyncStatusPanelComponent, ChantiersDebugPanelComponent, ChantierLogisticsPanelComponent, DiplomaticPipelinePanelComponent, CmdrsPanelComponent, ReunionPanelComponent, ReveilPanelComponent, FrontierCmdrPanelComponent],
   template: `
     <div class="page">
-      <div class="page-bg" (click)="nextBgImage()">
+      <div class="page-bg">
         <img class="page-bg-img"
              [src]="bgImageA()"
              [style.opacity]="bgActiveSlot() === 'a' ? 1 : 0"
@@ -49,6 +49,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
              alt="" draggable="false" />
         <div class="page-bg-overlay"></div>
       </div>
+      <button class="bg-next-btn" (click)="nextBgImage()" title="Image suivante">›</button>
       <header class="header-zone">
         <h1 class="header-faction">{{ factionName() }}</h1>
         <div class="header-emblem-wrapper">
@@ -212,8 +213,36 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       inset: 0;
       z-index: 0;
       background-color: #060a0f;
-      pointer-events: auto;
+      pointer-events: none;
+    }
+    .bg-next-btn {
+      position: fixed;
+      bottom: 1.2rem;
+      right: 1.2rem;
+      z-index: 200;
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      border: 1px solid rgba(0, 212, 255, 0.25);
+      background: rgba(6, 20, 35, 0.55);
+      color: rgba(0, 212, 255, 0.55);
+      font-size: 1.3rem;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.2s, color 0.2s, border-color 0.2s;
+      padding: 0;
+      &:hover {
+        opacity: 1;
+        color: rgba(0, 212, 255, 1);
+        border-color: rgba(0, 212, 255, 0.6);
+      }
+    }
+    .page:hover .bg-next-btn {
+      opacity: 0.4;
     }
     .page-bg-img {
       position: absolute;
