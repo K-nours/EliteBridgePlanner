@@ -157,7 +157,7 @@ export class ChantiersDebugPanelComponent implements OnInit {
       });
   }
 
-  /** Clic sur l’icône + du header — même logique que l’ancien bouton texte. */
+  /** Clic sur l'icône + du header — même logique que l'ancien bouton texte. */
   protected onAddChantierClick(event: Event): void {
     event.stopPropagation();
     this.declareDockedChantier();
@@ -179,7 +179,7 @@ export class ChantiersDebugPanelComponent implements OnInit {
         if (!res.ok || !res.canDeclareChantier) {
           this.loading.set(false);
           this.statusIsError.set(true);
-          this.shortStatus.set(res.userMessage || 'Impossible d’ajouter ce chantier.');
+          this.shortStatus.set(res.userMessage || "Impossible d'ajouter ce chantier.");
           pushSync(`Action: refus — ${res.error ?? '—'}`);
           return;
         }

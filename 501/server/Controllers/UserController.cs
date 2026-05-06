@@ -27,6 +27,8 @@ public class UserController : ControllerBase
         if (user == null)
             return Ok(new { connected = false });
 
+        var cachedProfile = await _userService.GetCachedProfileAsync(ct);
+
         string? avatarUrl = null;
         if (!string.IsNullOrWhiteSpace(user.Commander))
         {
@@ -77,6 +79,8 @@ public class UserController : ControllerBase
             guildName = user.GuildName,
             customerId = user.CustomerId,
             avatarUrl,
+            lastSystemName = cachedProfile?.LastSystemName,
+            shipName = cachedProfile?.ShipName,
         });
     }
 

@@ -59,7 +59,7 @@ function parseRetryAfterSeconds(err: HttpErrorResponse): number | null {
   return null;
 }
 
-/** Marge après l’intervalle avant d’afficher « en retard » (évite faux positifs si le tick est légèrement en retard). */
+/** Marge après l'intervalle avant d'afficher « en retard » (évite faux positifs si le tick est légèrement en retard). */
 const REAL_SYNC_LATE_GRACE_MS = 60_000;
 
 @Component({
@@ -84,7 +84,7 @@ export class ChantierLogisticsPanelComponent {
 
   /**
    * true si refresh-one a rechargé les listes avec succès (besoins CAPI fiables pour ce cycle).
-   * Sinon (marketId bloquant, cooldown refresh-one) → Real sync ne met pas à jour l’horodatage « besoins vérifiés ».
+   * Sinon (marketId bloquant, cooldown refresh-one) → Real sync ne met pas à jour l'horodatage « besoins vérifiés ».
    */
   private chantierRefreshVerifiedThisCycle = false;
 
@@ -93,14 +93,13 @@ export class ChantierLogisticsPanelComponent {
   protected readonly refreshLoading = signal(false);
   protected readonly realSyncTickRunning = signal(false);
   protected readonly deleteLoading = signal(false);
-  protected readonly cargoSyncLoading = signal(false);
 
   /** Dernière réponse inventaire Frontier (soutes). */
   protected readonly inventoryPayload = signal<ChantierLogisticsInventoryDto | null>(null);
   protected readonly inventoryLoading = signal(false);
   protected readonly inventoryHttpError = signal(false);
 
-  /** Pour ne logger qu’une transition Frontier connecté → déconnecté (panneau sync, pas le pavé logistique). */
+  /** Pour ne logger qu'une transition Frontier connecté → déconnecté (panneau sync, pas le pavé logistique). */
   private frontierConnInitialized = false;
   private frontierWasConnected = true;
 
@@ -215,6 +214,9 @@ export class ChantierLogisticsPanelComponent {
           const site = this.ui.selectedSite();
           const ctx = site ? this.chantierCtx(site.id, site.stationName) : 'id=— · «—»';
           this.syncLog.addLog(`[Chantiers] ${ctx} · Real sync — Frontier déconnecté, synchro automatique suspendue`);
+        }
+        if (!this.frontierWasConnected && conn) {
+          this.ui.realSyncAuthError.set(null);
         }
         this.frontierWasConnected = conn;
       });
@@ -331,7 +333,7 @@ export class ChantierLogisticsPanelComponent {
       if (!this.frontierAuth.isConnected()) {
         const site = this.ui.selectedSite();
         const ctx = site ? this.chantierCtx(site.id, site.stationName) : `id=${sid ?? '—'} · «—»`;
-        this.syncLog.addLog(`[Chantiers] ${ctx} · Real sync activé — Frontier hors ligne, synchro suspendue jusqu’à reconnexion`);
+        this.syncLog.addLog(`[Chantiers] ${ctx} · Real sync activé — Frontier hors ligne, synchro suspendue jusqu'à reconnexion`);
       }
     } else {
       this.realSyncLog(`stopped for chantier ${sid}`);
@@ -362,7 +364,7 @@ export class ChantierLogisticsPanelComponent {
       if (this.ui.lastRealSyncAttemptOutcome() === 'failure') return 'error';
       if (this.realSyncTickRunning()) return 'pending';
       if (this.capiRateLimit.isInCooldown()) return 'ratelimit';
-      /** Besoins chantier non vérifiables (marketId) alors que le cycle peut quand même mettre à jour l’inventaire. */
+      /** Besoins chantier non vérifiables (marketId) alors que le cycle peut quand même mettre à jour l'inventaire. */
       if (this.ui.chantierMarketIdCapiIssue() != null) return 'chantierwarn';
       if (
         this.ui.realSyncInventoryHttpError() != null ||
@@ -536,7 +538,7 @@ export class ChantierLogisticsPanelComponent {
     );
   }
 
-  /** Inventaire dans le même cycle Real sync — mutualisé avec l’effet via le coordinateur (dédup in-flight). */
+  /** Inventaire dans le même cycle Real sync — mutualisé avec l'effet via le coordinateur (dédup in-flight). */
   private fetchPlayerInventoryForRealSync$(): Observable<ChantierLogisticsInventoryDto | null> {
     const gen = ++this.inventoryFetchGeneration;
     this.lastInventoryFetchWasHttp429 = false;
@@ -671,7 +673,7 @@ export class ChantierLogisticsPanelComponent {
 
   private applyChantierGoneState(mode: 'manual' | 'realSync', chantierId: number, stationLabel: string): void {
     const ctx = this.chantierCtx(chantierId, stationLabel);
-    /** Mettre à jour l’état / persistance avant de vider la sélection (sinon mauvaise slice en localStorage). */
+    /** Mettre à jour l'état / persistance avant de vider la sélection (sinon mauvaise slice en localStorage). */
     this.ui.setRealSyncEnabled(false);
     this.ui.clearChantierSyncTimestamps();
     this.ui.selectedSiteId.set(null);
@@ -685,7 +687,7 @@ export class ChantierLogisticsPanelComponent {
     }
   }
 
-  /** GET inventaire déclenché par l’effet (Real sync désactivé) — intervalle min + dédup via coordinateur. */
+  /** GET inventaire déclenché par l'effet (Real sync désactivé) — intervalle min + dédup via coordinateur. */
   private fetchPlayerInventoryFromEffect(): void {
     if (!this.frontierAuth.isConnected()) return;
     if (!this.capiRateLimit.canFetchInventory()) {
@@ -875,54 +877,6 @@ export class ChantierLogisticsPanelComponent {
 
   protected toggleResteMode(): void {
     this.resteMode.set(this.resteMode() === 'global' ? 'chantier' : 'global');
-  }
-
-  protected syncCargoOnly(event: Event): void {
-    event.stopPropagation();
-    if (!this.frontierAuth.isConnected() || this.cargoSyncLoading() || this.realSyncTickRunning()) return;
-    const gen = ++this.inventoryFetchGeneration;
-    this.cargoSyncLoading.set(true);
-    this.inventoryLoading.set(true);
-    this.inventoryHttpError.set(false);
-    this.inventoryCoordinator
-      .getInventory$('manual')
-      .pipe(
-        take(1),
-        mergeMap((dto) => {
-          if (dto === null) return of(null);
-          return of(mergeInventoryDtos(this.inventoryPayload(), dto));
-        }),
-        tap((merged) => {
-          if (!merged || gen !== this.inventoryFetchGeneration) return;
-          this.inventoryPayload.set(merged);
-          this.inventoryHttpError.set(false);
-          this.logInventoryDiagnosticToSync(merged, 'real-sync');
-          if (!merged.rateLimited) {
-            this.inventoryCoordinator.markSuccessfulFetch();
-            this.capiRateLimit.recordSuccess();
-          } else {
-            this.capiRateLimit.record429(merged.retryAfterSeconds ?? null);
-          }
-        }),
-        catchError((err: unknown) => {
-          if (err instanceof HttpErrorResponse && err.status === 429) {
-            this.inventoryCoordinator.recordHttp429();
-            const ra = parseRetryAfterSeconds(err);
-            this.capiRateLimit.record429(ra);
-            if (gen === this.inventoryFetchGeneration) this.inventoryHttpError.set(false);
-            return of(null);
-          }
-          if (gen === this.inventoryFetchGeneration) this.inventoryHttpError.set(true);
-          const msg = err instanceof HttpErrorResponse ? `HTTP ${err.status}` : 'erreur réseau';
-          this.syncLog.addLog(`[Cargo sync] échec — ${msg}`);
-          return of(null);
-        }),
-        finalize(() => {
-          if (gen === this.inventoryFetchGeneration) this.inventoryLoading.set(false);
-          this.cargoSyncLoading.set(false);
-        }),
-      )
-      .subscribe();
   }
 
   protected openEnlargeModal(event: Event): void {

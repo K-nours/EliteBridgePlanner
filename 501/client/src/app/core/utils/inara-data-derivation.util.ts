@@ -1,7 +1,7 @@
 import type { GuildSystemBgsDto } from '../models/guild-systems.model';
 import { inaraAgeDays } from './inara-freshness.util';
 
-/** État dérivé pour l’UI (âge Inara, catégorie « sans nouvelles », libellé « Rumeurs »). */
+/** État dérivé pour l'UI (âge Inara, catégorie « sans nouvelles », libellé « Rumeurs »). */
 export interface InaraDataDerivation {
   freshnessDays: number | null;
   isWithoutNews: boolean;
@@ -23,7 +23,7 @@ export function isInaraWithoutNewsCategory(sys: Pick<GuildSystemBgsDto, 'lastUpd
   return age !== null && age > 30;
 }
 
-/** Présence d’un statut BGS/Inara affichable (hors remplacement par « Rumeurs »). */
+/** Présence d'un statut BGS/Inara affichable (hors remplacement par « Rumeurs »). */
 export function hasInaraStatusForRumorDisplay(sys: GuildSystemBgsDto): boolean {
   if (sys.states?.length) return true;
   if (sys.state?.trim()) return true;
@@ -40,7 +40,7 @@ export function shouldShowRumorsInsteadOfStatus(sys: GuildSystemBgsDto): boolean
   return hasInaraStatusForRumorDisplay(sys);
 }
 
-/** Résumé du statut Inara d’origine (tooltip sous « Rumeurs »). */
+/** Résumé du statut Inara d'origine (tooltip sous « Rumeurs »). */
 export function getOriginalInaraStatusSummary(sys: GuildSystemBgsDto): string {
   const parts: string[] = [];
   const fromStates = sys.states?.length ? sys.states : sys.state?.trim() ? [sys.state.trim()] : [];

@@ -10,7 +10,7 @@ export interface ConstructionResourceSnapshot {
 
 /**
  * Chantier déclaré persisté côté serveur (guilde).
- * L’id est toujours l’identifiant SQL renvoyé par l’API (pas de génération locale).
+ * L'id est toujours l'identifiant SQL renvoyé par l'API (pas de génération locale).
  */
 export interface ActiveChantierSite {
   readonly id: string;
@@ -37,7 +37,7 @@ export class ActiveChantiersStore {
   readonly others = this._others.asReadonly();
 
   /**
-   * Chantiers uniques par `id` : d’abord « mine » (ordre conservé), puis « others » sans doublon d’id.
+   * Chantiers uniques par `id` : d'abord « mine » (ordre conservé), puis « others » sans doublon d'id.
    * Évite deux lignes avec le même chantier (double comptage global / mauvaise résolution).
    */
   readonly entries = computed(() => {

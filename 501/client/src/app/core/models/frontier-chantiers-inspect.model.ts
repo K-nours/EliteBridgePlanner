@@ -14,7 +14,7 @@ export interface FrontierChantiersInspectResponse {
   rootKeys: string[];
   propertyPathsSample: string[];
   keywordHits: string[];
-  /** Jusqu’à 20 chemins dock/station/starport/location/port — diagnostic compact serveur. */
+  /** Jusqu'à 20 chemins dock/station/starport/location/port — diagnostic compact serveur. */
   dockStationPathCandidates?: FrontierJsonPathCandidate[];
   diagnostic: FrontierChantiersDiagnostic;
   rawJsonFormattedTruncated: string | null;

@@ -15,7 +15,7 @@ export interface ChantierMarketIdCapiIssueState {
 }
 
 /**
- * Sélection d’un site de construction pour le panneau logistique + option « Real sync » (polling ciblé).
+ * Sélection d'un site de construction pour le panneau logistique + option « Real sync » (polling ciblé).
  * Real sync et horodatages sont **persistés par chantier** (localStorage) pour survivre au F5.
  */
 @Injectable({ providedIn: 'root' })
@@ -24,7 +24,7 @@ export class ChantierLogisticsUiService {
 
   readonly selectedSiteId = signal<string | null>(null);
 
-  /** Dernier id pour lequel on a restauré / persisté (évite de réécraser l’état à chaque refresh des listes). */
+  /** Dernier id pour lequel on a restauré / persisté (évite de réécraser l'état à chaque refresh des listes). */
   private appliedPersistenceForId: string | null = null;
 
   constructor() {
@@ -75,7 +75,7 @@ export class ChantierLogisticsUiService {
 
   /**
    * Dernière mise à jour « générique » (refresh manuel réussi incluant rechargement listes).
-   * @deprecated Préférer lastChantierNeedsVerifiedAt pour l’affichage des besoins CAPI.
+   * @deprecated Préférer lastChantierNeedsVerifiedAt pour l'affichage des besoins CAPI.
    */
   readonly lastChantierDataRefreshSuccessAt = signal<string | null>(null);
 
@@ -110,13 +110,13 @@ export class ChantierLogisticsUiService {
 
   /**
    * Dernier refresh-one / rechargement listes bloqué par rate limit API — la liste des chantiers peut être obsolète
-   * (chantier terminé en jeu encore affiché jusqu’à un refresh valide).
+   * (chantier terminé en jeu encore affiché jusqu'à un refresh valide).
    */
   readonly chantierServerListStaleDueToRateLimit = signal(false);
 
   /**
    * Après refresh 404 ou chantier terminé côté serveur : message unique (pas de métadonnées périmées).
-   * Effacé dès qu’un autre site est sélectionné.
+   * Effacé dès qu'un autre site est sélectionné.
    */
   readonly chantierGoneMessage = signal<string | null>(null);
 
@@ -170,10 +170,10 @@ export class ChantierLogisticsUiService {
   touchRealSyncCycleSuccess(opts?: {
     inventory?: ChantierLogisticsInventoryDto | null;
     inventoryHttpFailed?: boolean;
-    /** Cooldown client : pas d’appel inventaire ce cycle — ne pas effacer les signaux soute/FC. */
+    /** Cooldown client : pas d'appel inventaire ce cycle — ne pas effacer les signaux soute/FC. */
     inventorySkippedDueToCooldown?: boolean;
     /**
-     * true si le refresh chantier n’a pas validé les besoins (marketId, skip refresh-one, etc.) :
+     * true si le refresh chantier n'a pas validé les besoins (marketId, skip refresh-one, etc.) :
      * ne pas mettre à jour les horodatages « données chantier à jour ».
      */
     skipChantierVerifiedTimestamp?: boolean;
@@ -212,7 +212,7 @@ export class ChantierLogisticsUiService {
   }
 
   /**
-   * Rate limit HTTP 429 sur refresh chantier (API 501) : ne pas marquer l’échec du cycle,
+   * Rate limit HTTP 429 sur refresh chantier (API 501) : ne pas marquer l'échec du cycle,
    * garder Real sync actif et les données affichées.
    */
   touchRealSyncRateLimitNoFailure(): void {

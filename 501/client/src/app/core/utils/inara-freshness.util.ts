@@ -50,7 +50,7 @@ export function getInaraFreshnessBadge(sys: GuildSystemBgsDto): InaraFreshnessBa
     label = `${days} j`;
     ariaLabel =
       days === 0
-        ? 'Données Inara : moins d’un jour'
+        ? "Données Inara : moins d'un jour"
         : days === 1
           ? 'Données Inara : 1 jour'
           : `Données Inara : ${days} jours`;

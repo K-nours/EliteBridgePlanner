@@ -7,9 +7,9 @@ import type { ChantierLogisticsInventoryDto } from '../models/chantier-logistics
  * Compteurs **un cycle Real sync** (entre `beginRealSyncCycle` et `logRealSyncCycleVolume`).
  * Mis à jour **uniquement** pour `getInventory$(reason === 'real-sync')`.
  *
- * **Pas de champ `skipped` ici** : l’anti-spam « effet chantier » (intervalle min) est compté en session
+ * **Pas de champ `skipped` ici** : l'anti-spam « effet chantier » (intervalle min) est compté en session
  * dans {@link ChantierLogisticsInventoryCoordinatorService.volume}`.skippedEffectMinInterval` — ce chemin est
- * inactif quand Real sync est ON (l’effet n’émet pas de GET inventaire).
+ * inactif quand Real sync est ON (l'effet n'émet pas de GET inventaire).
  */
 export interface RealSyncInventoryCycleSnapshot {
   /** GET inventaire réellement démarrés ce cycle (flux `real-sync`). */
@@ -66,8 +66,8 @@ export class ChantierLogisticsInventoryCoordinatorService {
   /**
    * @param reason
    * - `effect` : changement de chantier (hors Real sync) — intervalle min + pas de spam. Émet `null` si données encore fraîches.
-   * - `real-sync` : cycle automatique — pas d’intervalle min, seulement dédup in-flight.
-   * - `manual` : après refresh manuel chantier — force l’appel (hors cooldown HTTP serveur).
+   * - `real-sync` : cycle automatique — pas d'intervalle min, seulement dédup in-flight.
+   * - `manual` : après refresh manuel chantier — force l'appel (hors cooldown HTTP serveur).
    */
   getInventory$(reason: 'effect' | 'real-sync' | 'manual'): Observable<ChantierLogisticsInventoryDto | null> {
     const MIN_EFFECT_INTERVAL_MS = 35_000;

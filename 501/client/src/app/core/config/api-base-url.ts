@@ -17,7 +17,7 @@ export function getApiBaseUrlFromWindow(): string {
   return String(raw).trim().replace(/\/$/, '');
 }
 
-/** Résolution finale pour le token API_BASE_URL (fenêtre prioritaire sur l’environnement). */
+/** Résolution finale pour le token API_BASE_URL (fenêtre prioritaire sur l'environnement). */
 export function resolveApiBaseUrl(environment: {
   production: boolean;
   guildDashboardApiBase?: string;

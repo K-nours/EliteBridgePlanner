@@ -14,6 +14,8 @@ export interface FrontierMeResponse {
   guildId?: number | null;
   guildName?: string | null;
   avatarUrl?: string | null;
+  lastSystemName?: string | null;
+  shipName?: string | null;
 }
 
 export interface FrontierProfileDto {

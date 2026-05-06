@@ -84,7 +84,7 @@ import type { GuildSettingsUpdateDto } from '../../../core/models/guild-settings
                 <span class="form-error">{{ inaraApiError() }}</span>
               }
               <span class="form-hint">
-                Sert aux appels inapi/v1 (ex. profil CMDR) et à l’en-tête roster. Laisser vide pour ne pas changer. Fichier serveur (hors git) : Data/inara-api-user.json
+                Sert aux appels inapi/v1 (ex. profil CMDR) et à l'en-tête roster. Laisser vide pour ne pas changer. Fichier serveur (hors git) : Data/inara-api-user.json
               </span>
             </div>
             <div class="form-group form-group--script">
@@ -282,7 +282,7 @@ export class SettingsModalComponent {
   );
 
   /** Textes du survol (i) — pas de secrets. */
-  readonly helpInaraApiKey = `Clé API Inara (INAPI, inapi/v1) : utilisée pour les requêtes type getCommanderProfile et pour retenter l’accès à la page roster HTML avec l’en-tête X-Inara-ApiKey. Optionnelle si le roster est public.`;
+  readonly helpInaraApiKey = `Clé API Inara (INAPI, inapi/v1) : utilisée pour les requêtes type getCommanderProfile et pour retenter l'accès à la page roster HTML avec l'en-tête X-Inara-ApiKey. Optionnelle si le roster est public.`;
 
   factionUrl = '';
   squadronUrl = '';

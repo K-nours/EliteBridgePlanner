@@ -68,7 +68,7 @@ export class GuildSystemsPanelComponent implements OnInit {
 
   /**
    * Toutes les sections repliables **affichées** (selon filtre carte / recherche) sont dépliées.
-   * Si aucune section repliable n’est dans la liste courante → false (pipeline prend de la place).
+   * Si aucune section repliable n'est dans la liste courante → false (pipeline prend de la place).
    */
   readonly allCollapsibleSectionsExpanded = computed(() => {
     const cats = this.categoryConfig();
@@ -302,7 +302,7 @@ export class GuildSystemsPanelComponent implements OnInit {
     return badges;
   }
 
-  /** Tooltip : statut Inara d’origine lorsque le libellé affiché est « Rumeurs ». */
+  /** Tooltip : statut Inara d'origine lorsque le libellé affiché est « Rumeurs ». */
   getStateBadgeTitle(sys: GuildSystemBgsDto, badge: string): string {
     if (badge !== 'Rumeurs') return '';
     const orig = getOriginalInaraStatusSummary(sys);

@@ -56,10 +56,7 @@
     <div class="map-empty-hint">
       @if (mapViewMode === 'faction') {
         <span>Aucun système de guilde avec coordonnées sur la carte</span>
-        <span class="map-empty-hint-sub">Importez les systèmes (Inara) puis lancez l’enrichissement EDSM des coordonnées pour la vue Faction.</span>
-      } @else if (mapViewMode === 'cmdr') {
-        <span>Aucun système avec coordonnées dans le journal Frontier parsé</span>
-        <span class="map-empty-hint-sub">Utilisez « Synchronisation du journal » dans le bloc CMDR connecté pour télécharger et parser le journal CAPI.</span>
+        <span class="map-empty-hint-sub">Importez les systèmes (Inara) puis lancez l'enrichissement EDSM des coordonnées pour la vue Faction.</span>
       } @else {
         <span>Aucun pont planifié actuellement</span>
       }
@@ -83,13 +80,9 @@
   @if (tooltipData; as t) {
     <div class="map-tooltip" [style.left.px]="t.x" [style.top.px]="t.y">
       <div class="map-tooltip-name">{{ t.system.name }}</div>
-      @if (t.system.isJournalCmdrPoint) {
-        <div class="map-tooltip-detail">Parcours journal (coords StarPos)</div>
-      } @else {
-        <div class="map-tooltip-detail">{{ t.system.influencePercent }}% · {{ t.system.category }}</div>
-        @if (hasSignificantDelta(t.system.influenceDelta72h)) {
-          <div class="map-tooltip-delta">{{ formatDelta(t.system.influenceDelta72h) }}</div>
-        }
+      <div class="map-tooltip-detail">{{ t.system.influencePercent }}% · {{ t.system.category }}</div>
+      @if (hasSignificantDelta(t.system.influenceDelta72h)) {
+        <div class="map-tooltip-delta">{{ formatDelta(t.system.influenceDelta72h) }}</div>
       }
     </div>
   }

@@ -1,6 +1,6 @@
-import { Component, OnInit, OnDestroy, inject, signal, computed, effect, ViewChild } from '@angular/core';
-import { HttpErrorResponse } from '@angular/common/http';
+import { Component, OnInit, inject, signal, computed, ViewChild } from '@angular/core';
 import { catchError, forkJoin, map, of, switchMap, take } from 'rxjs';
+
 import { TruncateTooltipDirective } from '../../shared/directives/truncate-tooltip.directive';
 import { SettingsModalComponent } from '../../shared/components/settings-modal/settings-modal.component';
 import { SyncHelpModalComponent } from '../../shared/components/sync-help-modal/sync-help-modal.component';
@@ -11,10 +11,10 @@ import { SyncStatusPanelComponent } from './sync-status-panel/sync-status-panel.
 import { ChantiersDebugPanelComponent } from './chantiers-debug-panel/chantiers-debug-panel.component';
 import { ChantierLogisticsPanelComponent } from './chantier-logistics-panel/chantier-logistics-panel.component';
 import { DiplomaticPipelinePanelComponent } from './diplomatic-pipeline-panel/diplomatic-pipeline-panel.component';
-import { FrontierCmdrPanelComponent } from './frontier-cmdr-panel/frontier-cmdr-panel.component';
 import { CmdrsPanelComponent } from './cmdrs-panel/cmdrs-panel.component';
 import { ReunionPanelComponent } from './reunion-panel/reunion-panel.component';
 import { ReveilPanelComponent } from './reveil-panel/reveil-panel.component';
+import { FrontierCmdrPanelComponent } from './frontier-cmdr-panel/frontier-cmdr-panel.component';
 import { DashboardApiService } from '../../core/services/dashboard-api.service';
 import { CommandersApiService } from '../../core/services/commanders-api.service';
 import { SyncLogService } from '../../core/services/sync-log.service';
@@ -24,16 +24,9 @@ import { FrontierAuthService } from '../../core/services/frontier-auth.service';
 import { GuildSettingsService } from '../../core/services/guild-settings.service';
 import { InaraSyncBridgeService } from '../../core/services/inara-sync-bridge.service';
 import { SyncHelpModalService } from '../../core/services/sync-help-modal.service';
-import { FrontierJournalApiService } from '../../core/services/frontier-journal-api.service';
-import { RareCommodityAlertService } from '../../core/services/rare-commodity-alert.service';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
 import type { SystemsFilterValue, GuildSystemBgsDto } from '../../core/models/guild-systems.model';
-import type {
-  FrontierJournalUnifiedSyncStatusDto,
-  FrontierJournalParseStatusDto,
-  FrontierJournalSystemDerivedDto,
-} from '../../core/services/frontier-journal-api.service';
 import { hasConflictState } from '../../core/utils/guild-systems.util';
 import { isInaraWithoutNewsCategory } from '../../core/utils/inara-data-derivation.util';
 import { inaraAgeDays } from '../../core/utils/inara-freshness.util';
@@ -42,7 +35,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [TruncateTooltipDirective, SettingsModalComponent, SyncHelpModalComponent, GuildSystemsPanelComponent, GuildSystemsMapComponent, MapPanelComponent, SyncStatusPanelComponent, ChantiersDebugPanelComponent, ChantierLogisticsPanelComponent, DiplomaticPipelinePanelComponent, FrontierCmdrPanelComponent, CmdrsPanelComponent, ReunionPanelComponent, ReveilPanelComponent],
+  imports: [TruncateTooltipDirective, SettingsModalComponent, SyncHelpModalComponent, GuildSystemsPanelComponent, GuildSystemsMapComponent, MapPanelComponent, SyncStatusPanelComponent, ChantiersDebugPanelComponent, ChantierLogisticsPanelComponent, DiplomaticPipelinePanelComponent, CmdrsPanelComponent, ReunionPanelComponent, ReveilPanelComponent, FrontierCmdrPanelComponent],
   template: `
     <div class="page">
       <div class="page-bg">
@@ -142,21 +135,12 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
           <div class="map-section">
             <app-map-panel class="box map-box"
               [mapViewMode]="mapViewMode()"
-              [journalCmdrMapPoints]="journalCmdrMapPoints()"
               [systems]="guildSystemsSync.systems()"
               [systemsFilter]="guildSystemsSync.systemsFilter()"
-              [journalLayerVisited]="journalMapLayerVisited()"
-              [journalLayerDiscovered]="journalMapLayerDiscovered()"
-              [journalLayerFullScan]="journalMapLayerFullScan()"
-              [journalDerivedByName]="journalDerivedByName()"
               [mapFilterCountsLeft]="mapFilterCountsLeft()"
               [mapFilterCountsRight]="mapFilterCountsRight()"
-              [journalCmdrCountVisited]="journalCmdrCountVisited()"
-              [journalCmdrCountDiscovered]="journalCmdrCountDiscovered()"
-              [journalCmdrCountFullScan]="journalCmdrCountFullScan()"
               (mapViewModeChange)="mapViewMode.set($event)"
-              (systemsFilterChange)="setSystemsFilter($event)"
-              (journalLayerChange)="selectJournalMapLayer($event)" />
+              (systemsFilterChange)="setSystemsFilter($event)" />
           </div>
           <app-sync-status-panel class="box box-sync-status"
             [class.box-sync-status--collapsed]="syncStatusCollapsed()"
@@ -174,23 +158,10 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
           </div>
         </div>
         <div class="col col-right">
-          @if (showCmdrConnected() && dashboard()?.frontierProfile; as fp) {
+          @if (frontierAuth.profile(); as profile) {
             <app-frontier-cmdr-panel class="box"
-              [frontierProfile]="fp"
-              [connectedCmdrAvatar]="connectedCmdrAvatar()"
-              [journalUnifiedRunning]="journalUnifiedRunning()"
-              [journalUnifiedStatus]="journalUnifiedStatus()"
-              [journalFrontierTooltip]="journalFrontierTooltip()"
-              [rareCommodityHasAlert]="rareCommodityAlert.hasAlert()"
-              [rareCommodityAlertUrl]="rareCommodityAlert.alertUrl()"
-              [rareCommodityAlertTooltip]="rareCommodityAlert.alertTooltip()"
-              [rareCommodityIsReady]="rareCommodityAlert.isReady()"
-              [rareCommodityOkTooltip]="rareCommodityAlert.okTooltip()"
-              (journalExport)="onJournalExportClick()"
-              (journalImportReplace)="triggerJournalImportReplace()"
-              (syncJournal)="onSyncJournalClick()"
-              (connectFrontierForJournal)="onConnectFrontierForJournal()"
-              (journalFileSelected)="onJournalImportFileSelected($event)" />
+              [frontierProfile]="profile"
+              [connectedCmdrAvatar]="connectedCmdrAvatar()" />
           }
           <app-cmdrs-panel class="box"
             [commandersData]="commandersForList()"
@@ -590,13 +561,13 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       flex: 1 1 auto;
       min-height: 0;
     }
+    .col-right app-frontier-cmdr-panel.box {
+      flex: 0 0 auto;
+    }
     .col-left app-diplomatic-pipeline-panel.box {
       flex: 0 0 20vh;
       min-height: 0;
       overflow: hidden;
-    }
-    .col-right app-frontier-cmdr-panel.box {
-      flex: 0 0 auto;
     }
     .col-right app-reunion-panel.box {
       flex: 0 0 auto;
@@ -711,7 +682,7 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
   `],
 })
-export class DashboardComponent implements OnInit, OnDestroy {
+export class DashboardComponent implements OnInit {
   @ViewChild('settingsModal') settingsModal!: SettingsModalComponent;
 
   private readonly dashboardApi = inject(DashboardApiService);
@@ -720,84 +691,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly inaraBridge = inject(InaraSyncBridgeService);
   protected readonly syncHelpModal = inject(SyncHelpModalService);
   protected readonly frontierAuth = inject(FrontierAuthService);
-  private readonly frontierJournalApi = inject(FrontierJournalApiService);
-  protected readonly rareCommodityAlert = inject(RareCommodityAlertService);
   protected readonly frontierMenuOpen = signal(false);
-  /** Ligne affichée dans la zone logs sync pendant une synchro journal Frontier. */
-  protected readonly journalBackfillProgress = signal<string | null>(null);
-  protected readonly journalUnifiedStatus = signal<FrontierJournalUnifiedSyncStatusDto | null>(null);
-  protected readonly journalUnifiedRunning = computed(() => this.journalUnifiedStatus()?.isRunning === true);
-  /** Calques carte 3D (journal CMDR). */
-  protected readonly journalMapLayerVisited = signal(false);
-  protected readonly journalMapLayerDiscovered = signal(false);
-  protected readonly journalMapLayerFullScan = signal(false);
-  /** Clé = nom système normalisé (uppercase), pour la carte. */
-  protected readonly journalDerivedByName = signal<
-    Record<string, { isVisited: boolean; hasFirstDiscoveryBody: boolean; isFullScanned: boolean }>
-  >({});
-  /** Liste complète GET derived/systems (coords CMDR pour la vue Cmdr). */
-  protected readonly journalDerivedSystemsList = signal<FrontierJournalSystemDerivedDto[]>([]);
-  /** Points journal avec coordonnées StarPos pour la carte vue Cmdr. */
-  protected readonly journalCmdrMapPoints = computed(() =>
-    this.journalDerivedSystemsList().filter(
-      (s) => s.coordsX != null && s.coordsY != null && s.coordsZ != null,
-    ),
-  );
-  /** Compteurs calques vue Cmdr (même périmètre que les points sur la carte). */
-  protected readonly journalCmdrCountVisited = computed(
-    () => this.journalCmdrMapPoints().filter((s) => s.isVisited).length,
-  );
-  protected readonly journalCmdrCountDiscovered = computed(
-    () => this.journalCmdrMapPoints().filter((s) => s.hasFirstDiscoveryBody).length,
-  );
-  protected readonly journalCmdrCountFullScan = computed(
-    () => this.journalCmdrMapPoints().filter((s) => s.isFullScanned).length,
-  );
-  /** faction = carte guilde + filtres BGS ; cmdr = points journal ; galacticBridge = ponts planifiés. */
-  protected readonly mapViewMode = signal<'faction' | 'cmdr' | 'galacticBridge'>('faction');
-  protected readonly journalParseStatus = signal<FrontierJournalParseStatusDto | null>(null);
-  protected readonly journalFrontierStatusLines = computed((): string[] | null => {
-    const u = this.journalUnifiedStatus();
-    const ps = this.journalParseStatus();
-    if (!u && !ps) return null;
-    const lines: string[] = [];
-    const lastUtc = u?.lastSyncCompletedUtc;
-    if (lastUtc) lines.push(`Dernière synchro journal : ${this.formatJournalIsoUtc(lastUtc)}`);
-    if (u?.isRunning && u.lastMessage) {
-      lines.push(u.lastMessage);
-      return lines;
-    }
-    if (u?.phase === 'error') {
-      if (u.lastMessage) lines.push(u.lastMessage);
-      else if (u.lastError) lines.push(`Journal Frontier : erreur — ${u.lastError}`);
-      return lines;
-    }
-    const pending = u?.pendingParseDays ?? ps?.pendingDaysEstimate ?? 0;
-    if (pending > 0) {
-      lines.push(`Journal Frontier : ~${pending} jour(s) encore à parser`);
-    } else if ((ps?.systemsCount ?? 0) > 0 || (u?.fetchedSuccessDaysApprox ?? 0) > 0) {
-      const coords = ps?.systemsWithCoordsCount ?? u?.systemsWithCoordsCount ?? 0;
-      lines.push(`Journal Frontier : à jour — ${ps?.systemsCount ?? 0} syst., ${coords} sur la carte`);
-    } else {
-      lines.push('Journal Frontier : prêt — lancez une synchro pour télécharger l’historique');
-    }
-    return lines.length ? lines : null;
-  });
-  /** Texte tooltip sur le bouton de synchro journal (état Frontier / dernière synchro). */
-  protected readonly journalFrontierTooltip = computed(() => {
-    const lines = this.journalFrontierStatusLines();
-    if (lines?.length) return lines.join(' — ');
-    return 'Journal Frontier';
-  });
+  /** faction = carte guilde + filtres BGS ; galacticBridge = ponts planifiés. */
+  protected readonly mapViewMode = signal<'faction' | 'galacticBridge'>('faction');
   /** Toutes les sections Bas / Sains / Autres dépliées → panneau systèmes pleine hauteur, pipeline réduit. */
   protected readonly systemsPanelAllExpanded = signal(false);
-  /** Toutes les sections repliables visibles sont repliées → zone systèmes en hauteur contenu (aligné avec l’état initial). */
+  /** Toutes les sections repliables visibles sont repliées → zone systèmes en hauteur contenu (aligné avec l'état initial). */
   protected readonly systemsPanelAllSectionsCollapsed = signal(true);
-  /** Importer : 'replace' | merge + duplicatePolicy */
-  private readonly journalImportPending = signal<{
-    strategy: 'replace' | 'merge';
-    duplicatePolicy: 'skip' | 'import';
-  } | null>(null);
   protected readonly syncStatusMenuOpen = signal(false);
   /** true = zone des logs masquée (titre + boutons visibles uniquement). */
   protected readonly syncStatusCollapsed = signal(true);
@@ -806,11 +706,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly AVATAR_DEFAULT_FALLBACK_URL = AVATAR_DEFAULT_FALLBACK_URL;
   protected readonly guildSystemsSync = inject(GuildSystemsSyncService);
   private readonly guildSystemsApi = inject(GuildSystemsApiService);
-  private journalUnifiedPollingRef: ReturnType<typeof setInterval> | null = null;
-  private journalUnifiedExpectComplete = false;
-  /** Évite les doublons dans les logs pour le même libellé de progression. */
-  private journalUnifiedLastLoggedMessage: string | null = null;
-
   /** Progression EDSM en direct pendant un import (ex: "EDSM : requêtes unitaires (47/173)"). */
   protected systemsImportProgress = signal<string | null>(null);
   private systemsImportPollingRef: ReturnType<typeof setInterval> | null = null;
@@ -818,21 +713,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected readonly strokeCircumference = 2 * Math.PI * 34;
   protected refreshProgress = signal(0);
 
-  constructor() {
-    effect(() => {
-      const url = this.connectedCmdrAvatar();
-      if (url) {
-        this.headerAvatarError.set(false);
-      }
-    });
-    /** Journal CMDR : rechargé quand Frontier passe à « connecté » (après /api/user/me), pas seulement au 1er tick où l’état était encore déconnecté. */
-    effect(() => {
-      if (this.frontierAuth.isConnected()) {
-        this.refreshJournalParseAndDerived();
-        this.loadJournalUnifiedStatus();
-      }
-    });
-  }
   protected strokeDashOffset = computed(() => this.strokeCircumference * (1 - this.refreshProgress() / 100));
 
   /** Dernières erreurs Inara (postMessage depuis onglet), effacées au succès. */
@@ -991,51 +871,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   protected setSystemsFilter(value: SystemsFilterValue): void {
     this.guildSystemsSync.systemsFilter.set(value);
-    this.journalMapLayerVisited.set(false);
-    this.journalMapLayerDiscovered.set(false);
-    this.journalMapLayerFullScan.set(false);
   }
 
-  /** Un seul filtre carte à la fois : changement de vue réinitialise l’autre côté. */
   protected onMapViewFaction(): void {
     this.mapViewMode.set('faction');
-    this.journalMapLayerVisited.set(false);
-    this.journalMapLayerDiscovered.set(false);
-    this.journalMapLayerFullScan.set(false);
-  }
-
-  protected onMapViewCmdr(): void {
-    this.mapViewMode.set('cmdr');
-    this.guildSystemsSync.systemsFilter.set('all');
   }
 
   protected onMapViewGalacticBridge(): void {
     this.mapViewMode.set('galacticBridge');
     this.guildSystemsSync.systemsFilter.set('all');
-    this.journalMapLayerVisited.set(false);
-    this.journalMapLayerDiscovered.set(false);
-    this.journalMapLayerFullScan.set(false);
-  }
-
-  /** Calques journal exclusifs ; reclic sur l’actif désactive. Réinitialise le filtre Faction sur « Total ». */
-  protected selectJournalMapLayer(mode: 'visited' | 'discovered' | 'fullscan'): void {
-    this.guildSystemsSync.systemsFilter.set('all');
-    const vis = this.journalMapLayerVisited();
-    const disc = this.journalMapLayerDiscovered();
-    const full = this.journalMapLayerFullScan();
-    const was =
-      (mode === 'visited' && vis) ||
-      (mode === 'discovered' && disc) ||
-      (mode === 'fullscan' && full);
-    if (was) {
-      this.journalMapLayerVisited.set(false);
-      this.journalMapLayerDiscovered.set(false);
-      this.journalMapLayerFullScan.set(false);
-      return;
-    }
-    this.journalMapLayerVisited.set(mode === 'visited');
-    this.journalMapLayerDiscovered.set(mode === 'discovered');
-    this.journalMapLayerFullScan.set(mode === 'fullscan');
   }
 
   protected showCmdrConnected = signal(true);
@@ -1090,11 +934,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' });
   }
 
-  /** Affiche une date UTC ISO en heure locale (bloc CMDR — dernière synchro journal). */
-  protected formatJournalIsoUtc(iso: string): string {
-    return this.formatSyncDate(new Date(iso));
-  }
-
   /** Texte des logs avec récap Inara en tête. */
   protected syncLogsWithRecap = computed(() => {
     const systems = this.lastSystemsSyncError() ?? (this.guildSettings.lastSystemsImportAt() ? this.formatLastSync(this.guildSettings.lastSystemsImportAt()!) : '—');
@@ -1125,12 +964,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         ? [...rawLogLines.slice(0, maxLogLines), '[… tronqué : trop de lignes de journal …]']
         : rawLogLines;
     const progress = this.systemsImportProgress();
-    const journalProgress = this.journalBackfillProgress();
     const progressLine = progress ? [`[${new Date().toISOString().slice(11, 23)}] ${progress}`] : [];
-    const journalLine = journalProgress ? [`[${new Date().toISOString().slice(11, 23)}] ${journalProgress}`] : [];
-    // Ne pas injecter de faux log « Journal parsé » ici : parsedDaysCount concerne le parseur (bouton Parser → carte),
-    // pas la sync brut CAPI ; un new Date() dans ce computed refaisait une ligne à chaque rafraîchissement.
-    const logsReversed = [...logLines, ...progressLine, ...journalLine].reverse();
+    const logsReversed = [...logLines, ...progressLine].reverse();
     return [...logsReversed, '---------', ...recapLines];
   });
 
@@ -1233,172 +1068,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
     window.open('/assets/scripts/inara-sync.user.js', '_blank', 'noopener,noreferrer');
   }
 
-  /** Depuis le bloc journal : ouvre le flux OAuth Frontier (même que le menu). */
-  protected onConnectFrontierForJournal(): void {
-    this.addLog('Connexion Frontier — suivez la fenêtre ou l’onglet pour autoriser l’accès.');
-    this.frontierAuth.login();
-  }
-
-  protected onSyncJournalClick(): void {
-    if (this.journalUnifiedRunning()) return;
-    this.frontierJournalApi.startUnifiedSync().subscribe({
-      next: (res) => {
-        this.addLog(res.message);
-        this.startJournalUnifiedPolling(res.message);
-      },
-      error: (err) => {
-        const msg = err?.error?.message ?? err?.message ?? 'Erreur démarrage sync journal';
-        this.addLog(msg);
-        if (err?.status === 400) this.startJournalUnifiedPolling();
-      },
-    });
-  }
-
-  protected onJournalExportClick(): void {
-    this.frontierJournalApi.exportJournalBlob().subscribe({
-      next: (blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `frontier-journal-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.zip`;
-        a.click();
-        URL.revokeObjectURL(url);
-        this.addLog('Journal Frontier : export ZIP téléchargé.');
-      },
-      error: (err) => {
-        const msg = err?.error?.message ?? err?.message ?? 'Export impossible';
-        this.addLog(`Journal Frontier — export : ${msg}`);
-      },
-    });
-  }
-
-  protected triggerJournalImportReplace(): void {
-    this.journalImportPending.set({ strategy: 'replace', duplicatePolicy: 'skip' });
-  }
-
-  protected triggerJournalImportMergeSkip(): void {
-    this.journalImportPending.set({ strategy: 'merge', duplicatePolicy: 'skip' });
-  }
-
-  protected triggerJournalImportMergePreferBackup(): void {
-    this.journalImportPending.set({ strategy: 'merge', duplicatePolicy: 'import' });
-  }
-
-  protected onJournalImportFileSelected(ev: Event): void {
-    const input = ev.target as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
-    const pending = this.journalImportPending();
-    this.journalImportPending.set(null);
-    if (!file || !pending) return;
-
-    this.frontierJournalApi.importJournal(file, pending.strategy, pending.duplicatePolicy).subscribe({
-      next: (res) => {
-        if (res.message) this.addLog(`Journal Frontier — import : ${res.message}`);
-        this.refreshJournalParseAndDerived();
-      },
-      error: (err) => {
-        const body = err?.error;
-        const msg =
-          typeof body?.message === 'string'
-            ? body.message
-            : typeof body === 'string'
-              ? body
-              : err?.message ?? 'Import échoué';
-        this.addLog(`Journal Frontier — import : ${msg}`);
-      },
-    });
-  }
-
-  private startJournalUnifiedPolling(alreadyLoggedStarter?: string | null): void {
-    this.stopJournalUnifiedPolling();
-    this.journalUnifiedExpectComplete = true;
-    this.journalUnifiedLastLoggedMessage = alreadyLoggedStarter ?? null;
-    const tick = () => {
-      this.frontierJournalApi.getUnifiedSyncStatus().subscribe({
-        next: (st) => {
-          this.journalUnifiedStatus.set(st);
-          if (st.isRunning) {
-            if (st.lastMessage && st.lastMessage !== this.journalUnifiedLastLoggedMessage) {
-              this.journalUnifiedLastLoggedMessage = st.lastMessage;
-              this.addLog(st.lastMessage);
-            }
-            if (st.lastMessage) this.journalBackfillProgress.set(st.lastMessage);
-            return;
-          }
-          this.journalBackfillProgress.set(null);
-          if (this.journalUnifiedExpectComplete) {
-            this.journalUnifiedExpectComplete = false;
-            this.stopJournalUnifiedPolling();
-            this.journalUnifiedLastLoggedMessage = null;
-            if (st.lastError) {
-              this.addLog(`Journal Frontier : erreur — ${st.lastError}`);
-            } else {
-              if (st.lastMessage) this.addLog(st.lastMessage);
-              const sm = st.summaryMessage as string | null | undefined;
-              if (sm) this.addLog(sm);
-            }
-            this.refreshJournalParseAndDerived();
-          }
-        },
-      });
-    };
-    tick();
-    this.journalUnifiedPollingRef = setInterval(tick, 2000);
-  }
-
-  private stopJournalUnifiedPolling(): void {
-    if (this.journalUnifiedPollingRef != null) {
-      clearInterval(this.journalUnifiedPollingRef);
-      this.journalUnifiedPollingRef = null;
-    }
-  }
-
-  private loadJournalUnifiedStatus(): void {
-    this.frontierJournalApi.getUnifiedSyncStatus().subscribe({
-      next: (st) => {
-        this.journalUnifiedStatus.set(st);
-        if (st.isRunning) {
-          if (st.lastMessage) this.journalBackfillProgress.set(st.lastMessage);
-          this.startJournalUnifiedPolling();
-        }
-      },
-    });
-  }
-
-  private refreshJournalParseAndDerived(): void {
-    this.frontierJournalApi.getParseStatus().subscribe({
-      next: (st) => this.journalParseStatus.set(st),
-    });
-    this.loadJournalDerived();
-  }
-
-  private loadJournalDerived(): void {
-    this.frontierJournalApi.getDerivedSystems().subscribe({
-      next: (res) => {
-        this.journalDerivedSystemsList.set(res.systems ?? []);
-        const map: Record<string, { isVisited: boolean; hasFirstDiscoveryBody: boolean; isFullScanned: boolean }> = {};
-        for (const s of res.systems) {
-          map[s.systemName.trim().toUpperCase()] = {
-            isVisited: s.isVisited,
-            hasFirstDiscoveryBody: s.hasFirstDiscoveryBody,
-            isFullScanned: s.isFullScanned,
-          };
-        }
-        this.journalDerivedByName.set(map);
-      },
-      error: () => {
-        /* silencieux si pas encore de derived */
-      },
-    });
-  }
-
   ngOnInit(): void {
     this.addLog('Dashboard initialisé');
     this.addLog('Prêt — utilisez les boutons sync pour importer depuis Inara');
     this.guildSettings.load();
     this.inaraBridge.check();
-    this.rareCommodityAlert.checkOncePerDay();
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') this.guildSettings.load();
@@ -1498,9 +1172,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       }
     }
     if (!skipFrontierCheck) {
-      this.frontierAuth.checkAndLoadProfile().subscribe({
-        error: () => this.refreshJournalParseAndDerived(),
-      });
+      this.frontierAuth.checkAndLoadProfile().subscribe();
     }
     this.dashboardApi.getDashboard(null).subscribe({
       next: (d) => this.dashboard.set(d),
@@ -1646,7 +1318,5 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  ngOnDestroy(): void {
-    this.stopJournalUnifiedPolling();
-  }
 }
+

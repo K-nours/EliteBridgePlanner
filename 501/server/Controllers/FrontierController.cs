@@ -14,7 +14,6 @@ public class FrontierController : ControllerBase
     private readonly FrontierTokenStore _store;
     private readonly FrontierOAuthSessionService _oauthSession;
     private readonly FrontierUserService _userService;
-    private readonly FrontierJournalUnifiedSyncService _journalUnifiedSync;
     private readonly CurrentGuildService _currentGuild;
     private readonly DeclaredChantiersService _declaredChantiers;
     private readonly FrontierLogisticsInventoryService _logisticsInventory;
@@ -25,7 +24,6 @@ public class FrontierController : ControllerBase
         FrontierTokenStore store,
         FrontierOAuthSessionService oauthSession,
         FrontierUserService userService,
-        FrontierJournalUnifiedSyncService journalUnifiedSync,
         CurrentGuildService currentGuild,
         DeclaredChantiersService declaredChantiers,
         FrontierLogisticsInventoryService logisticsInventory,
@@ -35,7 +33,6 @@ public class FrontierController : ControllerBase
         _store = store;
         _oauthSession = oauthSession;
         _userService = userService;
-        _journalUnifiedSync = journalUnifiedSync;
         _currentGuild = currentGuild;
         _declaredChantiers = declaredChantiers;
         _logisticsInventory = logisticsInventory;
@@ -1039,7 +1036,6 @@ public class FrontierController : ControllerBase
 
         var report = await _auth.RunFullValidationAsync(token, ct);
         await _oauthSession.PersistAndSetAsync(token, report, ct);
-        _journalUnifiedSync.ClearAuthErrorStateAfterFrontierLogin();
 
         _ = await _userService.GetProfileAsync(ct);
 

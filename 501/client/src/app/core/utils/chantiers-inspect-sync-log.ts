@@ -1,7 +1,7 @@
 import type { FrontierChantiersInspectResponse } from '../models/frontier-chantiers-inspect.model';
 import type { FrontierChantiersDeclareEvaluateResponse } from '../models/frontier-chantiers-declare-evaluate.model';
 
-/** Préfixe unique pour remplacer l’entrée précédente dans SyncLogService (pas d’empilement). */
+/** Préfixe unique pour remplacer l'entrée précédente dans SyncLogService (pas d'empilement). */
 export const CHANTIERS_INSPECT_LOG_MARKER = '[Chantiers inspect]';
 
 const MAX_LINE = 500;

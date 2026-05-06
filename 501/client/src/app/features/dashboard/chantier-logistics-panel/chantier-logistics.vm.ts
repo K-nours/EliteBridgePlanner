@@ -554,7 +554,7 @@ export function canonicalCommodityKey(name: string): string {
   return n;
 }
 
-/** Déduplique les chantiers par `id` (évite double comptage global si l’API renvoie des doublons). */
+/** Déduplique les chantiers par `id` (évite double comptage global si l'API renvoie des doublons). */
 export function dedupeChantierSitesById(sites: readonly ActiveChantierSite[]): ActiveChantierSite[] {
   const seen = new Set<string>();
   const out: ActiveChantierSite[] = [];
@@ -572,7 +572,7 @@ export function dedupeChantierSitesById(sites: readonly ActiveChantierSite[]): A
  */
 /**
  * Fusionne une réponse inventaire avec le cache : ne remplace pas le FC si une erreur CAPI partielle
- * indique que l’agrégat n’est pas fiable.
+ * indique que l'agrégat n'est pas fiable.
  */
 export function mergeInventoryDtos(
   previous: ChantierLogisticsInventoryDto | null,

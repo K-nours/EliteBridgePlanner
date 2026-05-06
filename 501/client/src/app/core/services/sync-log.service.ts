@@ -7,12 +7,12 @@ export class SyncLogService {
   readonly logs = signal<string[]>([]);
   readonly logsText = computed(() => this.logs().join('\n') || '(aucun log)');
 
-  /** Nombre max d’entrées (chaque entrée est déjà bornée en taille). */
+  /** Nombre max d'entrées (chaque entrée est déjà bornée en taille). */
   private static readonly MAX_LOGS = 200;
   private static readonly MAX_CHARS_PER_ENTRY = 4000;
   private static readonly MAX_LINES_PER_ENTRY = 40;
 
-  /** Remplace l’entrée « chantiers inspect » précédente — une seule ligne de debug par action. */
+  /** Remplace l'entrée « chantiers inspect » précédente — une seule ligne de debug par action. */
   setChantiersInspectLog(msg: string): void {
     const sanitized = SyncLogService.sanitizeLogMessage(msg);
     const ts = new Date().toISOString().slice(11, 23);

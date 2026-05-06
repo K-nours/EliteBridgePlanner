@@ -14,29 +14,6 @@
     @let site = ui.selectedSite()!;
     <div class="chantier-logistics-detail">
       <div class="chantier-logistics-detail__body">
-        <div class="chantier-logistics-meta">
-          <p class="chantier-logistics-line">
-            <span class="chantier-logistics-label">Système</span>
-            <span class="chantier-logistics-value">{{ site.systemName }}</span>
-          </p>
-          <p class="chantier-logistics-line">
-            <span class="chantier-logistics-label">Site</span>
-            <span class="chantier-logistics-value">
-              @if (splitStationDisplayLabel(site.stationName); as st) {
-                @if (st.prefix) {
-                  <span class="chantier-logistics-site-prefix">{{ st.prefix }}</span
-                  ><span class="chantier-logistics-site-name">{{ st.name }}</span>
-                } @else {
-                  {{ st.name }}
-                }
-              }
-            </span>
-          </p>
-          @if (site.marketId) {
-            <p class="chantier-logistics-marketid" title="marketId (debug)">marketId {{ site.marketId }}</p>
-          }
-        </div>
-
         @if (ui.chantierServerListStaleDueToRateLimit()) {
           <div class="chantier-logistics-stale-list" role="status">
             <p class="chantier-logistics-stale-list__text">
@@ -237,17 +214,6 @@
     </button>
     <button
       type="button"
-      class="chantier-logistics-cargo-sync-btn"
-      [class.chantier-logistics-cargo-sync-btn--busy]="cargoSyncLoading()"
-      [disabled]="!ui.selectedSite() || cargoSyncLoading() || realSyncTickRunning() || !frontierAuth.isConnected() || !!ui.chantierGoneMessage()"
-      aria-label="Synchroniser le FC depuis Frontier"
-      title="Sync cargo — met à jour le FC uniquement (sans refresh des besoins chantier)"
-      (click)="syncCargoOnly($event)"
-    >
-      Sync cargo
-    </button>
-    <button
-      type="button"
       class="chantier-logistics-icon-btn"
       [class.chantier-logistics-icon-btn--busy]="refreshLoading() || realSyncTickRunning()"
       [disabled]="!ui.selectedSite() || refreshLoading() || realSyncTickRunning() || !!ui.chantierGoneMessage()"
@@ -325,29 +291,23 @@
         <div class="chantier-logistics-header chantier-logistics-header--modal">
           <div class="chantier-logistics-header-main">
             <div class="chantier-logistics-header-sync-block">
-              <p class="chantier-logistics-header-last-sync">
-                <span class="chantier-logistics-header-last-sync__label">Besoins chantier</span>
-                <span class="chantier-logistics-header-last-sync__value">{{
-                  formatLastSyncLabel(ui.lastChantierNeedsVerifiedAt())
-                }}</span>
-                @if (ui.chantierMarketIdCapiIssue()) {
-                  <span class="chantier-logistics-header-stale" title="Dernier snapshot affiché — non confirmé par la CAPI"
-                    >— non vérifiés</span
-                  >
+              @if (ui.selectedSite(); as site) {
+                <p class="chantier-logistics-header-last-sync">
+                  <span class="chantier-logistics-modal-system-name">{{ site.systemName }}</span>
+                </p>
+                <p class="chantier-logistics-header-last-sync">
+                  <span class="chantier-logistics-modal-station-name">{{ splitStationDisplayLabel(site.stationName).name }}</span>
+                </p>
+                @if (site.marketId) {
+                  <p class="chantier-logistics-header-last-sync">
+                    <span class="chantier-logistics-modal-marketid">marketId {{ site.marketId }}</span>
+                  </p>
                 }
-              </p>
-              <p class="chantier-logistics-header-last-sync">
-                <span class="chantier-logistics-header-last-sync__label">Soute / FC</span>
-                <span class="chantier-logistics-header-last-sync__value">{{
-                  formatLastSyncLabel(ui.lastRealSyncSuccessAt())
-                }}</span>
-                @if (ui.realSyncInventoryHttpError()) {
-                  <span class="chantier-logistics-header-stale">— indisponible</span>
-                }
-              </p>
+              }
             </div>
           </div>
           <div class="chantier-logistics-header-actions">
+            <div class="chantier-logistics-header-buttons">
             <button
               type="button"
               class="chantier-logistics-real-sync-btn chantier-logistics-real-sync-btn--in-header"
@@ -368,17 +328,6 @@
                 aria-hidden="true"
                 >{{ realSyncPillLabel() }}</span
               >
-            </button>
-            <button
-              type="button"
-              class="chantier-logistics-cargo-sync-btn"
-              [class.chantier-logistics-cargo-sync-btn--busy]="cargoSyncLoading()"
-              [disabled]="!ui.selectedSite() || cargoSyncLoading() || realSyncTickRunning() || !frontierAuth.isConnected() || !!ui.chantierGoneMessage()"
-              aria-label="Synchroniser le FC depuis Frontier"
-              title="Sync cargo — met à jour le FC uniquement (sans refresh des besoins chantier)"
-              (click)="syncCargoOnly($event)"
-            >
-              Sync cargo
             </button>
             <button
               type="button"
@@ -407,6 +356,16 @@
                 <path d="M16 16h5v5" />
               </svg>
             </button>
+            </div>
+            <p class="chantier-logistics-modal-updated">
+              <span class="chantier-logistics-updated-label">mis à jour</span>
+              <span class="chantier-logistics-updated-value">
+                {{ formatLastSyncLabel(ui.lastChantierNeedsVerifiedAt()) }}
+                @if (ui.chantierMarketIdCapiIssue()) {
+                  <span class="chantier-logistics-header-stale" title="Dernier snapshot affiché — non confirmé par la CAPI">— non vérifiés</span>
+                }
+              </span>
+            </p>
           </div>
         </div>
         <ng-container *ngTemplateOutlet="logisticsBody" />

@@ -17,7 +17,6 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { GuildSystemBgsDto } from '../../../core/models/guild-systems.model';
 import type { SystemsFilterValue } from '../../../core/models/guild-systems.model';
 import { GuildSystemsSyncService } from '../../../core/services/guild-systems-sync.service';
-import type { FrontierJournalSystemDerivedDto } from '../../../core/services/frontier-journal-api.service';
 import { hasConflictState } from '../../../core/utils/guild-systems.util';
 import { isInaraWithoutNewsCategory } from '../../../core/utils/inara-data-derivation.util';
 
@@ -31,21 +30,17 @@ export type MapCategoryKey =
   | 'healthy'
   | 'others';
 
-/** Couleurs calques journal — néon / forte saturation pour rester visibles à grande distance. */
-const JOURNAL_COLOR_VISITED = 0x00fff0;
-const JOURNAL_COLOR_DISCOVERED = 0xff3df2;
-const JOURNAL_COLOR_FULLSCAN = 0xfffc40;
-
-/** Low / others : même néon que « Visités » journal (distinct des pastels du panneau influence). */
+/** Low / others : couleur néon cyan (distinct des pastels du panneau influence). */
+const CATEGORY_NEON_CYAN = 0x00fff0;
 const CATEGORY_COLORS: Record<MapCategoryKey, number> = {
   origin: 0x00d4ff,
   headquarter: 0xd4af37,
   surveillance: 0x93c5fd,
   conflicts: 0xcc5500,
   critical: 0xff6b6b,
-  low: JOURNAL_COLOR_VISITED,
+  low: CATEGORY_NEON_CYAN,
   healthy: 0x00ff88,
-  others: JOURNAL_COLOR_VISITED,
+  others: CATEGORY_NEON_CYAN,
 };
 
 /**
@@ -80,7 +75,7 @@ const ED_TO_SCENE_X = (x: number) => -x;
 /** Facteur de scale au survol. */
 const HOVER_SCALE = 1.3;
 
-/** Décalage vertical (px) des libellés repères : sous le point projeté pour ne pas masquer l’étoile / le système. */
+/** Décalage vertical (px) des libellés repères : sous le point projeté pour ne pas masquer l'étoile / le système. */
 const LANDMARK_LABEL_OFFSET_Y_PX = 40;
 
 /** Distance caméra ↔ cible : molette OrbitControls et curseur identiques. */
@@ -98,8 +93,6 @@ function zoomLevelForViewDistance(dist: number): number {
 
 interface MapSystem extends GuildSystemBgsDto {
   mapCategory: MapCategoryKey;
-  /** Point synthétique vue Cmdr (pas un système Inara / pas de clic panneau guilde). */
-  isJournalCmdrPoint?: boolean;
 }
 
 /** Repère galactique rendu comme un système carte (billboards + glow), id négatif dédié. */
@@ -120,29 +113,25 @@ function createSyntheticLandmarkMapSystem(lm: (typeof GALACTIC_LANDMARKS)[number
     coordsZ: lm.z,
     primaryStarClass: 'primaryStarClass' in lm ? lm.primaryStarClass : null,
     mapCategory: 'others',
-    isJournalCmdrPoint: false,
   };
 }
 
-/** Rayon de référence vue Cmdr (journal) — même hiérarchie visuelle que la vue Faction. */
-const CMDR_JOURNAL_CORE_RADIUS = 2.85;
-
 /**
- * Rayon de base carte (anneaux + noyau) quand la faction n’a pas d’influence dans le système :
- * pas de disque d’influence BGS, seulement l’étoile + marqueurs catégorie (HQ, etc.).
+ * Rayon de base carte (anneaux + noyau) quand la faction n'a pas d'influence dans le système :
+ * pas de disque d'influence BGS, seulement l'étoile + marqueurs catégorie (HQ, etc.).
  */
 const STAR_MAP_NO_FACTION_BASE_R = 0.5;
 
-/** Disque d’influence : affiché seulement si la faction a une influence &gt; 0 (présence Inara / sync). */
+/** Disque d'influence : affiché seulement si la faction a une influence &gt; 0 (présence Inara / sync). */
 function hasFactionInfluenceOnMap(sys: Pick<GuildSystemBgsDto, 'influencePercent'>): boolean {
   const p = sys.influencePercent;
   return typeof p === 'number' && !Number.isNaN(p) && p > 0;
 }
 
-/** Multiplicateur global sur l’alpha des shaders radiaux (étoile / influence). */
+/** Multiplicateur global sur l'alpha des shaders radiaux (étoile / influence). */
 const STAR_ALPHA_SCALE = 1.0;
 const INFLUENCE_DISK_OPACITY = 0.22;
-/** Au survol : opacité du grand disque d’influence (uniforme `uAlphaScale` du shader). */
+/** Au survol : opacité du grand disque d'influence (uniforme `uAlphaScale` du shader). */
 const INFLUENCE_DISK_HOVER_OPACITY = 0.8;
 const RING_PRIMARY_OPACITY = 0.88;
 /** Anneau catégorie extérieur — plus discret (demi-largeur radiale vs ancienne version). */
@@ -152,7 +141,7 @@ const DIM_FACTOR_INFLUENCE = 0.12;
 const DIM_FACTOR_RING1 = 0.35;
 const DIM_FACTOR_RING2 = 0.08;
 
-/** Épaisseur relative de la bordure filtre (≈ lisibilité « 2px » à l’échelle du disque). */
+/** Épaisseur relative de la bordure filtre (≈ lisibilité « 2px » à l'échelle du disque). */
 const RING_PRIMARY_BORDER_FRAC = 0.022;
 
 /**
@@ -166,9 +155,6 @@ function visualSystemDiskOuterRadius(baseR: number): number {
   const r2OuterFull = baseR * 1.28;
   return r2Inner + (r2OuterFull - r2Inner) * 0.5;
 }
-
-/** Couleur par défaut si pas de calque : glaçage clair (pas gris terne). */
-const CMDR_JOURNAL_FALLBACK = 0x8effff;
 
 interface SystemVisualLayers {
   /** Billboards : ShaderMaterial radial (étoile + disque influence). */
@@ -203,7 +189,7 @@ void main() {
 }
 `;
 
-/** Influence : alpha fort au centre, fade jusqu’à quasi 0 sur le bord extérieur. */
+/** Influence : alpha fort au centre, fade jusqu'à quasi 0 sur le bord extérieur. */
 const INFLUENCE_RADIAL_FRAG = `
 varying vec2 vUv;
 uniform vec3 uTint;
@@ -251,7 +237,7 @@ function createInfluenceRadialMaterial(tintHex: number, alphaScale: number): THR
 }
 
 /**
- * Lettre spectrale quand l’API n’a pas encore `primaryStarClass` (fallback carte).
+ * Lettre spectrale quand l'API n'a pas encore `primaryStarClass` (fallback carte).
  * Référence joueur : **Sol = G, Colonia = F** (vérifié Inara) ; le reste inchangé.
  */
 const KNOWN_SPECTRAL_LETTER_BY_SYSTEM_NAME: Record<string, string> = {
@@ -261,15 +247,11 @@ const KNOWN_SPECTRAL_LETTER_BY_SYSTEM_NAME: Record<string, string> = {
   'BEAGLE POINT': 'K',
 };
 
-/** Noyau stellaire + teinte du disque d’influence (plus pâle / désaturée). */
+/** Noyau stellaire + teinte du disque d'influence (plus pâle / désaturée). */
 function inferStarPalette(
   primaryStarClass: string | null | undefined,
   systemName: string,
-  isJournalCmdr: boolean,
 ): { core: number; influence: number } {
-  if (isJournalCmdr) {
-    return { core: CMDR_JOURNAL_FALLBACK, influence: 0x5ec4c4 };
-  }
   const nameKey = systemName.trim().toUpperCase();
   const fromApi = (primaryStarClass ?? '').trim();
   const fromKnown = KNOWN_SPECTRAL_LETTER_BY_SYSTEM_NAME[nameKey];
@@ -298,14 +280,14 @@ function inferStarPalette(
   return { core: 0xffee99, influence: 0xc9b85c };
 }
 
-/** Survol : éclaircit le noyau spectral au lieu d’un cyan fixe (qui masquait Sol, etc.). */
+/** Survol : éclaircit le noyau spectral au lieu d'un cyan fixe (qui masquait Sol, etc.). */
 function hoverStarCoreHex(spectralCoreHex: number): number {
   const c = new THREE.Color(spectralCoreHex);
   c.lerp(new THREE.Color(0xffffff), 0.4);
   return c.getHex();
 }
 
-/** Assombrit légèrement une couleur néon pour le disque d’influence (lisibilité, pas un pâté opaque). */
+/** Assombrit légèrement une couleur néon pour le disque d'influence (lisibilité, pas un pâté opaque). */
 function tintForInfluenceDisk(hex: number): number {
   const c = new THREE.Color(hex);
   c.lerp(new THREE.Color(0x0a1620), 0.42);
@@ -335,17 +317,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   @Input() systems: GuildSystemsResponseInput = emptyInput();
   @Input() selectedSystemId: number | null = null;
   @Input() systemsFilter: SystemsFilterValue = 'all';
-  /** Vue Faction : systèmes guilde ; Vue Cmdr : points journal ; Pont galactique : ponts planifiés (placeholder). */
-  @Input() mapViewMode: 'faction' | 'cmdr' | 'galacticBridge' = 'faction';
-  /** Systèmes dérivés du journal ayant coordsX/Y/Z (passé par le parent). */
-  @Input() journalCmdrPoints: FrontierJournalSystemDerivedDto[] = [];
-
-  /** Calques journal CMDR (cumulables) — surbrillance sur la carte. */
-  @Input() journalLayerVisited = false;
-  @Input() journalLayerDiscovered = false;
-  @Input() journalLayerFullScan = false;
-  /** Clé = nom système normalisé (uppercase trim), valeurs depuis GET derived/systems. */
-  @Input() journalByName: Record<string, { isVisited: boolean; hasFirstDiscoveryBody: boolean; isFullScanned: boolean }> = {};
+  /** Vue Faction : systèmes guilde ; Pont galactique : ponts planifiés (placeholder). */
+  @Input() mapViewMode: 'faction' | 'galacticBridge' = 'faction';
 
   private readonly guildSync = inject(GuildSystemsSyncService);
   private readonly cdr = inject(ChangeDetectorRef);
@@ -403,8 +376,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   }
 
   /**
-   * Vue Faction : pas de points si aucun système guilde n’a de coords EDSM.
-   * Vue Cmdr : pas de points si le journal parsé n’a aucune coordonnée StarPos.
+   * Vue Faction : pas de points si aucun système guilde n'a de coords EDSM.
+   * Vue Cmdr : pas de points si le journal parsé n'a aucune coordonnée StarPos.
    */
   hasNoCoords(): boolean {
     return this.buildMapPointsList().length === 0;
@@ -415,14 +388,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     if (this.mapViewMode === 'galacticBridge') {
       return [];
     }
-    if (this.mapViewMode === 'faction') {
-      return guildInputToFactionMapSystems(this.systems);
-    }
-    const withCoords = this.journalCmdrPoints.filter(
-      (p) => p.coordsX != null && p.coordsY != null && p.coordsZ != null,
-    );
-    if (withCoords.length === 0) return [];
-    return withCoords.map((p) => journalDtoToMapSystemMerged(p, this.systems));
+    return guildInputToFactionMapSystems(this.systems);
   }
 
   ngOnInit(): void {}
@@ -435,20 +401,12 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   ngOnChanges(changes: SimpleChanges): void {
     const systemsCh = !!changes['systems'];
     const modeCh = !!changes['mapViewMode'];
-    const journalCh = !!changes['journalCmdrPoints'];
-    /** Changement Faction / Cmdr / Pont uniquement : ne pas recadrer la caméra. */
-    const preserveCamera = modeCh && !systemsCh && !journalCh;
+    /** Changement Faction / Pont uniquement : ne pas recadrer la caméra. */
+    const preserveCamera = modeCh && !systemsCh;
 
-    if (systemsCh || modeCh || journalCh) {
+    if (systemsCh || modeCh) {
       if (this.scene) this.updatePoints(preserveCamera);
-    } else if (
-      (changes['systemsFilter'] ||
-        changes['journalLayerVisited'] ||
-        changes['journalLayerDiscovered'] ||
-        changes['journalLayerFullScan'] ||
-        changes['journalByName']) &&
-      this.scene
-    ) {
+    } else if (changes['systemsFilter'] && this.scene) {
       this.updateVisualHighlight();
     }
   }
@@ -560,7 +518,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   }
 
   /**
-   * Si un repère a le même nom qu’un système déjà rendu comme point faction/journal, on masque le groupe repère
+   * Si un repère a le même nom qu'un système déjà rendu comme point faction/journal, on masque le groupe repère
    * pour éviter Sol « double ».
    */
   private syncLandmarkMeshesWithFactionSystems(): void {
@@ -612,11 +570,9 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const cz = sumZ / n;
 
     for (const sys of list) {
-      const baseR = sys.isJournalCmdrPoint
-        ? CMDR_JOURNAL_CORE_RADIUS
-        : hasFactionInfluenceOnMap(sys)
-          ? this.radiusFromInfluence(sys.influencePercent)
-          : STAR_MAP_NO_FACTION_BASE_R;
+      const baseR = hasFactionInfluenceOnMap(sys)
+        ? this.radiusFromInfluence(sys.influencePercent)
+        : STAR_MAP_NO_FACTION_BASE_R;
       const pos = new THREE.Vector3(ED_TO_SCENE_X(sys.coordsX!), sys.coordsY!, sys.coordsZ!);
       const { group, layers, hitMesh } = this.buildSystemVisualGroup(sys, baseR, pos);
       this.scene.add(group);
@@ -664,7 +620,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   }
 
   /**
-   * Étoile centrale + disque d’influence + bordure catégorie + halo.
+   * Étoile centrale + disque d'influence + bordure catégorie + halo.
    * Le raycast utilise une sphère invisible de rayon = moitié du disque total (bord extérieur du halo).
    */
   private buildSystemVisualGroup(
@@ -679,7 +635,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     group.name = `sys-${sys.id}`;
 
     const palette =
-      opts?.palette ?? inferStarPalette(sys.primaryStarClass, sys.name, !!sys.isJournalCmdrPoint);
+      opts?.palette ?? inferStarPalette(sys.primaryStarClass, sys.name);
     const coreR = Math.max(0.12, baseR * 0.12);
     /** Cercle billboard : le dégradé UV va à 0 sur le bord — pas de disque dur. */
     const starBillboardR = coreR * 2.5;
@@ -700,7 +656,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const showInfDisk = hasFactionInfluenceOnMap(sys);
     influenceDisk.visible = showInfDisk;
 
-    const cat = CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED;
+    const cat = CATEGORY_COLORS[sys.mapCategory] ?? CATEGORY_NEON_CYAN;
     const ring1Geom = new THREE.RingGeometry(ring1Inner, ring1Outer, 64);
     const ring1Mat = new THREE.MeshBasicMaterial({
       color: cat,
@@ -714,7 +670,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
 
     const r2Inner = ring1Outer + borderW * 0.25;
     const r2OuterFull = baseR * 1.28;
-    /** Moitié de l’extension radiale de l’ancien halo → moins envahissant. */
+    /** Moitié de l'extension radiale de l'ancien halo → moins envahissant. */
     const r2Outer = r2Inner + (r2OuterFull - r2Inner) * 0.5;
     const ring2Geom = new THREE.RingGeometry(r2Inner, r2Outer, 48);
     const ring2Mat = new THREE.MeshBasicMaterial({
@@ -745,57 +701,17 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     return { group, layers, hitMesh };
   }
 
-  private journalLayersActive(): boolean {
-    return this.journalLayerVisited || this.journalLayerDiscovered || this.journalLayerFullScan;
-  }
-
-  private normalizeJournalKey(name: string): string {
-    return name.trim().toUpperCase();
-  }
-
-  /** Priorité affichage : full scan > première découverte (corps) > visité. */
-  private journalAccentColor(sys: MapSystem): number | null {
-    if (!this.journalLayersActive()) return null;
-    const j = this.journalByName[this.normalizeJournalKey(sys.name)];
-    if (!j) return null;
-    if (this.journalLayerFullScan && j.isFullScanned) return JOURNAL_COLOR_FULLSCAN;
-    if (this.journalLayerDiscovered && j.hasFirstDiscoveryBody) return JOURNAL_COLOR_DISCOVERED;
-    if (this.journalLayerVisited && j.isVisited) return JOURNAL_COLOR_VISITED;
-    return null;
-  }
-
-  private journalMatchesActiveLayers(sys: MapSystem): boolean {
-    const j = this.journalByName[this.normalizeJournalKey(sys.name)];
-    if (!j) return false;
-    return (
-      (this.journalLayerVisited && j.isVisited) ||
-      (this.journalLayerDiscovered && j.hasFirstDiscoveryBody) ||
-      (this.journalLayerFullScan && j.isFullScanned)
-    );
-  }
-
-  private journalCmdrDefaultColor(sys: MapSystem): number {
-    const j = this.journalByName[this.normalizeJournalKey(sys.name)];
-    if (!j) return CMDR_JOURNAL_FALLBACK;
-    if (j.isFullScanned) return JOURNAL_COLOR_FULLSCAN;
-    if (j.hasFirstDiscoveryBody) return JOURNAL_COLOR_DISCOVERED;
-    if (j.isVisited) return JOURNAL_COLOR_VISITED;
-    return CMDR_JOURNAL_FALLBACK;
-  }
-
   private updateVisualHighlight(): void {
     if (!this.scene) return;
     const filter = this.systemsFilter;
-    const journalOn = this.journalLayersActive();
-    const cmdr = this.mapViewMode === 'cmdr';
 
     for (const [id, layers] of this.systemLayers) {
       const sys = this.systemGroups.get(id)?.userData?.['systemData'] as MapSystem | undefined;
       if (!sys) continue;
       if (this.hoveredSystem?.id === id) continue;
 
-      const palette = inferStarPalette(sys.primaryStarClass, sys.name, !!sys.isJournalCmdrPoint);
-      const catHex = CATEGORY_COLORS[sys.mapCategory] ?? JOURNAL_COLOR_VISITED;
+      const palette = inferStarPalette(sys.primaryStarClass, sys.name);
+      const catHex = CATEGORY_COLORS[sys.mapCategory] ?? CATEGORY_NEON_CYAN;
 
       const starMat = layers.starCore.material as THREE.ShaderMaterial;
       const diskMat = layers.influenceDisk.material as THREE.ShaderMaterial;
@@ -812,56 +728,28 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
       let r1Op = RING_PRIMARY_OPACITY;
       let r2Op = RING_SECONDARY_OPACITY;
 
-      if (cmdr) {
-        const matchJ = !journalOn || this.journalMatchesActiveLayers(sys);
-        const accent = this.journalAccentColor(sys);
-        if (journalOn && accent != null && matchJ) {
-          coreHex = accent;
-          infHex = tintForInfluenceDisk(accent);
-        } else if (!journalOn) {
-          const c = this.journalCmdrDefaultColor(sys);
-          coreHex = c;
-          infHex = tintForInfluenceDisk(c);
-        } else {
-          coreHex = catHex;
-          infHex = tintForInfluenceDisk(catHex);
-        }
-        if (!matchJ) {
-          coreAlpha *= DIM_FACTOR_CORE;
-          infOp *= DIM_FACTOR_INFLUENCE;
-          r1Op *= DIM_FACTOR_RING1;
-          r2Op *= DIM_FACTOR_RING2;
-        }
-      } else {
-        // Conflits : aligné sur le panneau (hasConflictState) — un même système peut être sain + conflit
-        // ou avoir mapCategory « surveillance » / autre alors qu'il est en guerre ; le filtre carte doit quand même le mettre en avant.
-        // « Systèmes sans nouvelles » : uniquement selon l'ancienneté Inara (> 30 j), pas la catégorie carte.
-        const matchCat =
-          filter === 'all' ||
-          (filter === 'withoutNews'
-            ? isInaraWithoutNewsCategory(sys)
-            : filter === 'conflicts'
-              ? hasConflictState(sys) || sys.mapCategory === 'conflicts'
-              : (() => {
-                  const hc = FILTER_TO_CATEGORY[filter];
-                  return hc != null && sys.mapCategory === hc;
-                })());
-        const matchJ = !journalOn || this.journalMatchesActiveLayers(sys);
-        const visible = matchCat && matchJ;
-        const accent = this.journalAccentColor(sys);
-        if (journalOn && accent != null && matchJ && matchCat) {
-          coreHex = accent;
-          infHex = tintForInfluenceDisk(accent);
-        } else {
-          coreHex = palette.core;
-          infHex = palette.influence;
-        }
-        if (!visible) {
-          coreAlpha *= DIM_FACTOR_CORE;
-          infOp *= DIM_FACTOR_INFLUENCE;
-          r1Op *= DIM_FACTOR_RING1;
-          r2Op *= DIM_FACTOR_RING2;
-        }
+      // Conflits : aligné sur le panneau (hasConflictState) — un même système peut être sain + conflit
+      // ou avoir mapCategory « surveillance » / autre alors qu'il est en guerre ; le filtre carte doit quand même le mettre en avant.
+      // « Systèmes sans nouvelles » : uniquement selon l'ancienneté Inara (> 30 j), pas la catégorie carte.
+      const matchCat =
+        filter === 'all' ||
+        (filter === 'withoutNews'
+          ? isInaraWithoutNewsCategory(sys)
+          : filter === 'conflicts'
+            ? hasConflictState(sys) || sys.mapCategory === 'conflicts'
+            : (() => {
+                const hc = FILTER_TO_CATEGORY[filter];
+                return hc != null && sys.mapCategory === hc;
+              })());
+
+      coreHex = palette.core;
+      infHex = palette.influence;
+
+      if (!matchCat) {
+        coreAlpha *= DIM_FACTOR_CORE;
+        infOp *= DIM_FACTOR_INFLUENCE;
+        r1Op *= DIM_FACTOR_RING1;
+        r2Op *= DIM_FACTOR_RING2;
       }
 
       starMat.uniforms['uCoreColor'].value.setHex(coreHex);
@@ -927,8 +815,8 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
     const dm = layers.influenceDisk.material as THREE.ShaderMaterial;
     const r1 = layers.ringPrimary.material as THREE.MeshBasicMaterial;
     const r2 = layers.ringSecondary.material as THREE.MeshBasicMaterial;
-    const pal = inferStarPalette(sys?.primaryStarClass, sys?.name ?? '', !!sys?.isJournalCmdrPoint);
-    const hoverCore = sys?.isJournalCmdrPoint ? 0xffffff : hoverStarCoreHex(pal.core);
+    const pal = inferStarPalette(sys?.primaryStarClass, sys?.name ?? '');
+    const hoverCore = hoverStarCoreHex(pal.core);
     sm.uniforms['uCoreColor'].value.setHex(hoverCore);
     sm.uniforms['uAlphaScale'].value = Math.min(1.25, STAR_ALPHA_SCALE + 0.22);
     sm.depthTest = false;
@@ -950,11 +838,7 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
       : null;
     this.selectedSystem = sys;
     if (sys) {
-      if (sys.isJournalCmdrPoint) {
-        this.guildSync.clearMapSelection();
-      } else {
-        this.guildSync.onMapSystemClicked(sys.name, sys.id);
-      }
+      this.guildSync.onMapSystemClicked(sys.name, sys.id);
     } else {
       this.guildSync.clearMapSelection();
     }
@@ -1215,16 +1099,6 @@ export class GuildSystemsMapComponent implements OnInit, AfterViewInit, OnChange
   }
 }
 
-function syntheticJournalId(systemName: string): number {
-  let h = 0;
-  const s = systemName.trim().toUpperCase();
-  for (let i = 0; i < s.length; i++) {
-    h = (h << 5) - h + s.charCodeAt(i);
-    h |= 0;
-  }
-  return h <= 0 ? h - 1 : -h;
-}
-
 /**
  * Priorité décroissante : si un même système (même `id`) est présent dans plusieurs listes API
  * (ex. origine + siège), une seule entrée carte doit être créée — sinon deux groupes 3D se superposent
@@ -1241,56 +1115,7 @@ const GUILD_CATEGORY_PRIORITY: { cat: MapCategoryKey; key: keyof GuildSystemsRes
   { cat: 'others', key: 'others' },
 ];
 
-function findGuildMatchForJournalName(
-  name: string,
-  systems: GuildSystemsResponseInput,
-): { sys: GuildSystemBgsDto; cat: MapCategoryKey } | null {
-  const key = name.trim().toUpperCase();
-  for (const { cat, key: arrKey } of GUILD_CATEGORY_PRIORITY) {
-    for (const s of systems[arrKey] ?? []) {
-      if (s.name.trim().toUpperCase() === key) return { sys: s, cat };
-    }
-  }
-  return null;
-}
-
-/** Positions = journal CAPI (StarPos) ; métadonnées BGS = guilde si le nom correspond. */
-function journalDtoToMapSystemMerged(
-  dto: FrontierJournalSystemDerivedDto,
-  systems: GuildSystemsResponseInput,
-): MapSystem {
-  const m = findGuildMatchForJournalName(dto.systemName, systems);
-  if (!m) {
-    return {
-      id: syntheticJournalId(dto.systemName),
-      name: dto.systemName,
-      influencePercent: 0,
-      isThreatened: false,
-      isExpansionCandidate: false,
-      isHeadquarter: false,
-      isUnderSurveillance: false,
-      isClean: true,
-      category: 'Journal CAPI',
-      isFromSeed: false,
-      coordsX: dto.coordsX!,
-      coordsY: dto.coordsY!,
-      coordsZ: dto.coordsZ!,
-      mapCategory: 'others',
-      isJournalCmdrPoint: true,
-    };
-  }
-  const { sys, cat } = m;
-  return {
-    ...sys,
-    coordsX: dto.coordsX!,
-    coordsY: dto.coordsY!,
-    coordsZ: dto.coordsZ!,
-    mapCategory: cat,
-    isJournalCmdrPoint: false,
-  };
-}
-
-/** Vue Faction uniquement : systèmes guilde enrichis (coords EDSM), sans passer par le journal CMDR. */
+/** Systèmes guilde enrichis (coords EDSM). */
 function guildInputToFactionMapSystems(input: GuildSystemsResponseInput): MapSystem[] {
   const byId = new Map<number, MapSystem>();
   for (const { cat, key: arrKey } of GUILD_CATEGORY_PRIORITY) {
@@ -1303,7 +1128,6 @@ function guildInputToFactionMapSystems(input: GuildSystemsResponseInput): MapSys
         coordsY: s.coordsY,
         coordsZ: s.coordsZ,
         mapCategory: cat,
-        isJournalCmdrPoint: false,
       });
     }
   }

@@ -7,7 +7,11 @@
       "Bash(cp '/Users/biboxm1/Documents/Projets perso/EliteBridgePlanner/client/src/app/features/dashboard/diplomatic-pipeline-panel/diplomatic-pipeline-panel.component.ts' '/Users/biboxm1/Documents/Projets perso/501.gc/client/src/app/features/dashboard/diplomatic-pipeline-panel/diplomatic-pipeline-panel.component.ts')",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\)\")",
       "Bash(xargs cat *)",
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "Read(//Users/biboxm1/Documents/Projets perso/CmdrMap/server/**)",
+      "Bash(dotnet ef *)",
+      "Bash(npx tsc *)",
+      "Bash(ls ~/trash/ | grep frontier-cmdr | sort)"
     ]
   }
 }

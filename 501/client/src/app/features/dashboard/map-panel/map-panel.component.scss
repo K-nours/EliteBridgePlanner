@@ -205,7 +205,7 @@
 .map-counter--active.map-counter--total .map-counter-value {
   color: #b8fff9;
 }
-.map-counter--active:not(.map-counter--healthy):not(.map-counter--critical):not(.map-counter--conflicts):not(.map-counter--surveillance-ok):not(.map-counter--surveillance-critical):not(.map-counter--without-news):not(.map-counter--journal):not(.map-counter--total) .map-counter-value {
+.map-counter--active:not(.map-counter--healthy):not(.map-counter--critical):not(.map-counter--conflicts):not(.map-counter--surveillance-ok):not(.map-counter--surveillance-critical):not(.map-counter--without-news):not(.map-counter--total) .map-counter-value {
   color: #00eaff;
 }
 .map-counter--active.map-counter--without-news {
@@ -239,45 +239,8 @@
 .map-counter--total:disabled .map-counter-value {
   color: rgba(0, 255, 240, 0.42);
 }
-.map-counter:disabled:not(.map-counter--journal):not(.map-counter--total) .map-counter-value {
+.map-counter:disabled:not(.map-counter--total) .map-counter-value {
   color: rgba(255, 255, 255, 0.45);
-}
-.map-counter-value--journal {
-  font-size: 1.25rem;
-  font-variant-numeric: tabular-nums;
-}
-.map-counter--journal-visited .map-counter-value--journal {
-  color: #00fff0;
-}
-.map-counter--journal-disc .map-counter-value--journal {
-  color: #ff3df2;
-}
-.map-counter--journal-full .map-counter-value--journal {
-  color: #fffc40;
-}
-.map-counter--journal-visited:disabled .map-counter-value--journal {
-  color: rgba(0, 255, 240, 0.42);
-}
-.map-counter--journal-disc:disabled .map-counter-value--journal {
-  color: rgba(255, 61, 242, 0.42);
-}
-.map-counter--journal-full:disabled .map-counter-value--journal {
-  color: rgba(255, 252, 64, 0.42);
-}
-.map-counter--journal-visited.map-counter--active {
-  background: rgba(0, 255, 240, 0.18);
-  border-color: rgba(0, 255, 240, 0.75);
-  box-shadow: 0 0 14px rgba(0, 255, 240, 0.35);
-}
-.map-counter--journal-disc.map-counter--active {
-  background: rgba(255, 61, 242, 0.16);
-  border-color: rgba(255, 61, 242, 0.72);
-  box-shadow: 0 0 14px rgba(255, 61, 242, 0.32);
-}
-.map-counter--journal-full.map-counter--active {
-  background: rgba(255, 252, 64, 0.2);
-  border-color: rgba(255, 252, 64, 0.78);
-  box-shadow: 0 0 14px rgba(255, 252, 64, 0.38);
 }
 .map-counter--active:hover:not(:disabled) {
   filter: brightness(1.06);

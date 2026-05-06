@@ -1,4 +1,3 @@
-// ── Structure hôte ──────────────────────────────────────────────
 :host {
   display: flex;
   flex-direction: column;
@@ -8,7 +7,6 @@
   min-height: 0;
 }
 
-// ── En-tête ─────────────────────────────────────────────────────
 .panel-header {
   display: flex;
   align-items: center;
@@ -32,14 +30,6 @@
     0 0 10px rgba(0, 234, 255, 0.22);
 }
 
-.panel-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  flex-shrink: 0;
-}
-
-// ── Contenu ──────────────────────────────────────────────────────
 .panel-content {
   padding-left: 16px;
   padding-right: 16px;
@@ -129,195 +119,4 @@
   font-size: 0.75rem;
   font-weight: 700;
   color: #00d4ff;
-}
-
-.frontier-cmdr-journal-sync {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 16px;
-}
-
-.btn-journal-sync {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.2rem;
-  width: 100%;
-  padding: 0.35rem 0.6rem;
-  font-size: 0.65rem;
-  font-family: 'Orbitron', sans-serif;
-  background: rgba(0, 212, 255, 0.1);
-  border: 1px solid rgba(0, 212, 255, 0.25);
-  color: #00d4ff;
-  border-radius: 4px;
-  cursor: pointer;
-  text-align: center;
-  transition: background 0.15s;
-}
-
-.btn-journal-sync:hover:not(:disabled) {
-  background: rgba(0, 212, 255, 0.25);
-}
-
-.btn-journal-sync:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-journal-sync-text {
-  font-weight: 500;
-}
-
-.btn-journal-sync--single {
-  flex-direction: row;
-  min-height: 2.35rem;
-  width: 100%;
-  min-width: 0;
-}
-
-.journal-import-file-input {
-  position: absolute;
-  width: 0;
-  height: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.btn-journal-connect-frontier {
-  width: 100%;
-  margin-top: 0.35rem;
-  padding: 0.4rem 0.65rem;
-  font-size: 0.62rem;
-  font-family: 'Orbitron', sans-serif;
-  font-weight: 600;
-  background: rgba(255, 140, 0, 0.18);
-  border: 1px solid rgba(255, 140, 0, 0.45);
-  color: #ffb347;
-  border-radius: 4px;
-  cursor: pointer;
-  text-align: center;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.btn-journal-connect-frontier:hover {
-  background: rgba(255, 140, 0, 0.28);
-  border-color: rgba(255, 180, 100, 0.65);
-}
-
-.cmdrs-more-dropdown {
-  position: relative;
-}
-
-.btn-icon-more {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  font-family: 'Orbitron', sans-serif;
-  background: rgba(0, 212, 255, 0.2);
-  border: 1px solid rgba(0, 212, 255, 0.4);
-  color: #00d4ff;
-  border-radius: 4px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.btn-icon-more:hover:not(:disabled) {
-  background: rgba(0, 212, 255, 0.3);
-}
-
-.btn-icon-more:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.cmdr-inara-alert {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  border: none;
-  background: transparent;
-  cursor: default;
-  flex-shrink: 0;
-  text-decoration: none;
-}
-
-.cmdr-inara-alert--ok {
-  color: #3effa0;
-  opacity: 0.75;
-}
-
-.cmdr-inara-alert--warning {
-  cursor: pointer;
-  color: #ffb400;
-  background: rgba(255, 180, 0, 0.12);
-  border: 1px solid rgba(255, 180, 0, 0.35);
-  animation: inara-pulse 2s ease-in-out infinite;
-}
-
-.cmdr-inara-alert--warning:hover {
-  background: rgba(255, 180, 0, 0.22);
-  color: #ffd04d;
-}
-
-.cmdr-inara-alert--warning svg {
-  filter: drop-shadow(0 0 3px rgba(255, 180, 0, 0.5));
-}
-
-@keyframes inara-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.5; }
-}
-
-.cmdrs-menu-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 9997;
-}
-
-.cmdrs-menu {
-  position: absolute;
-  right: 0;
-  top: 100%;
-  margin-top: 0.25rem;
-  z-index: 9998;
-  min-width: 140px;
-  padding: 0.35rem;
-  background: rgba(6, 20, 35, 0.98);
-  border: 1px solid rgba(0, 212, 255, 0.4);
-  border-radius: 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.cmdrs-menu-item {
-  padding: 0.35rem 0.6rem;
-  font-size: 0.65rem;
-  font-family: 'Orbitron', sans-serif;
-  background: rgba(0, 212, 255, 0.1);
-  border: 1px solid rgba(0, 212, 255, 0.25);
-  color: #00d4ff;
-  border-radius: 4px;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.15s;
-}
-
-.cmdrs-menu-item:hover:not(:disabled) {
-  background: rgba(0, 212, 255, 0.25);
-}
-
-.cmdrs-menu-item:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }

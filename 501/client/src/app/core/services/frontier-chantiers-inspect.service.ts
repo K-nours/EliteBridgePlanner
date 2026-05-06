@@ -6,7 +6,7 @@ import { API_BASE_URL, buildHttpUrl } from '../config/api-base-url';
 
 /**
  * Inspection des données Frontier déjà disponibles via CAPI /profile (même source que le dashboard).
- * Pas d’OAuth supplémentaire — le token serveur doit déjà exister.
+ * Pas d'OAuth supplémentaire — le token serveur doit déjà exister.
  *
  * URL : `buildHttpUrl(API_BASE_URL, '/api/integrations/frontier/chantiers-inspect')`.
  * En dev, `API_BASE_URL` vient de `environment.guildDashboardApiBase` (http://localhost:5294) ;
