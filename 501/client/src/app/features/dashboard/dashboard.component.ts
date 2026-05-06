@@ -721,9 +721,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Background slideshow ---
   private readonly BG_IMAGES = [
-    'assets/backgrounds/bg1.jpg',
-    'assets/backgrounds/bg2.jpg',
-    'assets/backgrounds/bg3.jpg',
+    'assets/backgrounds/185785x2901.jpg',
+    'assets/backgrounds/186746x4957.jpg',
+    'assets/backgrounds/188595x1856.jpg',
+    'assets/backgrounds/188691x2125.jpg',
+    'assets/backgrounds/190066x1119.jpg',
+    'assets/backgrounds/204144x1041.jpg',
+    'assets/backgrounds/232896x5824.jpg',
   ];
   private readonly BG_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
   private bgIndex = 0;
