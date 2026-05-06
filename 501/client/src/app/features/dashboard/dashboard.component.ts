@@ -1365,6 +1365,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return;
     }
     this.addLog('Ouverture page Inara CMDR');
+    // Déclenche aussi la sync galerie via le userscript
+    if (typeof window !== 'undefined') {
+      window.postMessage({ type: 'trigger-gallery-sync', cmdrUrl: url }, '*');
+      this.addLog('Sync galerie Inara lancée');
+    }
   }
 
   /** Sync Inara → cache puis recharge les commanders. */

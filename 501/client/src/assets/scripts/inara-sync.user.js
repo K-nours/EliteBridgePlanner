@@ -246,49 +246,38 @@
       console.log('Inara Sync bridge active on dashboard');
     }
 
-    // ── Galerie CMDR : fetch via GM_xmlhttpRequest (cookies Inara inclus) ──
-    setTimeout(function () {
-      const backendBase = (BACKEND_URL || 'https://localhost:7294').replace(/\/$/, '');
+    // ── Galerie CMDR : déclenché par postMessage 'trigger-gallery-sync' depuis le dashboard ──
+    function fetchCmdrGallery(cmdrUrl) {
+      const galleryUrl = cmdrUrl.replace(/\/elite\/cmdr\/(\d+)\/?$/, '/elite/cmdr-gallery/$1/');
+      logTm('[Gallery] fetch →', galleryUrl);
       GM_xmlhttpRequest({
         method: 'GET',
-        url: backendBase + '/api/guild/settings',
-        timeout: 8000,
-        onload: function (res) {
-          if (res.status !== 200) return;
-          let settings;
-          try { settings = JSON.parse(res.responseText); } catch (_) { return; }
-          const cmdrUrl = settings && settings.inaraCmdrUrl;
-          if (!cmdrUrl) return;
-
-          // Dérive l'URL galerie : /elite/cmdr/ID/ → /elite/cmdr-gallery/ID/
-          const galleryUrl = cmdrUrl.replace(/\/elite\/cmdr\/(\d+)\/?$/, '/elite/cmdr-gallery/$1/');
-          logTm('[Gallery] fetch →', galleryUrl);
-
-          GM_xmlhttpRequest({
-            method: 'GET',
-            url: galleryUrl,
-            timeout: 10000,
-            onload: function (gRes) {
-              if (gRes.status !== 200) {
-                logTmError('[Gallery] HTTP', gRes.status, galleryUrl);
-                return;
-              }
-              const rx = /(?:https:\/\/inara\.cz)?\/data\/gallery\/\d+\/\d+x\d+\.(?:jpg|jpeg|png|webp)/gi;
-              const matches = gRes.responseText.match(rx) || [];
-              const images = [...new Set(matches.map(function (u) {
-                return u.startsWith('http') ? u : 'https://inara.cz' + u;
-              }))];
-              logTm('[Gallery]', images.length, 'image(s) trouvée(s)');
-              if (images.length > 0) {
-                window.postMessage({ type: 'inara-gallery-images', images: images }, '*');
-              }
-            },
-            onerror: function (e) { logTmError('[Gallery] erreur réseau', e); },
-          });
+        url: galleryUrl,
+        timeout: 10000,
+        onload: function (gRes) {
+          if (gRes.status !== 200) {
+            logTmError('[Gallery] HTTP', gRes.status, galleryUrl);
+            return;
+          }
+          const rx = /(?:https:\/\/inara\.cz)?\/data\/gallery\/\d+\/\d+x\d+\.(?:jpg|jpeg|png|webp)/gi;
+          const matches = gRes.responseText.match(rx) || [];
+          const images = [...new Set(matches.map(function (u) {
+            return u.startsWith('http') ? u : 'https://inara.cz' + u;
+          }))];
+          logTm('[Gallery]', images.length, 'image(s) trouvée(s)');
+          if (images.length > 0) {
+            window.postMessage({ type: 'inara-gallery-images', images: images }, '*');
+          }
         },
-        onerror: function () { logTm('[Gallery] backend injoignable'); },
+        onerror: function (e) { logTmError('[Gallery] erreur réseau', e); },
       });
-    }, 1500);
+    }
+
+    window.addEventListener('message', function (ev) {
+      if (ev.data && ev.data.type === 'trigger-gallery-sync' && ev.data.cmdrUrl) {
+        fetchCmdrGallery(ev.data.cmdrUrl);
+      }
+    });
 
     return;
   }
