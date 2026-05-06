@@ -1,10 +1,11 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TruncateTooltipDirective } from '../../../shared/directives/truncate-tooltip.directive';
 import { HttpErrorResponse } from '@angular/common/http';
 import { catchError, forkJoin, map, of, switchMap, take } from 'rxjs';
 import { FrontierChantiersDeclareEvaluateService } from '../../../core/services/frontier-chantiers-declare-evaluate.service';
 import { DeclaredChantiersApiService } from '../../../core/services/declared-chantiers-api.service';
+import { FrontierAuthService } from '../../../core/services/frontier-auth.service';
 import type { DeclaredChantierListItemApi } from '../../../core/models/declared-chantiers-api.model';
 import { SyncLogService } from '../../../core/services/sync-log.service';
 import { ActiveChantiersStore, type ActiveChantierSite } from '../../../core/state/active-chantiers.store';
@@ -37,6 +38,7 @@ export class ChantiersDebugPanelComponent implements OnInit {
   private readonly syncLog = inject(SyncLogService);
   protected readonly chantiers = inject(ActiveChantiersStore);
   protected readonly logisticsUi = inject(ChantierLogisticsUiService);
+  protected readonly frontierAuth = inject(FrontierAuthService);
 
   protected readonly loading = signal(false);
   protected readonly hydrating = signal(true);
@@ -65,6 +67,29 @@ export class ChantiersDebugPanelComponent implements OnInit {
   protected readonly othersSiteCount = computed(() =>
     this.chantiers.others().filter((e) => e.active).length,
   );
+
+  constructor() {
+    let prevConnected: boolean | null = null;
+    effect(() => {
+      const connected = this.frontierAuth.isConnected();
+      if (prevConnected === null) {
+        prevConnected = connected;
+        return;
+      }
+      if (prevConnected === connected) return;
+      prevConnected = connected;
+
+      if (!connected) {
+        this.shortStatus.set('Frontier déconnecté — reconnectez pour voir vos chantiers');
+        this.statusIsError.set(true);
+      } else {
+        // Reconnexion : efface le message et recharge
+        this.shortStatus.set(null);
+        this.statusIsError.set(false);
+        this.loadChantiersFromBackend();
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.loadChantiersFromBackend();
