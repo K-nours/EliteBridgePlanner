@@ -217,12 +217,12 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     }
     .bg-next-btn {
       position: fixed;
-      bottom: 1.2rem;
-      right: 1.2rem;
+      bottom: 0;
+      right: 0;
       z-index: 200;
       width: 2rem;
       height: 2rem;
-      border-radius: 50%;
+      border-radius: 0;
       border: 1px solid rgba(0, 212, 255, 0.25);
       background: rgba(6, 20, 35, 0.55);
       color: rgba(0, 212, 255, 0.55);
