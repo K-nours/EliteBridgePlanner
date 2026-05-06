@@ -182,6 +182,14 @@ public class InaraCommodityController : ControllerBase
         if (!cmdrUrl.StartsWith("https://inara.cz/", StringComparison.OrdinalIgnoreCase))
             return BadRequest("URL Inara invalide");
 
+        // Dérive l'URL galerie depuis l'URL profil CMDR si nécessaire
+        // /elite/cmdr/313685/ → /elite/cmdr-gallery/313685/
+        var galleryUrl = System.Text.RegularExpressions.Regex.Replace(
+            cmdrUrl,
+            @"/elite/cmdr/(\d+)/?$",
+            "/elite/cmdr-gallery/$1/",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
         var client = _httpFactory.CreateClient();
         client.DefaultRequestHeaders.UserAgent.ParseAdd("GuildDashboard/1.0");
         client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml");
@@ -189,7 +197,7 @@ public class InaraCommodityController : ControllerBase
         string html;
         try
         {
-            var response = await client.GetAsync(cmdrUrl, ct);
+            var response = await client.GetAsync(galleryUrl, ct);
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Inara gallery: {Status} pour {Url}", response.StatusCode, cmdrUrl);

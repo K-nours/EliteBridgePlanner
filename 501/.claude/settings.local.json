@@ -11,7 +11,8 @@
       "Read(//Users/biboxm1/Documents/Projets perso/CmdrMap/server/**)",
       "Bash(dotnet ef *)",
       "Bash(npx tsc *)",
-      "Bash(ls ~/trash/ | grep frontier-cmdr | sort)"
+      "Bash(ls ~/trash/ | grep frontier-cmdr | sort)",
+      "Bash(curl -s \"https://localhost:7294/api/inara/cmdr-gallery?cmdrUrl=https://inara.cz/elite/cmdr/313685/\" -k)"
     ]
   }
 }
