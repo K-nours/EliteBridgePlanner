@@ -1,0 +1,93 @@
+import { Injectable, signal } from '@angular/core';
+
+declare global {
+  interface Window {
+    __INARA_SYNC_BRIDGE__?: boolean;
+  }
+}
+
+const DEBUG = true;
+
+/**
+ * Détecte si le userscript Inara Sync est actif sur le dashboard.
+ * Une page web ne peut pas détecter Tampermonkey directement ; le userscript
+ * compagnon expose window.__INARA_SYNC_BRIDGE__ = true quand il s'exécute.
+ */
+@Injectable({ providedIn: 'root' })
+export class InaraSyncBridgeService {
+  private readonly _available = signal<boolean | null>(null);
+
+  /** true si le script est détecté, false sinon, null si pas encore vérifié */
+  readonly available = this._available.asReadonly();
+
+  /** Vérifie une fois si le bridge est présent (cache). À appeler au chargement. */
+  check(): void {
+    if (this._available() !== null) return;
+    this.checkNow();
+  }
+
+  /**
+   * Re-vérifie immédiatement le bridge (pas de cache).
+   * À appeler à chaque clic Sync car le userscript peut s'injecter après le bootstrap Angular.
+   * Détecte le signal via le DOM (document.documentElement) car Tampermonkey peut s'exécuter
+   * dans un contexte isolé où window n'est pas partagé avec la page.
+   */
+  checkNow(): boolean {
+    const ok =
+      typeof document !== 'undefined' &&
+      document.documentElement.getAttribute('data-inara-sync-bridge') === 'true';
+    this._available.set(ok);
+    if (DEBUG && typeof console !== 'undefined') {
+      console.log('[InaraBridge] available =', ok);
+    }
+    return ok;
+  }
+
+  /** Vérifie de façon synchrone si le script est disponible. Re-check à chaque appel. */
+  isAvailable(): boolean {
+    return this.checkNow();
+  }
+
+  /**
+   * Construit l'URL Inara avec autoImport=1 et openerOrigin pour postMessage.
+   * Retourne null si le script n'est pas détecté (afficher la modale d'aide).
+   * Même logique pour tous les boutons dashboard (écusson, systèmes, roster, avatar).
+   */
+  buildAutoImportUrl(url: string | null): string | null {
+    if (!url) return null;
+    if (!this.checkNow()) return null;
+    const openerOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    const [base, hash] = url.split('#');
+    const sep = base.includes('?') ? '&' : '?';
+    const withParam = base + sep + `autoImport=1&openerOrigin=${encodeURIComponent(openerOrigin)}`;
+    return hash ? `${withParam}#${hash}` : withParam;
+  }
+
+  /** Construit l'URL roster avec syncAvatars=1 pour récupérer les liens CMDR et sync avatars un par un. */
+  buildSyncAvatarsRosterUrl(url: string | null): string | null {
+    if (!url) return null;
+    if (!this.checkNow()) return null;
+    const openerOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    const [base, hash] = url.split('#');
+    const sep = base.includes('?') ? '&' : '?';
+    const withParam = base + sep + `syncAvatars=1&openerOrigin=${encodeURIComponent(openerOrigin)}`;
+    return hash ? `${withParam}#${hash}` : withParam;
+  }
+
+  /** Ouvre une page Inara en mode autoImport. Retourne l'URL ouverte si OK, null si modal d'aide à afficher.
+   * Important : on n'utilise ni noopener ni noreferrer — l'onglet doit avoir window.opener pour postMessage et window.close(). */
+  openWithAutoImport(url: string | null): string | null {
+    const fullUrl = this.buildAutoImportUrl(url);
+    if (!fullUrl) return null;
+    window.open(fullUrl, '_blank');
+    return fullUrl;
+  }
+
+  /** Ouvre la page roster Inara en mode sync avatars (extraction des liens CMDR). */
+  openSyncAvatarsRoster(url: string | null): string | null {
+    const fullUrl = this.buildSyncAvatarsRosterUrl(url);
+    if (!fullUrl) return null;
+    window.open(fullUrl, '_blank');
+    return fullUrl;
+  }
+}

@@ -1,0 +1,323 @@
+// ── Structure hôte ──────────────────────────────────────────────
+:host {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+// ── En-tête ─────────────────────────────────────────────────────
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 16px;
+  height: 60px;
+  flex-shrink: 0;
+}
+
+.panel-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.panel-count {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: rgba(0, 212, 255, 0.55);
+  background: rgba(0, 212, 255, 0.07);
+  border: 1px solid rgba(0, 212, 255, 0.18);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  flex-shrink: 0;
+  letter-spacing: 0.05em;
+}
+
+.panel-title {
+  margin: 0;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #00eaff;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-shadow:
+    0 0 4px rgba(0, 234, 255, 0.4),
+    0 0 10px rgba(0, 234, 255, 0.22);
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+// ── Contenu ──────────────────────────────────────────────────────
+.panel-content {
+  padding-left: 16px;
+  padding-right: 16px;
+  padding-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.cmdrs-more-dropdown {
+  position: relative;
+}
+
+.btn-icon-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-family: 'Orbitron', sans-serif;
+  background: rgba(0, 212, 255, 0.2);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  color: #00d4ff;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.btn-icon-more:hover:not(:disabled) {
+  background: rgba(0, 212, 255, 0.3);
+}
+
+.btn-icon-more:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cmdrs-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9997;
+}
+
+.cmdrs-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 0.25rem;
+  z-index: 9998;
+  min-width: 140px;
+  padding: 0.35rem;
+  background: rgba(6, 20, 35, 0.98);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.cmdrs-menu-item {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.65rem;
+  font-family: 'Orbitron', sans-serif;
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  color: #00d4ff;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.cmdrs-menu-item:hover:not(:disabled) {
+  background: rgba(0, 212, 255, 0.25);
+}
+
+.cmdrs-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cmdrs-empty {
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+  padding: 0.5rem 0;
+}
+
+.cmdrs-list {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 88px);
+  grid-auto-rows: 0;
+  overflow: hidden;
+  gap: 8px;
+  padding-top: 0.5rem;
+  min-width: 0;
+  flex-shrink: 0;
+  height: calc(2 * 88px + 8px + 0.5rem);
+}
+
+.cmdrs-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+  flex-shrink: 0;
+}
+
+.cmdrs-page-btn {
+  width: 24px;
+  height: 24px;
+}
+
+.cmdrs-page-label {
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(148, 163, 184, 0.9);
+  min-width: 2.5rem;
+  text-align: center;
+}
+
+.cmdr-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 0.5rem;
+  min-width: 72px;
+  padding: 8px;
+  box-sizing: border-box;
+  border: 1px solid rgba(0, 212, 255, 0.1);
+  border-radius: 10px;
+}
+
+.cmdr-item--link {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cmdr-item--link:hover {
+  background: rgba(0, 212, 255, 0.08);
+  border-color: rgba(0, 212, 255, 0.4);
+  box-shadow: 0 0 8px rgba(0, 234, 255, 0.25);
+}
+
+.cmdr-item.is-current {
+  background: rgba(0, 212, 255, 0.08);
+  border-color: rgba(0, 212, 255, 0.4);
+  box-shadow: 0 0 8px rgba(0, 234, 255, 0.25);
+}
+
+.cmdr-item.is-current .cmdr-avatar {
+  box-shadow: 0 0 10px rgba(0, 234, 255, 0.6);
+  border-color: rgba(0, 234, 255, 0.9);
+}
+
+.cmdr-item.is-current:hover {
+  background: rgba(0, 212, 255, 0.18);
+  border-color: rgba(0, 234, 255, 0.65);
+  box-shadow:
+    0 0 14px rgba(0, 234, 255, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.cmdr-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(0, 212, 255, 0.2);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.cmdr-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cmdr-initial {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #00d4ff;
+}
+
+.cmdr-name {
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  text-align: center;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+@media (max-width: 768px) {
+  .cmdrs-list {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    grid-template-rows: repeat(2, 72px);
+    height: calc(2 * 72px + 6px + 0.5rem);
+  }
+
+  .cmdr-item {
+    min-width: 56px;
+    padding: 6px;
+  }
+
+  .cmdr-avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  .cmdr-name {
+    font-size: 0.65rem;
+    max-width: 56px;
+  }
+
+  .cmdr-initial {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .cmdrs-list {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+  }
+
+  .cmdr-item {
+    min-width: 48px;
+    padding: 4px;
+  }
+
+  .cmdr-avatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  .cmdr-name {
+    font-size: 0.6rem;
+    max-width: 48px;
+  }
+
+  .cmdr-initial {
+    font-size: 0.7rem;
+  }
+}

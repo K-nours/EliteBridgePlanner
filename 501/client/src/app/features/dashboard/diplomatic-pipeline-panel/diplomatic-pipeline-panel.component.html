@@ -1,0 +1,159 @@
+<header class="panel-header">
+  <div class="panel-title-wrap">
+    <h3 class="panel-title">Menaces diplomatiques</h3>
+    <span class="panel-count">{{ entries().length }}</span>
+  </div>
+  <div class="panel-actions">
+    <!-- pas d'actions globales -->
+  </div>
+</header>
+<div class="panel-content">
+  @if (state() === 'error') {
+    <div class="dp-empty dp-empty--error">
+      <span class="dp-empty-icon">⚠</span>
+      <span>{{ errorMessage() }}</span>
+    </div>
+  } @else if (factionGroups().length > 0) {
+    @if (!edsmAvailable()) {
+      <div class="dp-edsm-warning">EDSM indisponible — factions non chargées</div>
+    }
+    <div class="dp-groups">
+      @for (group of factionGroups(); track group.factionName) {
+        <div class="category"
+          [class.category--collapsed]="isCollapsed(group.factionName)">
+          <button
+            type="button"
+            class="category-header category-header--clickable"
+            [class.category-header--expanded]="!isCollapsed(group.factionName)"
+            (click)="toggleGroup(group.factionName)"
+            [attr.aria-expanded]="!isCollapsed(group.factionName)"
+          >
+            <span class="category-label">{{ group.factionName }}</span>
+            <span class="category-count">({{ group.systems.length }})</span>
+            <svg class="category-chevron" xmlns="http://www.w3.org/2000/svg" width="10" height="10"
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+          <div class="category-expand"
+            [class.category-expand--open]="!isCollapsed(group.factionName)"
+            [attr.aria-hidden]="isCollapsed(group.factionName)">
+            <div class="category-expand-inner">
+              <div class="category-content">
+
+                <!-- Bloc info faction -->
+                @if (getFactionSync(group.factionName).status === 'idle') {
+                  <p class="faction-info">
+                    Aucune information sur cette faction pour l'instant.
+                    <button
+                      type="button"
+                      class="btn-inara-sync"
+                      (click)="syncFactionInfo(group.factionName, group.systems[0]?.systemName); $event.stopPropagation()"
+                      title="Récupérer les infos depuis Inara"
+                    >Synchro Inara</button>
+                  </p>
+                } @else if (getFactionSync(group.factionName).status === 'loading') {
+                  <div class="faction-sync-loading">
+                    <span class="dp-spinner"></span>
+                    <span>Chargement depuis Inara…</span>
+                  </div>
+                } @else if (getFactionSync(group.factionName).status === 'error') {
+                  <p class="faction-info faction-info--error">
+                    <span>⚠ {{ getFactionSync(group.factionName).error }}</span>
+                    <button
+                      type="button"
+                      class="btn-inara-sync"
+                      (click)="syncFactionInfo(group.factionName, group.systems[0]?.systemName); $event.stopPropagation()"
+                    >Réessayer</button>
+                  </p>
+                } @else if (getFactionSync(group.factionName).status === 'loaded') {
+                  @let info = getFactionSync(group.factionName).data;
+                  @if (info) {
+                    <div class="faction-info-block">
+                      <div class="faction-info-grid">
+                        @if (info.allegiance) {
+                          <span class="fi-label">Allégeance</span>
+                          <span class="fi-value">{{ info.allegiance }}</span>
+                        }
+                        @if (info.government) {
+                          <span class="fi-label">Gouvernement</span>
+                          <span class="fi-value">{{ info.government }}</span>
+                        }
+                        @if (info.origin) {
+                          <span class="fi-label">Origine</span>
+                          <span class="fi-value">{{ info.origin }}</span>
+                        }
+                        @if (info.isPlayerFaction !== null && info.isPlayerFaction !== undefined) {
+                          <span class="fi-label">Faction joueur</span>
+                          <span class="fi-value" [class.fi-value--yes]="info.isPlayerFaction">{{ info.isPlayerFaction ? 'Oui' : 'Non' }}</span>
+                        }
+                        @if (info.squadronName) {
+                          <span class="fi-label">Escadron</span>
+                          <span class="fi-value">
+                            @if (info.squadronInaraUrl) {
+                              <a [href]="info.squadronInaraUrl" target="_blank" rel="noopener noreferrer" class="fi-link">{{ info.squadronName }}</a>
+                            } @else {
+                              {{ info.squadronName }}
+                            }
+                          </span>
+                        }
+                        @if (info.squadronLanguage) {
+                          <span class="fi-label fi-indent">↳ Langue</span>
+                          <span class="fi-value">{{ info.squadronLanguage }}</span>
+                        }
+                        @if (info.squadronTimezone) {
+                          <span class="fi-label fi-indent">↳ Fuseau</span>
+                          <span class="fi-value">{{ info.squadronTimezone }}</span>
+                        }
+                        @if (info.squadronMembersCount !== null && info.squadronMembersCount !== undefined) {
+                          <span class="fi-label fi-indent">↳ Membres</span>
+                          <span class="fi-value">{{ info.squadronMembersCount }}</span>
+                        }
+                      </div>
+                      <div class="fi-footer">
+                        @if (info.factionInaraUrl) {
+                          <a [href]="info.factionInaraUrl" target="_blank" rel="noopener noreferrer" class="fi-inara-link">
+                            Voir sur Inara ↗
+                          </a>
+                        }
+                        <button
+                          type="button"
+                          class="btn-inara-sync btn-inara-sync--refresh"
+                          (click)="syncFactionInfo(group.factionName, group.systems[0]?.systemName); $event.stopPropagation()"
+                          title="Mettre à jour depuis Inara"
+                        >↺</button>
+                      </div>
+                    </div>
+                  }
+                }
+
+                @for (entry of group.systems; track entry.systemName) {
+                  <div class="system-row">
+                    <a
+                      class="system-name"
+                      [href]="inaraSystemUrl(entry.systemName)"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      (click)="$event.stopPropagation()"
+                    >{{ entry.systemName }}</a>
+                    <span class="influence">{{ formatInfluence(entry.guildInfluencePercent) }}%</span>
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  } @else if (state() === 'loading') {
+    <div class="dp-loading">
+      <span class="dp-spinner"></span>
+      <span class="dp-loading-label">Chargement...</span>
+    </div>
+  } @else if (state() === 'loaded') {
+    <div class="dp-empty dp-empty--ok">
+      <span class="dp-empty-icon dp-empty-icon--ok">✓</span>
+      <span>Aucun système critique</span>
+    </div>
+  }
+</div>

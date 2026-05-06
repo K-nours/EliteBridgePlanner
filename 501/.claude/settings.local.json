@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp '/Users/biboxm1/Documents/Projets perso/EliteBridgePlanner/client/src/app/features/dashboard/dashboard.component.ts' '/Users/biboxm1/Documents/Projets perso/501.gc/client/src/app/features/dashboard/dashboard.component.ts')",
+      "Bash(cp '/Users/biboxm1/Documents/Projets perso/EliteBridgePlanner/client/src/app/features/dashboard/chantier-logistics-panel/chantier-logistics-panel.component.scss' '/Users/biboxm1/Documents/Projets perso/501.gc/client/src/app/features/dashboard/chantier-logistics-panel/chantier-logistics-panel.component.scss')",
+      "Bash(cp '/Users/biboxm1/Documents/Projets perso/EliteBridgePlanner/client/src/app/features/dashboard/chantiers-debug-panel/chantiers-debug-panel.component.scss' '/Users/biboxm1/Documents/Projets perso/501.gc/client/src/app/features/dashboard/chantiers-debug-panel/chantiers-debug-panel.component.scss')",
+      "Bash(cp '/Users/biboxm1/Documents/Projets perso/EliteBridgePlanner/client/src/app/features/dashboard/diplomatic-pipeline-panel/diplomatic-pipeline-panel.component.ts' '/Users/biboxm1/Documents/Projets perso/501.gc/client/src/app/features/dashboard/diplomatic-pipeline-panel/diplomatic-pipeline-panel.component.ts')",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\)\")",
+      "Bash(xargs cat *)",
+      "mcp__Claude_Preview__preview_start"
+    ]
+  }
+}

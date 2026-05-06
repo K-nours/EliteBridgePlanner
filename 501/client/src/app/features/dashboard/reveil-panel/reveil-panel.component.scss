@@ -1,0 +1,207 @@
+// ── Structure hôte ──────────────────────────────────────────────
+:host {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+// ── En-tête ─────────────────────────────────────────────────────
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 16px;
+  height: 60px;
+  flex-shrink: 0;
+}
+
+.panel-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.panel-count {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: rgba(0, 212, 255, 0.55);
+  background: rgba(0, 212, 255, 0.07);
+  border: 1px solid rgba(0, 212, 255, 0.18);
+  border-radius: 3px;
+  padding: 0.05rem 0.35rem;
+  flex-shrink: 0;
+  letter-spacing: 0.05em;
+}
+
+.panel-title {
+  margin: 0;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #00eaff;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  text-shadow:
+    0 0 4px rgba(0, 234, 255, 0.4),
+    0 0 10px rgba(0, 234, 255, 0.22);
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+// ── Contenu ──────────────────────────────────────────────────────
+.panel-content {
+  padding-left: 16px;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+// ── Règle ────────────────────────────────────────────────────────
+.reveil-rule {
+  font-size: 12px;
+  font-style: italic;
+  color: rgba(0, 212, 255, 0.75);
+  font-family: 'Exo 2', sans-serif;
+  flex-shrink: 0;
+}
+
+// ── Liste Réveil ─────────────────────────────────────────────────
+.reveil-list {
+  list-style: none;
+  margin: 0 0 0 -8px;
+  padding-right: 8px;
+  padding-left: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 212, 255, var(--scrollbar-opacity, 0.1)) transparent;
+
+  &::-webkit-scrollbar { width: 3px; }
+  &::-webkit-scrollbar-track { background: transparent; border-radius: 3px; }
+  &::-webkit-scrollbar-thumb { background: rgba(0, 212, 255, var(--scrollbar-opacity, 0.1)); border-radius: 3px; transition: background 0.3s ease; }
+  &::-webkit-scrollbar-thumb:hover { background: rgba(0, 212, 255, 1); }
+}
+
+.system-row {
+  position: relative;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 8px;
+  min-height: 1.75rem;
+  cursor: pointer;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+    background: transparent;
+    transition: background 0.15s;
+    z-index: 0;
+  }
+
+  &:hover::before { background: rgba(0, 212, 255, 0.06); }
+}
+
+.system-row-left {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.reveil-name {
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s;
+
+  .system-row:hover & { color: #00d4ff; text-decoration: underline; }
+}
+
+.reveil-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.reveil-btn-copy {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: #00d4ff;
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+
+  .system-row:hover &,
+  .system-row:focus-within &,
+  .system-row--copied & {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .system-row:hover &,
+  .system-row:focus-within & {
+    background: rgba(0, 212, 255, 0.12);
+    border-color: rgba(0, 212, 255, 0.4);
+  }
+
+  &:hover { background: rgba(0, 212, 255, 0.22) !important; border-color: rgba(0, 212, 255, 0.6) !important; }
+}
+
+.reveil-age {
+  position: relative;
+  z-index: 1;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.6rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.reveil-age--unknown { color: rgba(156, 163, 175, 0.7); }
+.reveil-age--stale   { color: rgba(251, 191, 36, 0.8); }
+.reveil-age--stale15 { color: rgba(251, 146, 60, 0.85); }
+.reveil-age--stale30 { color: rgba(248, 113, 113, 0.9); }
+
+.reveil-empty {
+  margin: 0.5rem 0 0;
+  font-family: 'Exo 2', sans-serif;
+  font-size: 0.68rem;
+  font-style: italic;
+  color: rgba(110, 231, 183, 0.6);
+}
+
+:host(:hover) {
+  --scrollbar-opacity: 1;
+}

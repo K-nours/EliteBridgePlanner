@@ -1,0 +1,220 @@
+<div class="panel guild-systems guild-systems--archived"
+  [class.guild-systems--all-collapsed]="allCollapsibleSectionsCollapsed()">
+  @if (contextMenuOpen()) {
+    <div class="context-menu-backdrop" (click)="closeContextMenu()"></div>
+    <div class="context-menu" [style.left.px]="contextMenuPos().x" [style.top.px]="contextMenuPos().y" (click)="$event.stopPropagation()">
+      @if (contextMenuSys(); as sys) {
+        <button type="button" class="context-menu-item" (click)="onContextMenuHq(sys); $event.stopPropagation()">
+          {{ sys.isHeadquarter ? 'Retirer du HQ' : 'Définir en HQ' }}
+        </button>
+        <button type="button" class="context-menu-item" (click)="onContextMenuSurveillance(sys); $event.stopPropagation()">
+          {{ sys.isUnderSurveillance ? 'Retirer de la surveillance' : 'Mettre sous surveillance' }}
+        </button>
+      }
+    </div>
+  }
+  <header class="panel-header">
+    <div class="panel-title-wrap">
+      <h3 class="panel-title">SYSTÈMES FACTION</h3>
+      <span class="panel-count">{{ totalSystemCount() }}</span>
+    </div>
+    <div class="panel-actions">
+      <button type="button"
+        class="btn-icon-more"
+        [class.btn-icon-more--active]="filterOpen()"
+        [title]="filterOpen() ? 'Fermer la recherche' : 'Rechercher un système'"
+        (click)="toggleFilter()">
+        @if (filterOpen()) {
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        } @else {
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        }
+      </button>
+      <div class="systems-more-dropdown">
+        @if (systemsMenuOpen()) {
+          <div class="systems-menu-backdrop" (click)="systemsMenuOpen.set(false)"></div>
+        }
+        <button type="button"
+          class="btn-icon-more"
+          [disabled]="!inaraFactionUrl()"
+          title="Actions"
+          (click)="systemsMenuOpen.set(!systemsMenuOpen())">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="12" cy="6" r="1.5"/>
+            <circle cx="12" cy="12" r="1.5"/>
+            <circle cx="12" cy="18" r="1.5"/>
+          </svg>
+        </button>
+        @if (systemsMenuOpen()) {
+          <div class="systems-menu">
+            <button type="button" class="systems-menu-item" [disabled]="!inaraFactionUrl()" [title]="inaraFactionUrl() ? (lastSystemsImportAt() ? 'Dernière sync: ' + formatLastSync(lastSystemsImportAt()!) : 'Ouvrir Inara') : 'Configurer l\'URL faction'" (click)="onSyncSystemsClick(); systemsMenuOpen.set(false)">Import Inara</button>
+            <button type="button" class="systems-menu-item systems-menu-item--danger" [disabled]="resetting()" title="Purge tous les systèmes. État propre avant import Inara complet." (click)="onResetClick(); systemsMenuOpen.set(false)">{{ resetting() ? '…' : 'Reset' }}</button>
+          </div>
+        }
+      </div>
+    </div>
+  </header>
+  <div class="panel-content">
+    @if (panelState() === 'failed' && lastError()) {
+      <p class="error-message">{{ lastError() }}</p>
+    }
+    <div class="systems-filter-wrap">
+      @if (filterOpen()) {
+        <div class="systems-filter-input-wrap">
+          <input type="text"
+            class="systems-filter-input"
+            [value]="systemFilterQuery()"
+            (input)="systemFilterQuery.set($any($event.target).value)"
+            placeholder="Filtrer les systèmes…"
+            title="Recherche par nom de système" />
+          @if (systemFilterQuery()) {
+            <button type="button"
+              class="systems-filter-clear"
+              (click)="systemFilterQuery.set('')"
+              title="Vider la recherche"
+              aria-label="Vider la recherche">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          }
+        </div>
+      }
+      <p class="systems-filter-hint">Clic : ouvrir sur Inara · Clic droit : menu • Tendance calculée sur les dernières 72h</p>
+    </div>
+    <div class="systems-list">
+      @for (cat of categoryConfig(); track cat.key) {
+        <div class="category"
+          [class.category--collapsible]="isCollapsible(cat.key)"
+          [class.category--collapsed]="isCollapsible(cat.key) && !isSectionExpanded(cat.key)">
+          @if (isCollapsible(cat.key)) {
+            <button
+              type="button"
+              class="category-header category-header--clickable"
+              [class.category-header--expanded]="isSectionExpanded(cat.key)"
+              (click)="toggleSection(cat.key)"
+              [attr.aria-expanded]="isSectionExpanded(cat.key)"
+              [attr.aria-label]="(isSectionExpanded(cat.key) ? 'Replier' : 'Déplier') + ' ' + cat.label">
+              <span class="category-label">{{ cat.label }}</span>
+              @if (cat.systems.length > 0) {
+                <span class="category-count">({{ cat.systems.length }})</span>
+              }
+              <svg class="category-chevron" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            <div
+              class="category-expand"
+              [class.category-expand--open]="isSectionExpanded(cat.key)"
+              [attr.aria-hidden]="!isSectionExpanded(cat.key)">
+              <div class="category-expand-inner">
+                @if (cat.systems.length > 0) {
+                  <div class="category-content">
+                    @for (sys of cat.systems; track sys.id) {
+                      <ng-container
+                        *ngTemplateOutlet="systemRowTpl; context: { $implicit: sys }" />
+                    }
+                  </div>
+                } @else {
+                  <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
+                }
+              </div>
+            </div>
+          } @else {
+            <span class="category-header">
+              <span class="category-label">{{ cat.label }}</span>
+            </span>
+            @if (cat.systems.length > 0) {
+              <div class="category-content">
+                @for (sys of cat.systems; track sys.id) {
+                  <ng-container
+                    *ngTemplateOutlet="systemRowTpl; context: { $implicit: sys }" />
+                }
+              </div>
+            } @else if (cat.systems.length === 0) {
+              <p class="empty" [class.empty--error]="panelState() === 'failed'">{{ emptyMessage() }}</p>
+            }
+          }
+        </div>
+      }
+    </div>
+  </div>
+</div>
+
+<ng-template #systemRowTpl let-sys>
+  <div class="system-row"
+    [attr.data-system-id]="sys.id"
+    [class]="getInfluenceClass(sys)"
+    [class.system-row--hq]="sys.isHeadquarter"
+    [class.system-row--copied]="copiedSystemId() === sys.id"
+    [class.system-row--highlighted]="guildSync.highlightedSystemIdInList() === sys.id"
+    (click)="openSystemInara(sys)"
+    (contextmenu)="onSystemContextMenu($event, sys)">
+    <span class="system-row-left">
+      <span class="system-name">@if (sys.isHeadquarter) { <span class="hq-mark">🏛️</span> }{{ sys.name }}</span>
+      <span class="system-row-actions">
+      @if (sys.coordsX != null && sys.coordsY != null && sys.coordsZ != null) {
+        <button type="button"
+          class="btn-target"
+          title="Centrer la carte sur ce système"
+          aria-label="Centrer la carte"
+          (click)="onFocusMapOnSystem($event, sys.id)">
+          <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="1" fill="currentColor"/>
+            <line x1="12" y1="4" x2="12" y2="8"/>
+            <line x1="12" y1="16" x2="12" y2="20"/>
+            <line x1="4" y1="12" x2="8" y2="12"/>
+            <line x1="16" y1="12" x2="20" y2="12"/>
+          </svg>
+        </button>
+      }
+      <button type="button"
+        class="btn-copy"
+        [title]="copyTooltip(sys.id)"
+        [attr.aria-label]="copyTooltip(sys.id)"
+        (click)="copySystemName($event, sys.name, sys.id)">
+        @if (copiedSystemId() === sys.id) {
+          <svg class="icon-check" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        } @else {
+          <svg class="icon-copy" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        }
+      </button>
+      </span>
+    </span>
+    <span class="system-row-right">
+      @let fr = inaraFreshness(sys);
+      <span
+        class="inara-freshness"
+        [class.inara-freshness--fresh]="fr.tier === 'fresh'"
+        [class.inara-freshness--medium]="fr.tier === 'medium'"
+        [class.inara-freshness--stale]="fr.tier === 'stale'"
+        [class.inara-freshness--stale15]="fr.tier === 'stale15'"
+        [class.inara-freshness--stale30]="fr.tier === 'stale30'"
+        [class.inara-freshness--unknown]="fr.tier === 'unknown'"
+        [attr.aria-label]="fr.ariaLabel"
+        role="img">{{ fr.label }}</span>
+      @if (hasDelta(sys.influenceDelta72h)) {
+        <span class="delta" [class.delta--up]="getDeltaClass(sys.influenceDelta72h) === 'delta--up'" [class.delta--down]="getDeltaClass(sys.influenceDelta72h) === 'delta--down'">{{ getDeltaDisplay(sys.influenceDelta72h) }}</span>
+      }
+      @for (badge of getStateBadges(sys); track $index) {
+        <span
+          class="state-badge"
+          [class.state-badge--rumor]="badge === 'Rumeurs'"
+          [attr.title]="getStateBadgeTitle(sys, badge) || null">{{ badge }}</span>
+      }
+      <span class="influence" [class]="getInfluenceClass(sys)">{{ sys.influencePercent }}%</span>
+    </span>
+  </div>
+</ng-template>

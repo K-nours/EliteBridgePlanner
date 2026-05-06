@@ -1,0 +1,50 @@
+<header class="panel-header">
+  <div class="panel-title-wrap">
+    <h3 class="panel-title">Opération Réveil</h3>
+    <span class="panel-count">{{ reveilSystems.length }}</span>
+  </div>
+  <div class="panel-actions">
+    <!-- pas d'actions globales dans ce panneau -->
+  </div>
+</header>
+<div class="panel-content">
+  <p class="reveil-rule">Systèmes sans mise à jour Inara depuis ≥ 5 jours ou date inconnue.</p>
+  @if (reveilSystems.length > 0) {
+    <div class="reveil-list">
+      @for (item of reveilSystems; track item.id) {
+        <div class="system-row"
+          [class.system-row--copied]="copiedReveilSystemId === item.id"
+          (click)="openInara.emit({ inaraUrl: item.inaraUrl, name: item.name })">
+          <span class="system-row-left">
+            <span class="reveil-name">{{ item.name }}</span>
+            <span class="reveil-actions">
+              <button type="button"
+                class="reveil-btn-copy"
+                [title]="copiedReveilSystemId === item.id ? 'Copié' : 'Copier'"
+                (click)="copySystemName.emit({ event: $event, name: item.name, id: item.id })">
+                @if (copiedReveilSystemId === item.id) {
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                } @else {
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                }
+              </button>
+            </span>
+          </span>
+          <span class="reveil-age"
+            [class.reveil-age--unknown]="item.ageDays === null"
+            [class.reveil-age--stale30]="item.ageDays !== null && item.ageDays >= 30"
+            [class.reveil-age--stale15]="item.ageDays !== null && item.ageDays >= 15 && item.ageDays < 30"
+            [class.reveil-age--stale]="item.ageDays !== null && item.ageDays >= 6 && item.ageDays < 15"
+          >{{ item.ageDays === null ? '?' : item.ageDays + ' j' }}</span>
+        </div>
+      }
+    </div>
+  } @else {
+    <p class="reveil-empty">Tous les systèmes sont à jour.</p>
+  }
+</div>

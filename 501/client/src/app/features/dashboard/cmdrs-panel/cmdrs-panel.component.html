@@ -1,0 +1,107 @@
+<header class="panel-header">
+  <div class="panel-title-wrap">
+    <h3 class="panel-title">CMDRs de l'escadron</h3>
+    <span class="panel-count">{{ commandersData?.commanders?.length ?? 0 }}</span>
+  </div>
+  <div class="panel-actions">
+    <div class="cmdrs-more-dropdown">
+      @if (cmdrsMenuOpen()) {
+        <div class="cmdrs-menu-backdrop" (click)="cmdrsMenuOpen.set(false)"></div>
+      }
+      <button type="button"
+        class="btn-icon-more"
+        [disabled]="!inaraSquadronUrl"
+        title="Actions"
+        (click)="cmdrsMenuOpen.set(!cmdrsMenuOpen())">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="12" cy="6" r="1.5"/>
+          <circle cx="12" cy="12" r="1.5"/>
+          <circle cx="12" cy="18" r="1.5"/>
+        </svg>
+      </button>
+      @if (cmdrsMenuOpen()) {
+        <div class="cmdrs-menu">
+          <button type="button" class="cmdrs-menu-item"
+            [disabled]="!inaraSquadronUrl"
+            [title]="syncAvatarsRosterTooltip"
+            (click)="syncAvatars.emit(); cmdrsMenuOpen.set(false)">Sync avatars</button>
+          <button type="button" class="cmdrs-menu-item"
+            [disabled]="!inaraSquadronUrl"
+            [title]="syncCmdrsTooltip"
+            (click)="syncCmdrs.emit(); cmdrsMenuOpen.set(false)">Synchronisation</button>
+        </div>
+      }
+    </div>
+  </div>
+</header>
+<div class="panel-content">
+  @if (commandersData; as data) {
+    @if (data.commanders.length > 0) {
+      @let totalPages = Math.ceil(data.commanders.length / CMDRS_PER_PAGE);
+      @let pageStart = cmdrPage() * CMDRS_PER_PAGE;
+      <div class="cmdrs-list">
+        @for (cmdr of data.commanders.slice(pageStart, pageStart + CMDRS_PER_PAGE); track cmdr.name) {
+          @if (cmdr.inaraUrl) {
+            <a [href]="cmdr.inaraUrl" target="_blank" rel="noopener noreferrer"
+              class="cmdr-item cmdr-item--link"
+              [class.is-current]="isCurrent(cmdr.name)"
+              title="Ouvrir le profil Inara">
+              <div class="cmdr-avatar">
+                @if (cmdr.avatarUrl && !cmdrAvatarError().has(cmdr.name)) {
+                  <img [src]="cmdr.avatarUrl" [alt]="cmdr.name" referrerpolicy="no-referrer"
+                    (error)="addCmdrAvatarError(cmdr.name)" />
+                }
+                @if (!cmdr.avatarUrl && avatarDefaultFallbackUrl && !cmdrAvatarError().has(cmdr.name)) {
+                  <img [src]="avatarDefaultFallbackUrl" [alt]="cmdr.name" referrerpolicy="no-referrer"
+                    (error)="addCmdrAvatarError(cmdr.name)" />
+                }
+                @if ((!cmdr.avatarUrl && !avatarDefaultFallbackUrl) || cmdrAvatarError().has(cmdr.name)) {
+                  <span class="cmdr-initial">{{ cmdr.name.charAt(0) }}</span>
+                }
+              </div>
+              <span class="cmdr-name">{{ cmdr.name }}</span>
+            </a>
+          } @else {
+            <div class="cmdr-item" [class.is-current]="isCurrent(cmdr.name)">
+              <div class="cmdr-avatar">
+                @if (cmdr.avatarUrl && !cmdrAvatarError().has(cmdr.name)) {
+                  <img [src]="cmdr.avatarUrl" [alt]="cmdr.name" referrerpolicy="no-referrer"
+                    (error)="addCmdrAvatarError(cmdr.name)" />
+                }
+                @if (!cmdr.avatarUrl && avatarDefaultFallbackUrl && !cmdrAvatarError().has(cmdr.name)) {
+                  <img [src]="avatarDefaultFallbackUrl" [alt]="cmdr.name" referrerpolicy="no-referrer"
+                    (error)="addCmdrAvatarError(cmdr.name)" />
+                }
+                @if ((!cmdr.avatarUrl && !avatarDefaultFallbackUrl) || cmdrAvatarError().has(cmdr.name)) {
+                  <span class="cmdr-initial">{{ cmdr.name.charAt(0) }}</span>
+                }
+              </div>
+              <span class="cmdr-name">{{ cmdr.name }}</span>
+            </div>
+          }
+        }
+      </div>
+      @if (totalPages > 1) {
+        <div class="cmdrs-pagination">
+          <button type="button" class="btn-icon-more cmdrs-page-btn"
+            [disabled]="cmdrPage() === 0"
+            aria-label="Page précédente"
+            (click)="cmdrPage.update(p => p - 1)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <span class="cmdrs-page-label">{{ cmdrPage() + 1 }} / {{ totalPages }}</span>
+          <button type="button" class="btn-icon-more cmdrs-page-btn"
+            [disabled]="cmdrPage() >= totalPages - 1"
+            aria-label="Page suivante"
+            (click)="cmdrPage.update(p => p + 1)">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      }
+    } @else {
+      <div class="cmdrs-empty">Aucun CMDR. Cliquez sur Synchronisation pour importer le roster.</div>
+    }
+  } @else {
+    <div class="cmdrs-empty">Chargement...</div>
+  }
+</div>

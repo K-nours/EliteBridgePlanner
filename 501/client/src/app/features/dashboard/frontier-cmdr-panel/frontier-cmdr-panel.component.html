@@ -1,0 +1,108 @@
+<header class="panel-header">
+  <h3 class="panel-title">CMDR CONNECTÉ</h3>
+  <div class="panel-actions">
+    @if (rareCommodityHasAlert) {
+      <a class="cmdr-inara-alert cmdr-inara-alert--warning"
+         [href]="rareCommodityAlertUrl"
+         target="_blank"
+         rel="noopener noreferrer"
+         [title]="'⚠ Rare commodity > 350t\n' + rareCommodityAlertTooltip"
+         style="white-space: pre;">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" aria-hidden="true">
+          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/>
+          <line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </a>
+    } @else if (rareCommodityIsReady) {
+      <span class="cmdr-inara-alert cmdr-inara-alert--ok" [title]="rareCommodityOkTooltip">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="13" height="13" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+      </span>
+    }
+    <div class="cmdrs-more-dropdown">
+      @if (cmdrJournalMenuOpen()) {
+        <div class="cmdrs-menu-backdrop" (click)="cmdrJournalMenuOpen.set(false)"></div>
+      }
+      <button type="button"
+        class="btn-icon-more"
+        title="Journal"
+        [disabled]="journalUnifiedRunning"
+        (click)="cmdrJournalMenuOpen.update((o) => !o)">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="12" cy="6" r="1.5"/>
+          <circle cx="12" cy="12" r="1.5"/>
+          <circle cx="12" cy="18" r="1.5"/>
+        </svg>
+      </button>
+      @if (cmdrJournalMenuOpen()) {
+        <div class="cmdrs-menu">
+          <button type="button" class="cmdrs-menu-item"
+            (click)="journalExport.emit(); cmdrJournalMenuOpen.set(false)">Exporter le journal</button>
+          <button type="button" class="cmdrs-menu-item"
+            (click)="onImportReplaceClick(); cmdrJournalMenuOpen.set(false)">Importer le journal</button>
+        </div>
+      }
+    </div>
+  </div>
+</header>
+<div class="panel-content">
+  <div class="frontier-cmdr-layout">
+    <div class="frontier-cmdr-main">
+      <div class="frontier-cmdr-data">
+        <div class="frontier-cmdr-row frontier-cmdr-row--avatar">
+          <div class="frontier-cmdr-avatar-block">
+            @if (connectedCmdrAvatar && !boxAvatarError()) {
+              <img [src]="connectedCmdrAvatar" [alt]="frontierProfile.commanderName" referrerpolicy="no-referrer"
+                (error)="boxAvatarError.set(true)" />
+            }
+            @if (!connectedCmdrAvatar || boxAvatarError()) {
+              <span class="frontier-cmdr-initial">{{ frontierProfile.commanderName?.charAt(0)?.toUpperCase() ?? 'C' }}</span>
+            }
+          </div>
+          <div>
+            <span class="frontier-cmdr-label">CMDR</span>
+            <span class="frontier-cmdr-value">{{ frontierProfile.commanderName }}</span>
+          </div>
+        </div>
+        @if (frontierProfile.squadronName) {
+          <div class="frontier-cmdr-row">
+            <span class="frontier-cmdr-label">Squadron</span>
+            <span class="frontier-cmdr-value">{{ frontierProfile.squadronName }}</span>
+          </div>
+        }
+        @if (frontierProfile.lastSystemName) {
+          <div class="frontier-cmdr-row">
+            <span class="frontier-cmdr-label">Système</span>
+            <span class="frontier-cmdr-value">{{ frontierProfile.lastSystemName }}</span>
+          </div>
+        }
+        @if (frontierProfile.shipName) {
+          <div class="frontier-cmdr-row">
+            <span class="frontier-cmdr-label">Vaisseau</span>
+            <span class="frontier-cmdr-value">{{ frontierProfile.shipName }}</span>
+          </div>
+        }
+      </div>
+      <div class="frontier-cmdr-journal-sync">
+        <button type="button" class="btn-journal-sync btn-journal-sync--single"
+          [attr.title]="journalFrontierTooltip"
+          [disabled]="journalUnifiedRunning"
+          (click)="syncJournal.emit()">
+          <span class="btn-journal-sync-text">
+            {{ journalUnifiedRunning ? (journalUnifiedStatus?.lastMessage ?? 'Journal Frontier…') : 'Synchronisation du journal' }}
+          </span>
+        </button>
+        <input #journalImportInput type="file" accept=".zip,application/zip" class="journal-import-file-input"
+          (change)="onFileSelected($event)" />
+        @if (journalUnifiedStatus?.phase === 'error' && journalUnifiedStatus?.frontierSessionUxAction) {
+          <button type="button" class="btn-journal-connect-frontier"
+            (click)="connectFrontierForJournal.emit()">
+            {{ journalUnifiedStatus?.frontierSessionUxAction === 'relogin' ? 'Reconnecter Frontier' : 'Connecter Frontier' }}
+          </button>
+        }
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,67 @@
+<header class="panel-header">
+  <h3 class="panel-title">État de la synchronisation</h3>
+  <div class="panel-actions">
+    <div class="sync-status-more-dropdown">
+      @if (menuOpen()) {
+        <div class="sync-status-menu-backdrop" (click)="menuOpen.set(false)"></div>
+      }
+      <button type="button"
+        class="btn-icon-more-sync"
+        title="Actions"
+        (click)="menuOpen.set(!menuOpen())">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="12" cy="6" r="1.5"/>
+          <circle cx="12" cy="12" r="1.5"/>
+          <circle cx="12" cy="18" r="1.5"/>
+        </svg>
+      </button>
+      @if (menuOpen()) {
+        <div class="sync-status-menu">
+          <button type="button" class="sync-status-menu-item" [disabled]="!syncLogsWithRecap" (click)="copyLogs.emit(); menuOpen.set(false)">Copier</button>
+          <button type="button" class="sync-status-menu-item sync-status-menu-item--danger" [disabled]="!hasSyncLogs" (click)="clearLogs.emit(); menuOpen.set(false)">Effacer</button>
+        </div>
+      }
+    </div>
+    <button
+      type="button"
+      class="btn-icon-more-sync btn-sync-collapse"
+      [title]="syncStatusCollapsed ? 'Déplier le panneau' : 'Replier le panneau'"
+      [attr.aria-expanded]="!syncStatusCollapsed"
+      [attr.aria-label]="syncStatusCollapsed ? 'Déplier le panneau' : 'Replier le panneau'"
+      (click)="toggleCollapsed.emit()"
+    >
+      <svg
+        class="btn-sync-collapse-chevron"
+        [class.btn-sync-collapse-chevron--collapsed]="syncStatusCollapsed"
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
+    </button>
+  </div>
+</header>
+@if (!syncStatusCollapsed) {
+  <div class="panel-content">
+    <div class="sync-logs-container">
+      @if (mapViewMode === 'cmdr') {
+        <p class="sync-status-cmdr-hint">
+          Carte : uniquement les positions StarPos du journal CAPI (raw). Vue Faction colore selon la guilde si le nom correspond ; vue Cmdr : calques visité / découvert / full scan.
+        </p>
+      }
+      <div class="sync-logs">
+        @for (line of syncLogLines; track $index) {
+          <div class="log-line" [class.log-line--error]="isErrorLine(line)">{{ line }}</div>
+        }
+      </div>
+    </div>
+  </div>
+}

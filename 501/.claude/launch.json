@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Angular client",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start", "--", "--port", "4201"],
+      "cwd": "client",
+      "port": 4201
+    },
+    {
+      "name": "ASP.NET Core server",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run"],
+      "cwd": "server",
+      "port": 5294
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+// Même rendu que .systems-list du panneau « Systèmes / Factions » (501 dashboard)
+@mixin scrollbar-faction-systems {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 212, 255, var(--scrollbar-opacity, 0.1)) transparent;
+
+  &::-webkit-scrollbar {
+    width: 3px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 3px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(0, 212, 255, var(--scrollbar-opacity, 0.1));
+    border-radius: 3px;
+    transition: background 0.3s ease;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 212, 255, 1);
+  }
+}

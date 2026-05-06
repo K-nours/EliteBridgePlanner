@@ -1,0 +1,416 @@
+<ng-template #logisticsBody>
+  @if (ui.chantierGoneMessage(); as gone) {
+    <div class="chantier-logistics-gone" role="status">
+      <p class="chantier-logistics-gone__text">{{ gone }}</p>
+    </div>
+  } @else if (!ui.selectedSite()) {
+    <div class="chantier-logistics-empty">
+      <p class="chantier-logistics-empty__title">Aucune logistique active</p>
+      <p class="chantier-logistics-empty__text">
+        Sélectionne un site de construction pour afficher les fournitures à livrer.
+      </p>
+    </div>
+  } @else {
+    @let site = ui.selectedSite()!;
+    <div class="chantier-logistics-detail">
+      <div class="chantier-logistics-detail__body">
+        <div class="chantier-logistics-meta">
+          <p class="chantier-logistics-line">
+            <span class="chantier-logistics-label">Système</span>
+            <span class="chantier-logistics-value">{{ site.systemName }}</span>
+          </p>
+          <p class="chantier-logistics-line">
+            <span class="chantier-logistics-label">Site</span>
+            <span class="chantier-logistics-value">
+              @if (splitStationDisplayLabel(site.stationName); as st) {
+                @if (st.prefix) {
+                  <span class="chantier-logistics-site-prefix">{{ st.prefix }}</span
+                  ><span class="chantier-logistics-site-name">{{ st.name }}</span>
+                } @else {
+                  {{ st.name }}
+                }
+              }
+            </span>
+          </p>
+          @if (site.marketId) {
+            <p class="chantier-logistics-marketid" title="marketId (debug)">marketId {{ site.marketId }}</p>
+          }
+        </div>
+
+        @if (ui.chantierServerListStaleDueToRateLimit()) {
+          <div class="chantier-logistics-stale-list" role="status">
+            <p class="chantier-logistics-stale-list__text">
+              Liste des chantiers : données possiblement obsolètes — le dernier rafraîchissement a été limité par l'API
+              Frontier. Un chantier terminé en jeu peut rester affiché jusqu'à un refresh valide. Les besoins ci-dessous
+              peuvent être non à jour.
+            </p>
+          </div>
+        }
+
+        @if (ui.chantierMarketIdCapiIssue(); as capiIssue) {
+          <div class="chantier-logistics-marketid-alert" role="status">
+            <p class="chantier-logistics-marketid-alert__title">MarketId à réenregistrer</p>
+            <p class="chantier-logistics-marketid-alert__text">
+              Le marketId stocké ne renvoie pas de bloc chantier côté CAPI. Les besoins affichés sont un cache — non
+              vérifiés tant que tu n'as pas
+              <strong>redocké</strong> à la station pour enregistrer un marketId valide. Un simple « Real sync » ne suffit
+              généralement pas.
+            </p>
+            @if (capiIssue.message) {
+              <p class="chantier-logistics-marketid-alert__detail">{{ capiIssue.message }}</p>
+            }
+          </div>
+        }
+
+        @if (!hasResourceData()) {
+          <p class="chantier-logistics-muted">Aucun détail de fournitures en cache pour ce chantier.</p>
+        } @else if (allDelivered()) {
+          <div class="chantier-logistics-complete">
+            <p class="chantier-logistics-complete__title">Approvisionnement complété</p>
+            <p class="chantier-logistics-complete__text">Aucune fourniture restante pour ce chantier.</p>
+          </div>
+        } @else {
+          @let trust = inventoryTrust();
+          <div class="chantier-logistics-res-table-wrap">
+            <table class="chantier-logistics-res-table">
+              <colgroup>
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--name" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--need" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--gap" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--fc" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--gap" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--global" />
+                @if (showTotalColumn(trust)) {
+                  <col class="chantier-logistics-res-col chantier-logistics-res-col--gap" />
+                  <col class="chantier-logistics-res-col chantier-logistics-res-col--total" />
+                }
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--gap" />
+                <col class="chantier-logistics-res-col chantier-logistics-res-col--reste" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col" class="chantier-logistics-res-th chantier-logistics-res-th--name">Ressource</th>
+                  <th
+                    scope="col"
+                    class="chantier-logistics-res-th chantier-logistics-res-th--num"
+                    title="Besoin restant sur ce chantier"
+                  >
+                    Besoin
+                  </th>
+                  <td class="chantier-logistics-res-th chantier-logistics-res-th--gap" aria-hidden="true"></td>
+                  <th
+                    scope="col"
+                    class="chantier-logistics-res-th chantier-logistics-res-th--num"
+                    title="Cargaison Fleet Carrier"
+                  >
+                    FC
+                  </th>
+                  <td class="chantier-logistics-res-th chantier-logistics-res-th--gap" aria-hidden="true"></td>
+                  <th
+                    scope="col"
+                    class="chantier-logistics-res-th chantier-logistics-res-th--num"
+                    title="Besoin restant cumulé pour cette marchandise sur tous tes chantiers"
+                  >
+                    Global
+                  </th>
+                  @if (showTotalColumn(trust)) {
+                    <td class="chantier-logistics-res-th chantier-logistics-res-th--gap" aria-hidden="true"></td>
+                    <th
+                      scope="col"
+                      class="chantier-logistics-res-th chantier-logistics-res-th--num"
+                      title="Somme des stocks affichés (vaisseau + FC, sources connues uniquement)"
+                    >
+                      Total
+                    </th>
+                  }
+                  <td class="chantier-logistics-res-th chantier-logistics-res-th--gap" aria-hidden="true"></td>
+                  <th
+                    scope="col"
+                    class="chantier-logistics-res-th chantier-logistics-res-th--num chantier-logistics-res-th--reste"
+                    [title]="resteMode() === 'global' ? 'Reste à charger (Global − stock) — clic pour basculer sur Chantier' : 'Reste à charger (Chantier − stock) — clic pour basculer sur Global'"
+                    (click)="toggleResteMode()"
+                  >
+                    Reste
+                    <span class="chantier-logistics-reste-mode-badge">{{ resteMode() === 'global' ? 'G' : 'C' }}</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of resourceRows(); track row.name) {
+                  <tr
+                    class="chantier-logistics-res-tr"
+                    [class.chantier-logistics-res-tr--ok]="inventoryRowHasStockInfo() && row.status === 'ok'"
+                    [class.chantier-logistics-res-tr--warn]="inventoryRowHasStockInfo() && row.status === 'warn'"
+                    [class.chantier-logistics-res-tr--zero]="inventoryRowHasStockInfo() && row.status === 'zero'"
+                  >
+                    <th scope="row" class="chantier-logistics-res-td chantier-logistics-res-td--name" [title]="row.name">{{ row.displayName }}</th>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--need">{{ row.need }}</td>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--gap" aria-hidden="true"></td>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--fc">
+                      @if (!trust.carrierKnown) {
+                        <span class="chantier-logistics-res-dash">—</span>
+                      } @else {
+                        <span class="chantier-logistics-res-num chantier-logistics-res-num--fc">{{ row.carrierQty }}</span>
+                      }
+                    </td>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--gap" aria-hidden="true"></td>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--global" title="Tous chantiers (cmdr)">
+                      {{ row.globalNeed }}
+                    </td>
+                    @if (showTotalColumn(trust)) {
+                      <td class="chantier-logistics-res-td chantier-logistics-res-td--gap" aria-hidden="true"></td>
+                      <td class="chantier-logistics-res-td chantier-logistics-res-td--total">
+                        <span
+                          class="chantier-logistics-res-num chantier-logistics-res-num--total"
+                          title="Somme des stocks affichés (vaisseau + FC, uniquement les sources connues)"
+                          >{{ knownStockSum(row, trust) }}</span>
+                      </td>
+                    }
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--gap" aria-hidden="true"></td>
+                    <td class="chantier-logistics-res-td chantier-logistics-res-td--reste">
+                      @if (!inventoryRowHasStockInfo()) {
+                        <span class="chantier-logistics-res-dash">—</span>
+                      } @else {
+                        @let resteVal = resteMode() === 'global' ? row.resteGlobal : row.resteChantier;
+                        @if (resteVal === 0) {
+                          <span class="chantier-logistics-res-num chantier-logistics-res-num--reste-ok">✓</span>
+                        } @else {
+                          <span class="chantier-logistics-res-num chantier-logistics-res-num--reste-need">{{ resteVal }}</span>
+                        }
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+
+      <div class="chantier-logistics-actions-row">
+        <button
+          type="button"
+          class="chantier-logistics-delete"
+          [disabled]="deleteLoading() || refreshLoading() || realSyncTickRunning()"
+          (click)="deleteSelected($event)"
+        >
+          Supprimer le chantier
+        </button>
+      </div>
+    </div>
+  }
+</ng-template>
+
+<header class="panel-header">
+  <div class="chantier-logistics-header-main">
+    <h3 class="panel-title">LOGISTIQUE DE CHANTIER</h3>
+    @if (ui.lastChantierNeedsVerifiedAt()) {
+      <span class="chantier-logistics-needs-date">
+        {{ formatLastSyncLabel(ui.lastChantierNeedsVerifiedAt()) }}
+        @if (ui.chantierMarketIdCapiIssue()) {
+          <span class="chantier-logistics-header-stale" title="Dernier snapshot affiché — non confirmé par la CAPI">— non vérifiés</span>
+        }
+      </span>
+    }
+  </div>
+  <div class="panel-actions">
+    <button
+      type="button"
+      class="chantier-logistics-real-sync-btn chantier-logistics-real-sync-btn--in-header"
+      [class.chantier-logistics-real-sync-btn--active]="ui.realSyncEnabled()"
+      [class.chantier-logistics-real-sync-btn--inactive]="!ui.realSyncEnabled()"
+      [disabled]="!canUseRealSyncSwitch()"
+      [attr.aria-pressed]="ui.realSyncEnabled()"
+      [attr.aria-label]="
+        (ui.realSyncEnabled() ? 'Real sync actif, désactiver' : 'Real sync inactif, activer')
+      "
+      [attr.title]="realSyncButtonTitle()"
+      (click)="onRealSyncToggle(!ui.realSyncEnabled())"
+    >
+      <span class="chantier-logistics-real-sync-btn__title">Real sync</span>
+      <span
+        class="chantier-logistics-real-sync-btn__pill"
+        [class]="'chantier-logistics-real-sync-btn__pill--state-' + realSyncPillState()"
+        aria-hidden="true"
+        >{{ realSyncPillLabel() }}</span
+      >
+    </button>
+    <button
+      type="button"
+      class="chantier-logistics-cargo-sync-btn"
+      [class.chantier-logistics-cargo-sync-btn--busy]="cargoSyncLoading()"
+      [disabled]="!ui.selectedSite() || cargoSyncLoading() || realSyncTickRunning() || !frontierAuth.isConnected() || !!ui.chantierGoneMessage()"
+      aria-label="Synchroniser le FC depuis Frontier"
+      title="Sync cargo — met à jour le FC uniquement (sans refresh des besoins chantier)"
+      (click)="syncCargoOnly($event)"
+    >
+      Sync cargo
+    </button>
+    <button
+      type="button"
+      class="chantier-logistics-icon-btn"
+      [class.chantier-logistics-icon-btn--busy]="refreshLoading() || realSyncTickRunning()"
+      [disabled]="!ui.selectedSite() || refreshLoading() || realSyncTickRunning() || !!ui.chantierGoneMessage()"
+      aria-label="Rafraîchir ce chantier"
+      title="Rafraîchir ce chantier"
+      (click)="refreshSelected($event)"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+        <path d="M3 3v5h5" />
+        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+        <path d="M16 16h5v5" />
+      </svg>
+    </button>
+    <button
+      type="button"
+      class="chantier-logistics-icon-btn"
+      aria-label="Agrandir dans une fenêtre"
+      title="Agrandir"
+      (click)="openEnlargeModal($event)"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <polyline points="15 3 21 3 21 9" />
+        <polyline points="9 21 3 21 3 15" />
+        <line x1="21" y1="3" x2="14" y2="10" />
+        <line x1="3" y1="21" x2="10" y2="14" />
+      </svg>
+    </button>
+  </div>
+</header>
+
+<div class="panel-content">
+  <ng-container *ngTemplateOutlet="logisticsBody" />
+</div>
+
+@if (enlargeOpen()) {
+  <div class="chantier-logistics-modal-layer" role="presentation">
+    <div class="chantier-logistics-modal-backdrop" (click)="closeEnlargeModal()"></div>
+    <div
+      class="chantier-logistics-modal-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="chantier-logistics-modal-title"
+      (click)="$event.stopPropagation()"
+    >
+      <div class="chantier-logistics-modal-header">
+        <h3 id="chantier-logistics-modal-title">LOGISTIQUE DE CHANTIER</h3>
+        <button type="button" class="chantier-logistics-modal-close" (click)="closeEnlargeModal()" aria-label="Fermer">
+          ×
+        </button>
+      </div>
+      <div class="chantier-logistics-modal-body">
+        <div class="chantier-logistics-header chantier-logistics-header--modal">
+          <div class="chantier-logistics-header-main">
+            <div class="chantier-logistics-header-sync-block">
+              <p class="chantier-logistics-header-last-sync">
+                <span class="chantier-logistics-header-last-sync__label">Besoins chantier</span>
+                <span class="chantier-logistics-header-last-sync__value">{{
+                  formatLastSyncLabel(ui.lastChantierNeedsVerifiedAt())
+                }}</span>
+                @if (ui.chantierMarketIdCapiIssue()) {
+                  <span class="chantier-logistics-header-stale" title="Dernier snapshot affiché — non confirmé par la CAPI"
+                    >— non vérifiés</span
+                  >
+                }
+              </p>
+              <p class="chantier-logistics-header-last-sync">
+                <span class="chantier-logistics-header-last-sync__label">Soute / FC</span>
+                <span class="chantier-logistics-header-last-sync__value">{{
+                  formatLastSyncLabel(ui.lastRealSyncSuccessAt())
+                }}</span>
+                @if (ui.realSyncInventoryHttpError()) {
+                  <span class="chantier-logistics-header-stale">— indisponible</span>
+                }
+              </p>
+            </div>
+          </div>
+          <div class="chantier-logistics-header-actions">
+            <button
+              type="button"
+              class="chantier-logistics-real-sync-btn chantier-logistics-real-sync-btn--in-header"
+              [class.chantier-logistics-real-sync-btn--active]="ui.realSyncEnabled()"
+              [class.chantier-logistics-real-sync-btn--inactive]="!ui.realSyncEnabled()"
+              [disabled]="!canUseRealSyncSwitch()"
+              [attr.aria-pressed]="ui.realSyncEnabled()"
+              [attr.aria-label]="
+                (ui.realSyncEnabled() ? 'Real sync actif, désactiver' : 'Real sync inactif, activer')
+              "
+              [attr.title]="realSyncButtonTitle()"
+              (click)="onRealSyncToggle(!ui.realSyncEnabled())"
+            >
+              <span class="chantier-logistics-real-sync-btn__title">Real sync</span>
+              <span
+                class="chantier-logistics-real-sync-btn__pill"
+                [class]="'chantier-logistics-real-sync-btn__pill--state-' + realSyncPillState()"
+                aria-hidden="true"
+                >{{ realSyncPillLabel() }}</span
+              >
+            </button>
+            <button
+              type="button"
+              class="chantier-logistics-cargo-sync-btn"
+              [class.chantier-logistics-cargo-sync-btn--busy]="cargoSyncLoading()"
+              [disabled]="!ui.selectedSite() || cargoSyncLoading() || realSyncTickRunning() || !frontierAuth.isConnected() || !!ui.chantierGoneMessage()"
+              aria-label="Synchroniser le FC depuis Frontier"
+              title="Sync cargo — met à jour le FC uniquement (sans refresh des besoins chantier)"
+              (click)="syncCargoOnly($event)"
+            >
+              Sync cargo
+            </button>
+            <button
+              type="button"
+              class="chantier-logistics-icon-btn"
+              [class.chantier-logistics-icon-btn--busy]="refreshLoading() || realSyncTickRunning()"
+              [disabled]="!ui.selectedSite() || refreshLoading() || realSyncTickRunning() || !!ui.chantierGoneMessage()"
+              aria-label="Rafraîchir ce chantier"
+              title="Rafraîchir ce chantier"
+              (click)="refreshSelected($event)"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                <path d="M16 16h5v5" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <ng-container *ngTemplateOutlet="logisticsBody" />
+      </div>
+    </div>
+  </div>
+}

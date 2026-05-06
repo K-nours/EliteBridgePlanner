@@ -1,0 +1,96 @@
+<div class="guild-systems-map">
+  <div #canvasContainer class="map-canvas"></div>
+  <div class="map-controls">
+    <div class="map-controls-pad">
+      <div class="map-controls-arrows">
+        <button type="button" class="map-btn-arrow" title="Haut" aria-label="Pan haut"
+          (pointerdown)="startPan($event, 0, 1, 0)" (pointerup)="stopPan()" (pointerleave)="stopPan()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <div class="map-arrows-row">
+          <button type="button" class="map-btn-arrow" title="Gauche" aria-label="Pan gauche"
+            (pointerdown)="startPan($event, -1, 0, 0)" (pointerup)="stopPan()" (pointerleave)="stopPan()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <button type="button" class="map-btn-arrow" title="Reset vue" (click)="resetView()" aria-label="Reset vue">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+          </button>
+          <button type="button" class="map-btn-arrow" title="Droite" aria-label="Pan droite"
+            (pointerdown)="startPan($event, 1, 0, 0)" (pointerup)="stopPan()" (pointerleave)="stopPan()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg>
+          </button>
+        </div>
+        <button type="button" class="map-btn-arrow" title="Bas" aria-label="Pan bas"
+          (pointerdown)="startPan($event, 0, -1, 0)" (pointerup)="stopPan()" (pointerleave)="stopPan()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="map-controls-landmarks">
+      <button type="button" class="map-btn-landmarks"
+        [class.map-btn-landmarks--active]="landmarksVisible"
+        title="Repères galactiques (Sol, Centre)"
+        aria-label="Afficher repères"
+        (click)="toggleLandmarks()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="map-controls-zoom">
+      <button type="button" class="map-btn-arrow" title="Zoom avant (maintenir)" aria-label="Zoom +"
+        (pointerdown)="startZoomHold($event, 1)" (pointerup)="stopZoomHold()" (pointerleave)="stopZoomHold()" (pointercancel)="stopZoomHold()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <div class="map-zoom-slider-wrap">
+        <input type="range" min="0" max="100" [value]="zoomLevel" (input)="setZoomFromLevel(+$any($event.target).value)" class="map-zoom-slider" />
+      </div>
+      <button type="button" class="map-btn-arrow" title="Zoom arrière (maintenir)" aria-label="Zoom −"
+        (pointerdown)="startZoomHold($event, -1)" (pointerup)="stopZoomHold()" (pointerleave)="stopZoomHold()" (pointercancel)="stopZoomHold()">
+        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>
+      </button>
+    </div>
+  </div>
+  @if (hasNoCoords()) {
+    <div class="map-empty-hint">
+      @if (mapViewMode === 'faction') {
+        <span>Aucun système de guilde avec coordonnées sur la carte</span>
+        <span class="map-empty-hint-sub">Importez les systèmes (Inara) puis lancez l’enrichissement EDSM des coordonnées pour la vue Faction.</span>
+      } @else if (mapViewMode === 'cmdr') {
+        <span>Aucun système avec coordonnées dans le journal Frontier parsé</span>
+        <span class="map-empty-hint-sub">Utilisez « Synchronisation du journal » dans le bloc CMDR connecté pour télécharger et parser le journal CAPI.</span>
+      } @else {
+        <span>Aucun pont planifié actuellement</span>
+      }
+    </div>
+  }
+  @if (landmarksVisible && landmarkLabels.length > 0) {
+    @for (lb of landmarkLabels; track lb.id) {
+      @if (lb.visible) {
+        <div class="map-landmark-label" [style.left.px]="lb.x" [style.top.px]="lb.y"
+          title="Double-cliquer pour centrer la carte sur ce repère"
+          (dblclick)="centerMapOnLandmark(lb.id, $event)">
+          <span class="map-landmark-name">{{ lb.name }}</span>
+          @if (lb.region) {
+            <span class="map-landmark-region">{{ lb.region }}</span>
+          }
+          <span class="map-landmark-distance">{{ formatLandmarkDistanceFromSol(lb.distanceFromSolLy) }}</span>
+        </div>
+      }
+    }
+  }
+  @if (tooltipData; as t) {
+    <div class="map-tooltip" [style.left.px]="t.x" [style.top.px]="t.y">
+      <div class="map-tooltip-name">{{ t.system.name }}</div>
+      @if (t.system.isJournalCmdrPoint) {
+        <div class="map-tooltip-detail">Parcours journal (coords StarPos)</div>
+      } @else {
+        <div class="map-tooltip-detail">{{ t.system.influencePercent }}% · {{ t.system.category }}</div>
+        @if (hasSignificantDelta(t.system.influenceDelta72h)) {
+          <div class="map-tooltip-delta">{{ formatDelta(t.system.influenceDelta72h) }}</div>
+        }
+      }
+    </div>
+  }
+</div>

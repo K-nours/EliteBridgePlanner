@@ -1,0 +1,104 @@
+/**
+ * Feature archived – no reliable external data source for Faction → Systems → Influence %.
+ * Conserver pour R&D futur. Voir docs/GUILD-SYSTEMS.md.
+ */
+import { Injectable, inject } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import type { GuildSystemsResponseDto } from '../models/guild-systems.model';
+import type { DiplomaticPipelineDto, InaraFactionInfoDto } from '../models/diplomatic-pipeline.model';
+
+/** Base API. Sur localhost:4200, appel direct au backend car le proxy peut échouer. */
+function getApiBase(): string {
+  if (typeof window !== 'undefined' && /^https?:\/\/localhost:4200(\/|$)/.test(window.location.origin)) {
+    return 'https://localhost:7294/api';
+  }
+  return '/api';
+}
+const API_BASE = getApiBase();
+
+/**
+ * Service Guild Systems — le frontend déclenche uniquement.
+ * Le backend utilise la guilde courante (Guild:CurrentGuildId).
+ */
+@Injectable({ providedIn: 'root' })
+export class GuildSystemsApiService {
+  private readonly http = inject(HttpClient);
+  private readonly base = API_BASE;
+
+  getSystems(): Observable<GuildSystemsResponseDto> {
+    return this.http.get<GuildSystemsResponseDto>(`${this.base}/guild/systems`);
+  }
+
+  resetSystems(): Observable<{ deletedGuildSystems: number; deletedControlledSystems: number }> {
+    return this.http.post<{ deletedGuildSystems: number; deletedControlledSystems: number }>(
+      `${this.base}/guild/systems/reset`,
+      {}
+    );
+  }
+
+  toggleHeadquarter(systemId: number): Observable<void> {
+    return this.http.post<void>(`${this.base}/guild/systems/${systemId}/toggle-headquarter`, {});
+  }
+
+  toggleSurveillance(systemId: number): Observable<void> {
+    return this.http.post<void>(`${this.base}/guild/systems/${systemId}/toggle-surveillance`, {});
+  }
+
+  syncBgs(): Observable<{ updated: number }> {
+    return this.http.post<{ updated: number }>(`${this.base}/guild/systems/sync`, {});
+  }
+
+  /** Progression du job EDSM enrich-edsm (pour sync status). */
+  getImportProgress(): Observable<{
+    phase?: string;
+    mode?: string;
+    current: number;
+    total: number;
+    active: boolean;
+    enrichedCount?: number;
+    displayableCount?: number;
+    ignoredCount?: number;
+    coordsEnrichedCount?: number;
+    error?: string;
+    status?: string;
+  }> {
+    return this.http.get<{
+      phase?: string;
+      mode?: string;
+      current: number;
+      total: number;
+      active: boolean;
+      enrichedCount?: number;
+      displayableCount?: number;
+      ignoredCount?: number;
+      coordsEnrichedCount?: number;
+      error?: string;
+      status?: string;
+    }>(`${this.base}/guild/systems/import-progress`);
+  }
+
+  /** Déclenche l'enrichissement EDSM (tendances 24h) en arrière-plan. À appeler après un import Inara réussi. */
+  enrichEdsm(): Observable<{ started: boolean; total?: number; message: string }> {
+    return this.http.post<{ started: boolean; total?: number; message: string }>(
+      `${this.base}/guild/systems/enrich-edsm`,
+      {}
+    );
+  }
+
+  /** Systèmes critiques enrichis avec la faction contrôlante EDSM. */
+  getDiplomaticPipeline(): Observable<DiplomaticPipelineDto> {
+    return this.http.get<DiplomaticPipelineDto>(`${this.base}/guild/systems/diplomatic-pipeline`);
+  }
+
+  /**
+   * Infos faction dominante d'un système (scraping Inara : page système → faction → escadron).
+   * Peut échouer si Inara bloque les requêtes serveur (anti-bot).
+   */
+  getFactionInfo(systemName: string): Observable<InaraFactionInfoDto> {
+    return this.http.get<InaraFactionInfoDto>(
+      `${this.base}/guild/faction-info`,
+      { params: { systemName } }
+    );
+  }
+}

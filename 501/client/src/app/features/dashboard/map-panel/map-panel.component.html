@@ -1,0 +1,108 @@
+<header class="panel-header">
+  <h3 class="panel-title">Carte</h3>
+  <div class="panel-actions">
+    <div class="map-view-toggle" role="group" aria-label="Vue carte">
+      <button type="button" class="map-view-toggle-btn"
+        [class.map-view-toggle-btn--active]="mapViewMode === 'faction'"
+        (click)="mapViewModeChange.emit('faction')">Vue Faction</button>
+      <button type="button" class="map-view-toggle-btn"
+        [class.map-view-toggle-btn--active]="mapViewMode === 'cmdr'"
+        (click)="mapViewModeChange.emit('cmdr')">Vue Cmdr</button>
+      <button type="button" class="map-view-toggle-btn"
+        [class.map-view-toggle-btn--active]="mapViewMode === 'galacticBridge'"
+        (click)="mapViewModeChange.emit('galacticBridge')">Vue Pont galactique</button>
+    </div>
+  </div>
+</header>
+<div class="panel-content">
+  <div class="map-3d-wrapper">
+    <app-guild-systems-map
+      [mapViewMode]="mapViewMode"
+      [journalCmdrPoints]="journalCmdrMapPoints"
+      [systems]="systems"
+      [systemsFilter]="systemsFilter"
+      [journalLayerVisited]="journalLayerVisited"
+      [journalLayerDiscovered]="journalLayerDiscovered"
+      [journalLayerFullScan]="journalLayerFullScan"
+      [journalByName]="journalDerivedByName" />
+  </div>
+  @if (mapViewMode === 'faction') {
+  <div class="map-filter-counters" role="group" aria-label="Filtres BGS carte">
+    <div class="map-filter-counters-left">
+      @for (fb of mapFilterCountsLeft; track fb.value) {
+        <button type="button"
+          class="map-counter"
+          [class.map-counter--active]="systemsFilter === fb.value"
+          [class.map-counter--total]="fb.value === 'all'"
+          [class.map-counter--healthy]="fb.value === 'healthy'"
+          [class.map-counter--critical]="fb.value === 'critical'"
+          [class.map-counter--conflicts]="fb.value === 'conflicts'"
+          [class.map-counter--conflicts-pulse]="fb.value === 'conflicts' && fb.count > 0"
+          [class.map-counter--surveillance-ok]="fb.value === 'surveillance' && !fb.surveillanceHasCritical"
+          [class.map-counter--surveillance-critical]="fb.value === 'surveillance' && fb.surveillanceHasCritical"
+          [class.map-counter--without-news]="fb.value === 'withoutNews'"
+          [disabled]="fb.count === 0 && fb.value !== 'all'"
+          (click)="systemsFilterChange.emit(fb.value)">
+          <span class="map-counter-label">{{ fb.label }}</span>
+          <span class="map-counter-value">{{ fb.count }}</span>
+        </button>
+      }
+    </div>
+    <div class="map-filter-counters-right">
+      @for (fb of mapFilterCountsRight; track fb.value) {
+        <button type="button"
+          class="map-counter"
+          [class.map-counter--active]="systemsFilter === fb.value"
+          [class.map-counter--total]="fb.value === 'all'"
+          [class.map-counter--healthy]="fb.value === 'healthy'"
+          [class.map-counter--critical]="fb.value === 'critical'"
+          [class.map-counter--conflicts]="fb.value === 'conflicts'"
+          [class.map-counter--conflicts-pulse]="fb.value === 'conflicts' && fb.count > 0"
+          [class.map-counter--surveillance-ok]="fb.value === 'surveillance' && !fb.surveillanceHasCritical"
+          [class.map-counter--surveillance-critical]="fb.value === 'surveillance' && fb.surveillanceHasCritical"
+          [class.map-counter--without-news]="fb.value === 'withoutNews'"
+          [disabled]="fb.count === 0 && fb.value !== 'all'"
+          (click)="systemsFilterChange.emit(fb.value)">
+          <span class="map-counter-label">{{ fb.label }}</span>
+          <span class="map-counter-value">{{ fb.count }}</span>
+        </button>
+      }
+    </div>
+  </div>
+  }
+  @if (mapViewMode === 'cmdr') {
+  <div class="map-filter-counters" role="group" aria-label="Calques journal sur la carte">
+    <div class="map-filter-counters-left">
+      <button type="button" class="map-counter map-counter--journal map-counter--journal-visited"
+        [class.map-counter--active]="journalLayerVisited"
+        [attr.aria-pressed]="journalLayerVisited"
+        [disabled]="journalCmdrCountVisited === 0"
+        title="Visités (FSDJump / CarrierJump / Location)"
+        (click)="journalLayerChange.emit('visited')">
+        <span class="map-counter-label">Visités</span>
+        <span class="map-counter-value map-counter-value--journal">{{ journalCmdrCountVisited }}</span>
+      </button>
+    </div>
+    <div class="map-filter-counters-right">
+      <button type="button" class="map-counter map-counter--journal map-counter--journal-disc"
+        [class.map-counter--active]="journalLayerDiscovered"
+        [attr.aria-pressed]="journalLayerDiscovered"
+        [disabled]="journalCmdrCountDiscovered === 0"
+        title="Découverts (au moins un corps : Scan, wasDiscovered=false)"
+        (click)="journalLayerChange.emit('discovered')">
+        <span class="map-counter-label">Découverts</span>
+        <span class="map-counter-value map-counter-value--journal">{{ journalCmdrCountDiscovered }}</span>
+      </button>
+      <button type="button" class="map-counter map-counter--journal map-counter--journal-full"
+        [class.map-counter--active]="journalLayerFullScan"
+        [attr.aria-pressed]="journalLayerFullScan"
+        [disabled]="journalCmdrCountFullScan === 0"
+        title="Full scan (FSSAllBodiesFound)"
+        (click)="journalLayerChange.emit('fullscan')">
+        <span class="map-counter-label">Full scan</span>
+        <span class="map-counter-value map-counter-value--journal">{{ journalCmdrCountFullScan }}</span>
+      </button>
+    </div>
+  </div>
+  }
+</div>
