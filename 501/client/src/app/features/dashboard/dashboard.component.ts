@@ -1398,11 +1398,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // --- Background slideshow ---
   private loadInaraGallery(): void {
-    // Attend que les settings soient chargés, puis tente de récupérer la galerie du CMDR
     const tryLoad = () => {
       const cmdrUrl = this.guildSettings.inaraCmdrUrl();
+      console.log('[Gallery] tryLoad — loaded:', this.guildSettings.loaded(), '— cmdrUrl:', cmdrUrl);
       if (!cmdrUrl) return;
       this.inaraGallery.fetchGallery(cmdrUrl).subscribe((images) => {
+        console.log('[Gallery] images reçues :', images.length, images);
         if (images.length > 0) {
           this.BG_IMAGES = images;
           this.bgIndex = 0;
@@ -1417,7 +1418,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (this.guildSettings.loaded()) {
       tryLoad();
     } else {
-      // Réessaie après que les settings se chargent (~500ms)
       setTimeout(tryLoad, 600);
     }
   }
