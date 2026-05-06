@@ -23,6 +23,7 @@ import { GuildSystemsApiService } from '../../core/services/guild-systems-api.se
 import { FrontierAuthService } from '../../core/services/frontier-auth.service';
 import { GuildSettingsService } from '../../core/services/guild-settings.service';
 import { InaraSyncBridgeService } from '../../core/services/inara-sync-bridge.service';
+import { InaraCmdrGalleryService } from '../../core/services/inara-cmdr-gallery.service';
 import { SyncHelpModalService } from '../../core/services/sync-help-modal.service';
 import type { DashboardResponseDto } from '../../core/models/dashboard.model';
 import type { CommandersResponseDto } from '../../core/models/commanders.model';
@@ -765,8 +766,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   protected systemsImportProgress = signal<string | null>(null);
   private systemsImportPollingRef: ReturnType<typeof setInterval> | null = null;
 
+  private readonly inaraGallery = inject(InaraCmdrGalleryService);
+
   // --- Background slideshow ---
-  private readonly BG_IMAGES = [
+  private readonly BG_IMAGES_FALLBACK = [
     'assets/backgrounds/185785x2901.jpg',
     'assets/backgrounds/186746x4957.jpg',
     'assets/backgrounds/188595x1856.jpg',
@@ -775,6 +778,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     'assets/backgrounds/204144x1041.jpg',
     'assets/backgrounds/232896x5824.jpg',
   ];
+  private BG_IMAGES: string[] = [...this.BG_IMAGES_FALLBACK];
   private readonly BG_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
   private bgIndex = 0;
   protected readonly bgActiveSlot = signal<'a' | 'b'>('a');
@@ -1145,6 +1149,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.addLog('Dashboard initialisé');
     this.addLog('Prêt — utilisez les boutons sync pour importer depuis Inara');
     this.guildSettings.load();
+    this.loadInaraGallery();
     this.inaraBridge.check();
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
@@ -1392,6 +1397,31 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   // --- Background slideshow ---
+  private loadInaraGallery(): void {
+    // Attend que les settings soient chargés, puis tente de récupérer la galerie du CMDR
+    const tryLoad = () => {
+      const cmdrUrl = this.guildSettings.inaraCmdrUrl();
+      if (!cmdrUrl) return;
+      this.inaraGallery.fetchGallery(cmdrUrl).subscribe((images) => {
+        if (images.length > 0) {
+          this.BG_IMAGES = images;
+          this.bgIndex = 0;
+          this.bgImageA.set(images[0]);
+          this.bgImageB.set(images[0]);
+          this.bgActiveSlot.set('a');
+          this.startBgRotation();
+        }
+      });
+    };
+
+    if (this.guildSettings.loaded()) {
+      tryLoad();
+    } else {
+      // Réessaie après que les settings se chargent (~500ms)
+      setTimeout(tryLoad, 600);
+    }
+  }
+
   protected prevBgImage(): void {
     if (this.BG_IMAGES.length <= 1) return;
     this.bgIndex = (this.bgIndex - 1 + this.BG_IMAGES.length) % this.BG_IMAGES.length;

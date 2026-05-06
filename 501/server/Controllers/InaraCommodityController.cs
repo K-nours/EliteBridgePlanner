@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Text.RegularExpressions;
+using System.Web;
 
 namespace GuildDashboard.Server.Controllers;
 
@@ -159,5 +160,54 @@ public class InaraCommodityController : ControllerBase
             results.Add(new { name, supplyT = supply, url });
 
         return true;
+    }
+
+    // ── CMDR gallery ─────────────────────────────────────────────────────────
+
+    private static readonly Regex RxGalleryImg = new(
+        @"(?:src|href)=""(/data/gallery/[^""]+\.(jpg|jpeg|png|webp))""",
+        RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// GET /api/inara/cmdr-gallery?cmdrUrl=https://inara.cz/elite/cmdr/12345/
+    /// Scrape la page profil Inara du CMDR et retourne les URLs d'images de sa galerie.
+    /// </summary>
+    [HttpGet("cmdr-gallery")]
+    public async Task<IActionResult> GetCmdrGallery([FromQuery] string cmdrUrl, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(cmdrUrl))
+            return BadRequest("cmdrUrl requis");
+
+        // Accepte les URLs Inara CMDR uniquement
+        if (!cmdrUrl.StartsWith("https://inara.cz/", StringComparison.OrdinalIgnoreCase))
+            return BadRequest("URL Inara invalide");
+
+        var client = _httpFactory.CreateClient();
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("GuildDashboard/1.0");
+        client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml");
+
+        string html;
+        try
+        {
+            var response = await client.GetAsync(cmdrUrl, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Inara gallery: {Status} pour {Url}", response.StatusCode, cmdrUrl);
+                return StatusCode((int)response.StatusCode, "Erreur Inara");
+            }
+            html = await response.Content.ReadAsStringAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Impossible de contacter Inara pour la galerie");
+            return StatusCode(502, "Impossible de contacter Inara");
+        }
+
+        var images = RxGalleryImg.Matches(html)
+            .Select(m => "https://inara.cz" + m.Groups[1].Value)
+            .Distinct()
+            .ToList();
+
+        return Ok(new { images });
     }
 }
