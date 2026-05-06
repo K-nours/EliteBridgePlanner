@@ -220,8 +220,8 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
       position: fixed;
       bottom: 0;
       z-index: 200;
-      width: 1rem;
-      height: 1rem;
+      width: 1.5rem;
+      height: 1.5rem;
       border-radius: 8px 0 0 0;
       border: 1px solid rgba(0, 212, 255, 0.25);
       background: rgba(6, 20, 35, 0.55);
@@ -252,6 +252,14 @@ import { AVATAR_DEFAULT_FALLBACK_URL } from '../../core/constants/avatar.constan
     .page:hover .bg-prev-btn,
     .page:hover .bg-next-btn {
       opacity: 0.4;
+    }
+    .page:has(.bg-prev-btn:hover) .main-grid,
+    .page:has(.bg-next-btn:hover) .main-grid {
+      opacity: 0.25;
+      transition: opacity 0.3s ease;
+    }
+    .main-grid {
+      transition: opacity 0.3s ease;
     }
     .page-bg-img {
       position: absolute;
