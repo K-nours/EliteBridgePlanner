@@ -164,8 +164,10 @@ public class InaraCommodityController : ControllerBase
 
     // ── CMDR gallery ─────────────────────────────────────────────────────────
 
+    // Capture les URLs galerie Inara n'importe où dans le HTML (src, href, data-src, CSS, JS…)
+    // Format : /data/gallery/{id}/{imageId}x{res}.jpg
     private static readonly Regex RxGalleryImg = new(
-        @"(?:src|href)=""(/data/gallery/[^""]+\.(jpg|jpeg|png|webp))""",
+        @"(?:https://inara\.cz)?(/data/gallery/\d+/\d+x\d+\.(?:jpg|jpeg|png|webp))",
         RegexOptions.IgnoreCase);
 
     /// <summary>
@@ -191,8 +193,10 @@ public class InaraCommodityController : ControllerBase
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
         var client = _httpFactory.CreateClient();
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("GuildDashboard/1.0");
-        client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+        client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+        client.DefaultRequestHeaders.Add("Accept-Language", "fr-FR,fr;q=0.9,en;q=0.8");
 
         string html;
         try
@@ -212,9 +216,17 @@ public class InaraCommodityController : ControllerBase
         }
 
         var images = RxGalleryImg.Matches(html)
-            .Select(m => "https://inara.cz" + m.Groups[1].Value)
+            .Select(m =>
+            {
+                var val = m.Groups[1].Value;
+                return val.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                    ? val
+                    : "https://inara.cz" + val;
+            })
             .Distinct()
             .ToList();
+
+        _logger.LogInformation("Inara gallery {Url}: {Count} image(s) trouvée(s)", galleryUrl, images.Count);
 
         return Ok(new { images });
     }
