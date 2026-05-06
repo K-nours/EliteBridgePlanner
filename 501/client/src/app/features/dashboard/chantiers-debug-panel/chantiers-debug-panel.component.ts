@@ -71,9 +71,36 @@ export class ChantiersDebugPanelComponent implements OnInit {
   }
 
   private loadChantiersFromBackend(): void {
+    const prevMine = this.chantiers.mine();
+    const prevOthers = this.chantiers.others();
+
+    const safeList = (obs$: ReturnType<typeof this.declaredApi.listMine>, prev: typeof prevMine) =>
+      obs$.pipe(
+        catchError((err: unknown) => {
+          if (err instanceof HttpErrorResponse && err.status === 401) {
+            // Token Frontier expiré — on garde les données existantes sans écraser le store
+            this.shortStatus.set('Reconnectez Frontier pour voir vos chantiers');
+            this.statusIsError.set(true);
+            return of(prev.map((s): DeclaredChantierListItemApi => ({
+              id: Number(s.id),
+              systemName: s.systemName,
+              stationName: s.stationName,
+              cmdrName: s.cmdrName ?? '',
+              active: s.active,
+              declaredAtUtc: s.declaredAt,
+              updatedAtUtc: s.declaredAt,
+              marketId: s.marketId ?? null,
+              constructionResources: s.constructionResources ?? [],
+              constructionResourcesTotal: s.constructionResourcesTotal ?? 0,
+            })));
+          }
+          return of([] as DeclaredChantierListItemApi[]);
+        }),
+      );
+
     forkJoin({
-      mine: this.declaredApi.listMine().pipe(catchError(() => of([] as DeclaredChantierListItemApi[]))),
-      others: this.declaredApi.listOthers().pipe(catchError(() => of([] as DeclaredChantierListItemApi[]))),
+      mine: safeList(this.declaredApi.listMine(), prevMine),
+      others: safeList(this.declaredApi.listOthers(), prevOthers),
     })
       .pipe(take(1))
       .subscribe(({ mine, others }) => {
