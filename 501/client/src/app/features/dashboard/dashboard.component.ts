@@ -1150,6 +1150,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.addLog('Prêt — utilisez les boutons sync pour importer depuis Inara');
     this.guildSettings.load();
     this.loadInaraGallery();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('message', (ev: MessageEvent) => {
+        if (ev.data?.type === 'inara-gallery-images' && Array.isArray(ev.data.images) && ev.data.images.length > 0) {
+          console.log('[Gallery] postMessage reçu :', ev.data.images.length, 'images');
+          this.BG_IMAGES = ev.data.images;
+          this.bgIndex = 0;
+          this.bgImageA.set(ev.data.images[0]);
+          this.bgImageB.set(ev.data.images[0]);
+          this.bgActiveSlot.set('a');
+          this.startBgRotation();
+        }
+      });
+    }
     this.inaraBridge.check();
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
